@@ -27,14 +27,6 @@
                                    Size="Size.Small"
                                    OnClick="OpenFolder" />
                 </Tooltip>
-                @* Refresh *@
-                <Tooltip Text="Refresh"
-                         RootClass="d-flex">
-                    <MudIconButton Icon="@Icons.Material.Rounded.Refresh"
-                                   aria-label="Refresh"
-                                   Size="Size.Small"
-                                   OnClick="LoadAsync" />
-                </Tooltip>
             </TitleContent>
             <ChildContent>
                 @if (_clips is null)
@@ -129,14 +121,15 @@
                                                 @clip.Details
                                             </MudText>
                                         </MudStack>
-                                        @* Show In Folder *@
+                                        @* Delete Button *@
                                         <MudElement HtmlTag="span"
                                                     ClickPropagation="false">
-                                            <MudIconButton Icon="@Icons.Material.Rounded.FolderOpen"
-                                                           aria-label="Show in Folder"
-                                                           title="Show in Folder"
+                                            <MudIconButton Icon="@Icons.Material.Rounded.Delete"
+                                                           aria-label="Delete Clip"
+                                                           title="Delete Clip"
                                                            Size="Size.Small"
-                                                           OnClick="() => Explorer.ShowFile(clip.Path)" />
+                                                           Class="danger-hover"
+                                                           OnClick="() => DeleteAsync(clip)" />
                                         </MudElement>
                                     </MudStack>
                                 </MudPaper>

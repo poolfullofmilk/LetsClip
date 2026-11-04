@@ -76,7 +76,7 @@ public sealed partial class MonitorOverlay : Window
         var palette = AppTheme.Custom.PaletteDark;
         var name = new TextBlock
         {
-            Text = monitor.ListLabel,
+            Text = monitor.Label,
             Foreground = BrushOf(palette.TextPrimary),
             FontFamily = new FontFamily("Segoe UI Variable Display, Segoe UI"),
             FontSize = NameSize,

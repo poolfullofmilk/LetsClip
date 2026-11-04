@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using LetsClip.Data.ViewModels;
 using NAudio.CoreAudioApi;
 using NLog;
@@ -22,75 +22,54 @@ public static class AudioDevices
         return List(DataFlow.Capture);
     }
 
-    public static string? DefaultName(bool playback)
-    {
-        try
-        {
-            using var enumerator = new MMDeviceEnumerator();
-            return enumerator.TryGetDefaultAudioEndpoint(
-                playback ? DataFlow.Render : DataFlow.Capture,
-                Role.Console,
-                out var device
-            )
-                ? Describe(device).Name
-                : null;
-        }
-        catch (COMException exception)
-        {
-            // No Audio Service Means No Devices, Never A Crash
-            s_logger.Warn($"Failed To Read Default Audio Device {exception.GetType().Name}");
-            return null;
-        }
-    }
-
-    public static string? DefaultMicrophoneId()
-    {
-        try
-        {
-            using var enumerator = new MMDeviceEnumerator();
-            return enumerator.TryGetDefaultAudioEndpoint(
-                DataFlow.Capture,
-                Role.Console,
-                out var device
-            )
-                ? device.ID
-                : null;
-        }
-        catch (COMException exception)
-        {
-            s_logger.Warn($"Failed To Read Default Microphone {exception.GetType().Name}");
-            return null;
-        }
-    }
-
-    private static AudioDeviceInfo Describe(MMDevice device)
-    {
-        // Headphones (G522) Reads As G522, Headphones Greyed Beside It
-        var full = device.FriendlyName;
-        var name = device.DeviceFriendlyName;
-        var suffix = $" ({name})";
-        return string.IsNullOrWhiteSpace(name) || !full.EndsWith(suffix, StringComparison.Ordinal)
-            ? new AudioDeviceInfo(device.ID, full)
-            : new AudioDeviceInfo(device.ID, name, full[..^suffix.Length]);
-    }
-
     private static List<AudioDeviceInfo> List(DataFlow flow)
     {
         try
         {
             using var enumerator = new MMDeviceEnumerator();
+            var defaultId = enumerator.TryGetDefaultAudioEndpoint(
+                flow,
+                Role.Console,
+                out var current
+            )
+                ? current.ID
+                : null;
+            var devices = enumerator.EnumerateAudioEndPoints(flow, DeviceState.Active).ToList();
+
+            // Headphones (G522) Reads As G522 Unless Names Then Clash
+            var shortNames = devices.Select(ShortName).ToList();
             return
             [
-                .. enumerator
-                    .EnumerateAudioEndPoints(flow, DeviceState.Active)
-                    .Select(Describe)
+                .. devices
+                    .Select(
+                        (device, index) =>
+                            new AudioDeviceInfo(
+                                device.ID,
+                                shortNames.Count(name => name == shortNames[index]) > 1
+                                    ? device.FriendlyName
+                                    : shortNames[index],
+                                device.ID == defaultId
+                            )
+                    )
                     .OrderBy(device => device.Name, StringComparer.CurrentCultureIgnoreCase),
             ];
         }
         catch (COMException exception)
         {
+            // No Audio Service Means No Devices, Never A Crash
             s_logger.Warn($"Failed To List Audio Devices {exception.GetType().Name}");
             return [];
         }
+    }
+
+    private static string ShortName(MMDevice device)
+    {
+        var full = device.FriendlyName;
+        var adapter = device.DeviceFriendlyName;
+        return
+            !string.IsNullOrWhiteSpace(adapter)
+            && full.EndsWith($" ({adapter})", StringComparison.Ordinal)
+            ? adapter
+            : full;
     }
 }

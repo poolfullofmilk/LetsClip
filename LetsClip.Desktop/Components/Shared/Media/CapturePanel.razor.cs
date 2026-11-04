@@ -13,7 +13,7 @@ public partial class CapturePanel : IDisposable
     // Said Once Before The First Start, Honest About What Records
     internal const string NoticeTitle = "Before Buffering Starts";
     internal const string NoticeText =
-        "LetsClip records everything visible on the chosen monitor, including other apps, chat windows and notifications, into a short rolling buffer on this PC.\n\nNothing is kept until you save a clip, and nothing leaves your PC. Buffering then runs by itself whenever LetsClip runs, and the tray icon pauses it any time.\n\nStart buffering now";
+        "LetsClip records everything visible on the chosen monitor, including other apps, chat windows and notifications, into a short rolling buffer on this PC. Games Only records just the game's window.\n\nNothing is kept until you save a clip, and nothing leaves your PC. Buffering then runs by itself whenever LetsClip runs, and the tray icon pauses it any time.\n\nStart buffering now";
 
     [Inject]
     public required CaptureController Controller { get; set; }
@@ -28,40 +28,20 @@ public partial class CapturePanel : IDisposable
 
     private CaptureStatus Status => Controller.Recorder.Status;
 
-    private string StateText =>
-        Status switch
-        {
-            { IsSaving: true, QueuedSaves: > 0 } => $"Saving Clip, {Status.QueuedSaves} Waiting",
-            { IsSaving: true } => "Saving Clip",
-            { State: CaptureState.Buffering } => "Buffering",
-            { State: CaptureState.Starting } => "Starting",
-            { State: CaptureState.Stopping } => "Stopping",
-            { State: CaptureState.Error } => "Error",
-            _ => Controller.IdleText,
-        };
-
-    private string StateClass =>
-        Status.State == CaptureState.Error ? "mud-error-text" : "mud-text-secondary";
-
-    private string HistoryText =>
-        Status.IsWarmingUp
-            ? $"{Status.AvailableSeconds:0}s of {Status.RequestedSeconds}s, Warming Up"
-            : $"{Status.AvailableSeconds:0}s of {Status.RequestedSeconds}s";
-
-    private double HistoryPercent =>
-        Status.RequestedSeconds > 0 ? 100 * Status.AvailableSeconds / Status.RequestedSeconds : 0;
+    // One Alert At Most, The Most Pressing First
+    private (Severity Severity, string Text)? Alert =>
+        Status.State == CaptureState.Error && Status.Message is { } error ? (Severity.Error, error)
+        : _saveError is { } saveError ? (Severity.Warning, saveError)
+        : Shell.HotkeyProblem is { } hotkey ? (Severity.Warning, hotkey)
+        : Status is { IsBuffering: true, Warning: { } warning } ? (Severity.Warning, warning)
+        : Status.Message is { } message ? (Severity.Info, message)
+        : null;
 
     // Full Size Is Only Offered Above 1080p
     private string? NativeLabel =>
         Controller.SelectedMonitor is { } monitor && Math.Min(monitor.Width, monitor.Height) > 1080
             ? $"{Math.Min(monitor.Width, monitor.Height)}p"
             : null;
-
-    private string HotkeyText =>
-        Shell.HotkeyProblem ?? $"{Shell.HotkeyText} saves from anywhere, even in the tray";
-
-    private string HotkeyClass =>
-        Shell.HotkeyProblem is null ? "mud-text-secondary" : "mud-warning-text";
 
     protected override void OnInitialized()
     {
@@ -75,14 +55,14 @@ public partial class CapturePanel : IDisposable
         _ = InvokeAsync(StateHasChanged);
     }
 
+    private static string AlertClass(Severity severity)
+    {
+        return severity == Severity.Warning ? "rounded-panel mud-warning-text" : "rounded-panel";
+    }
+
     private static string MonitorLabel(MonitorInfo? monitor)
     {
         return monitor?.FriendlyName ?? "";
-    }
-
-    private static string MonitorName(MonitorInfo monitor)
-    {
-        return monitor.IsPrimary ? $"{monitor.FriendlyName}, Primary" : monitor.FriendlyName;
     }
 
     private static string FrameRateLabel(int rate)
@@ -134,12 +114,16 @@ public partial class CapturePanel : IDisposable
         _saveError = null;
         if (!Controller.Settings.HasSeenCaptureNotice)
         {
-            if (!await DialogService.ConfirmAsync(NoticeTitle, NoticeText))
+            if (await DialogService.ConfirmAsync(NoticeTitle, NoticeText))
             {
-                return;
+                Controller.UpdateSettings(settings =>
+                    settings with
+                    {
+                        HasSeenCaptureNotice = true,
+                    }
+                );
             }
 
-            Controller.UpdateSettings(settings => settings with { HasSeenCaptureNotice = true });
             return;
         }
 

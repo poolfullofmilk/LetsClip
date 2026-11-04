@@ -56,6 +56,7 @@ window.letsClip = (() => {
         detach();
         state = { video, playhead, timeline, dotnet, duration, reported: 0, paused: true, stopAt: null, frame: 0, drag: null, grip: 0 };
         video.addEventListener("error", state.onError = () => dotnet.invokeMethodAsync("OnPlayerError").catch(() => {}));
+        video.addEventListener("dblclick", state.onDouble = () => fullScreen());
         timeline.addEventListener("pointerdown", state.onDown = (event) => down(event));
         timeline.addEventListener("pointermove", state.onMove = (event) => move(event));
         timeline.addEventListener("pointerup", state.onUp = (event) => up(event));
@@ -87,6 +88,8 @@ window.letsClip = (() => {
         cancelAnimationFrame(state.frame);
         const { video, timeline } = state;
         video.removeEventListener("error", state.onError);
+        video.removeEventListener("dblclick", state.onDouble);
+        if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
         timeline.removeEventListener("pointerdown", state.onDown);
         timeline.removeEventListener("pointermove", state.onMove);
         timeline.removeEventListener("pointerup", state.onUp);
@@ -179,6 +182,22 @@ window.letsClip = (() => {
         if (state) state.video.muted = muted;
     };
 
+    // Full Screen Shows The Clip Alone With The Browser's Own Controls
+    const fullScreen = () => {
+        if (!state) return;
+        if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+        else state.video.requestFullscreen().catch(() => {});
+    };
+
+    document.addEventListener("fullscreenchange", () => {
+        if (state) state.video.controls = document.fullscreenElement === state.video;
+    });
+
+    // Escape Leaves Full Screen, The Browser Keys That Would Are Off
+    window.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    });
+
     // The Next Key Pressed With Its Modifiers Becomes The Hotkey, Escape Cancels
     const captureKey = (dotnet) =>
         new Promise((resolve) => {
@@ -192,5 +211,5 @@ window.letsClip = (() => {
             window.addEventListener("keydown", listener, true);
         });
 
-    return { attach, detach, play, pause, nudge, seek, setMuted, captureKey };
+    return { attach, detach, play, pause, nudge, seek, setMuted, fullScreen, captureKey };
 })();

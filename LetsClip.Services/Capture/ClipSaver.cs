@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
 using LetsClip.Services.Media;
@@ -16,7 +16,6 @@ public static class ClipSaver
         double keepTo,
         string sessionFolder,
         string clipsFolder,
-        string? monitorName,
         DateTimeOffset recordedAt,
         ClipLibrary library,
         CancellationToken token
@@ -101,21 +100,7 @@ public static class ClipSaver
 
             ClipLibrary.Register(
                 finalPath,
-                new ClipMetadata(
-                    recordedAt,
-                    monitorName,
-                    media.Duration,
-                    keepStart,
-                    keepEnd,
-                    null,
-                    null,
-                    media.HasAudio,
-                    media.Width,
-                    media.Height,
-                    media.FrameRate,
-                    0,
-                    default
-                )
+                new ClipMetadata(recordedAt, keepStart, keepEnd, null, null, 0, default)
             );
             await ClipLibrary.EnsureThumbnailAsync(
                 finalPath,

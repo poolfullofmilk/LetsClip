@@ -28,10 +28,6 @@ public partial class Settings : IDisposable
     private bool _capturingKey;
     private string? _folderError;
     private string? _hotkeyError;
-    private string? _defaultPlaybackName;
-
-    private const string HotkeyDescription =
-        "Saves the last moments from anywhere, held keys save once";
 
     // A Folder Under The Profile Reads From There, Like Videos\LetsClip
     private string ClipsFolderText
@@ -49,7 +45,7 @@ public partial class Settings : IDisposable
     }
 
     private string GamesLinkText =>
-        Controller.GameCount is { } count ? $"{count} found" : "see the list";
+        Controller.GameCount is { } count ? (count == 1 ? "1 Game" : $"{count} Games") : "Games";
 
     protected override async Task OnInitializedAsync()
     {
@@ -57,8 +53,8 @@ public partial class Settings : IDisposable
         Shell.HotkeyChanged += OnChanged;
 
         // Device Lists Come From WASAPI Off The UI Thread
-        (_playback, _microphones, _defaultPlaybackName) = await Task.Run(() =>
-            (AudioDevices.Playback(), AudioDevices.Microphones(), AudioDevices.DefaultName(true))
+        (_playback, _microphones) = await Task.Run(() =>
+            (AudioDevices.Playback(), AudioDevices.Microphones())
         );
     }
 
@@ -74,7 +70,7 @@ public partial class Settings : IDisposable
     private string PlaybackLabel(string? id)
     {
         return id == AudioDevices.DefaultPlaybackId
-            ? "Windows Default"
+            ? "Automatic"
             : _playback.FirstOrDefault(device => device.Id == id)?.Name ?? "";
     }
 
@@ -125,8 +121,10 @@ public partial class Settings : IDisposable
             Controller.Settings.MicrophoneDeviceId is { Length: > 0 } known
             && _microphones.Any(device => device.Id == known)
                 ? known
-                : AudioDevices.DefaultMicrophoneId()
-                    ?? (_microphones.Count > 0 ? _microphones[0].Id : null);
+                : (
+                    _microphones.FirstOrDefault(device => device.IsDefault)
+                    ?? (_microphones.Count > 0 ? _microphones[0] : null)
+                )?.Id;
         Controller.UpdateSettings(settings =>
             settings with
             {

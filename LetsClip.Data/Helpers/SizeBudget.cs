@@ -18,6 +18,9 @@ public static class SizeBudget
     private const double LowBitsPerPixel = 0.008;
     private const double MinimumVideoBitsPerSecond = 250_000;
 
+    // The Largest Pick Reads Sharp Twice Over
+    private const double CeilingBitsPerPixel = GoodBitsPerPixel * 2;
+
     static SizeBudget()
     {
         Debug.Assert(SelfTestPasses());
@@ -35,11 +38,25 @@ public static class SizeBudget
             && megabytes <= MaximumMegabytes;
     }
 
-    public static double CeilingMegabytes(long sourceBytes, double seconds, double sourceDuration)
+    public static double CeilingMegabytes(
+        double seconds,
+        int width,
+        int height,
+        double frameRate,
+        bool hasAudio
+    )
     {
-        // The Selection's Share Of The Clip, More Adds Nothing
-        var share = sourceDuration > 0 ? Math.Clamp(seconds / sourceDuration, 0, 1) : 1;
-        return Math.Max(MinimumMegabytes + 1, Math.Ceiling(sourceBytes * share / 1_000_000));
+        var pixels = width * (double)height * frameRate;
+        var bits = seconds * ((pixels * CeilingBitsPerPixel) + (hasAudio ? AudioBitsPerSecond : 0));
+        var bytes =
+            ((bits / 8) + ContainerBytes(seconds, frameRate, hasAudio)) / (1 - SafetyMargin);
+        return Math.Max(MinimumMegabytes + 1, Math.Ceiling(bytes / 1_000_000));
+    }
+
+    private static double ContainerBytes(double seconds, double frameRate, bool hasAudio)
+    {
+        // The Mp4 Index Grows With Every Video And Audio Frame
+        return 4096 + (seconds * (frameRate + (hasAudio ? 47 : 0)) * 12);
     }
 
     public static ExportBudget Plan(
@@ -58,9 +75,8 @@ public static class SizeBudget
             return new ExportBudget(targetBytes, 0, audio, BudgetVerdict.TooSmall);
         }
 
-        // The Mp4 Index Grows With Every Video And Audio Frame
-        var containerBytes = 4096 + seconds * (frameRate + (hasAudio ? 47 : 0)) * 12;
-        var videoBits = ((targetBytes * (1 - SafetyMargin)) - containerBytes) * 8;
+        var videoBits =
+            ((targetBytes * (1 - SafetyMargin)) - ContainerBytes(seconds, frameRate, hasAudio)) * 8;
         var video = Math.Max(0, (videoBits / seconds) - audio);
         var bitsPerPixel = video / Math.Max(1, width * height * frameRate);
         var verdict =
@@ -86,9 +102,9 @@ public static class SizeBudget
             && Plan(50, 10, true, 1920, 1080, 60).Verdict == BudgetVerdict.Good
             && Plan(0.5, 10, true, 1920, 1080, 60).Verdict == BudgetVerdict.TooSmall
             && Plan(20, 0, true, 1920, 1080, 60).Verdict == BudgetVerdict.TooSmall
-            && CeilingMegabytes(30_000_000, 15, 30) == 15
-            && CeilingMegabytes(30_000_000, 15.1, 30) == 16
-            && CeilingMegabytes(100_000, 1, 30) == 2
+            && CeilingMegabytes(30, 1920, 1080, 60, true) == 45
+            && Plan(45, 30, true, 1920, 1080, 60).Verdict == BudgetVerdict.Good
+            && CeilingMegabytes(1, 320, 180, 30, false) == 2
             && !IsValidTarget(double.NaN)
             && !IsValidTarget(0.5)
             && IsValidTarget(10);

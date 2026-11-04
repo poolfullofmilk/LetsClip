@@ -15,7 +15,6 @@ public sealed class CaptureController : IDisposable
     // Starts And Stops Run One At A Time, Whoever Asks
     private readonly SemaphoreSlim _steps = new(1, 1);
     private CaptureHolds _holds;
-    private bool _startedForGame;
     private string? _lastGame;
     private IReadOnlyDictionary<string, string>? _installedGames;
 
@@ -23,7 +22,8 @@ public sealed class CaptureController : IDisposable
     {
         Settings = UserSettings.Load();
         Library = new ClipLibrary(Settings.ClipsDirectory);
-        Recorder = new ReplayRecorder(Library, Settings.ReplaySeconds);
+        Recorder = new ReplayRecorder(Library);
+        Recorder.Dropped += () => _ = RestartAfterDropAsync();
         Games.GameChanged += name => _ = OnGameChangedAsync(name);
         RefreshMonitors();
         _ = LoadGamesAsync();
@@ -71,6 +71,10 @@ public sealed class CaptureController : IDisposable
         : Settings.GamesOnly ? "Waiting for a Game"
         : "Not Buffering";
 
+    // Buffering Names The Game It Records
+    public string BufferingText =>
+        Settings.GamesOnly && Games.GameName is { } game ? $"Buffering {game}" : "Buffering";
+
     public int? GameCount => _installedGames is null ? null : KnownGames().Count;
 
     public void RefreshMonitors()
@@ -97,7 +101,6 @@ public sealed class CaptureController : IDisposable
 
         updated.Save();
         Library.SetFolder(updated.ClipsDirectory);
-        Recorder.ShowIdle(updated.ReplaySeconds);
         if (before.StartWithWindows != updated.StartWithWindows)
         {
             StartupRegistration.Apply(updated.StartWithWindows);
@@ -110,13 +113,7 @@ public sealed class CaptureController : IDisposable
 
     public void SelectMonitor(MonitorInfo monitor)
     {
-        UpdateSettings(settings =>
-            settings with
-            {
-                MonitorDevicePath = monitor.DevicePath,
-                MonitorName = monitor.FriendlyName,
-            }
-        );
+        UpdateSettings(settings => settings with { MonitorDevicePath = monitor.DevicePath });
     }
 
     #region Games
@@ -241,7 +238,6 @@ public sealed class CaptureController : IDisposable
         try
         {
             IsPaused = true;
-            _startedForGame = false;
             await Recorder.StopAsync();
         }
         finally
@@ -319,9 +315,8 @@ public sealed class CaptureController : IDisposable
             }
 
             // The Game Closed, So Ends The Buffer It Started
-            if (_startedForGame)
+            if (Settings.GamesOnly)
             {
-                _startedForGame = false;
                 await Recorder.StopAsync(
                     $"Stopped because {_lastGame ?? "the game"} closed, history was cleared"
                 );
@@ -339,6 +334,14 @@ public sealed class CaptureController : IDisposable
         await _steps.WaitAsync();
         try
         {
+            // Games Only Swaps The Monitor For The Game's Own Window
+            if (before.GamesOnly != after.GamesOnly)
+            {
+                await Recorder.StopAsync();
+                await StartIfWantedAsync();
+                return;
+            }
+
             // Monitor, Length, Rate Or Source Changes Apply At Once
             if (IsBuffering && ChangesCapture(before, after))
             {
@@ -347,19 +350,7 @@ public sealed class CaptureController : IDisposable
                 return;
             }
 
-            if (after.GamesOnly && !before.GamesOnly && IsBuffering)
-            {
-                // Games Only Keeps A Running Game's Buffer, Ends Any Other
-                _startedForGame = Games.GameName is not null;
-                if (!_startedForGame)
-                {
-                    await Recorder.StopAsync();
-                }
-
-                return;
-            }
-
-            if (before.GamesOnly != after.GamesOnly || !before.HasSeenCaptureNotice)
+            if (!before.HasSeenCaptureNotice)
             {
                 await StartIfWantedAsync();
             }
@@ -385,28 +376,40 @@ public sealed class CaptureController : IDisposable
             return;
         }
 
-        _startedForGame = settings.GamesOnly;
         await StartNowAsync();
     }
 
     private async Task StartNowAsync()
     {
+        // Games Only Records The Game's Window, Wherever It Sits
         var settings = Settings;
-        if (SelectedMonitor is not { } monitor)
+        var window = settings.GamesOnly ? Games.GameWindow() : 0;
+        var monitor = window != 0 ? MonitorCatalog.MonitorOf(Monitors, window) : null;
+        if ((settings.GamesOnly && window == 0) || (monitor ?? SelectedMonitor) is not { } shown)
         {
             return;
         }
 
         await Recorder.StartAsync(
             new CaptureOptions(
-                monitor,
+                shown,
                 settings.ReplaySeconds,
                 FrameRate,
                 settings.FullResolution,
-                SystemAudioDevice(settings),
-                MicrophoneDevice(settings)
+                settings.SystemAudio ? settings.SystemAudioDeviceId : null,
+                settings.Microphone ? settings.MicrophoneDeviceId : null,
+                window,
+                window != 0 ? Games.GameName : null
             )
         );
+    }
+
+    private async Task RestartAfterDropAsync()
+    {
+        // A Dropped Capture Starts Over By Itself
+        await Task.Delay(TimeSpan.FromSeconds(3));
+        await StartAutomaticallyAsync();
+        Changed?.Invoke();
     }
     #endregion
 
@@ -425,41 +428,6 @@ public sealed class CaptureController : IDisposable
             || before.SystemAudioDeviceId != after.SystemAudioDeviceId
             || before.Microphone != after.Microphone
             || before.MicrophoneDeviceId != after.MicrophoneDeviceId;
-    }
-
-    private static AudioDeviceInfo? SystemAudioDevice(UserSettings settings)
-    {
-        if (!settings.SystemAudio)
-        {
-            return null;
-        }
-
-        // The Default Follows Windows, A Picked Device Stays That Device
-        if (settings.SystemAudioDeviceId == AudioDevices.DefaultPlaybackId)
-        {
-            var name = AudioDevices.DefaultName(true);
-            return new AudioDeviceInfo(
-                AudioDevices.DefaultPlaybackId,
-                name is null ? "Default Playback Device" : $"Default ({name})"
-            );
-        }
-
-        var device = AudioDevices
-            .Playback()
-            .FirstOrDefault(candidate => candidate.Id == settings.SystemAudioDeviceId);
-        return device
-            ?? new AudioDeviceInfo(settings.SystemAudioDeviceId, "Missing Playback Device");
-    }
-
-    private static AudioDeviceInfo? MicrophoneDevice(UserSettings settings)
-    {
-        if (!settings.Microphone || settings.MicrophoneDeviceId is not { Length: > 0 } id)
-        {
-            return null;
-        }
-
-        var device = AudioDevices.Microphones().FirstOrDefault(candidate => candidate.Id == id);
-        return device ?? new AudioDeviceInfo(id, "Missing Microphone");
     }
 
     public void Dispose()

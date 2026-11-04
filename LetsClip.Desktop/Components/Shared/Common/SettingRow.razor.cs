@@ -8,13 +8,5 @@ public partial class SettingRow
     public required string Title { get; set; }
 
     [Parameter]
-    public string? Description { get; set; }
-
-    [Parameter]
-    public RenderFragment? DescriptionContent { get; set; }
-
-    [Parameter]
     public RenderFragment? ChildContent { get; set; }
-
-    private bool HasDescription => Description is not null || DescriptionContent is not null;
 }

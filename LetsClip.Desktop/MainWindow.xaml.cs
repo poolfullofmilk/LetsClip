@@ -40,6 +40,7 @@ public partial class MainWindow : Window
     private string? _mappedClipsFolder;
     private string? _lastSavedClip;
     private bool _isExiting;
+    private WindowState _windowedState;
 
     public MainWindow(IServiceProvider services, CaptureController controller, DesktopShell shell)
     {
@@ -240,8 +241,7 @@ public partial class MainWindow : Window
         };
         var text = status.State switch
         {
-            CaptureState.Buffering =>
-                $"{AppInfo.DisplayName}, Buffering {status.RequestedSeconds}s",
+            CaptureState.Buffering => $"{AppInfo.DisplayName}, {_controller.BufferingText}",
             CaptureState.Starting => $"{AppInfo.DisplayName}, Starting",
             CaptureState.Stopping => $"{AppInfo.DisplayName}, Stopping",
             CaptureState.Error => $"{AppInfo.DisplayName}, Error, {status.Message}",
@@ -262,6 +262,8 @@ public partial class MainWindow : Window
         browser.Settings.IsZoomControlEnabled = false;
         browser.Settings.IsPinchZoomEnabled = false;
         browser.NewWindowRequested += (_, eventArgs) => eventArgs.Handled = true;
+        browser.ContainsFullScreenElementChanged += (_, _) =>
+            ShowFullScreen(browser.ContainsFullScreenElement);
 
         Directory.CreateDirectory(AppInfo.ThumbnailsDirectory);
         browser.SetVirtualHostNameToFolderMapping(
@@ -270,6 +272,22 @@ public partial class MainWindow : Window
             CoreWebView2HostResourceAccessKind.DenyCors
         );
         MapClipsFolder();
+    }
+
+    private void ShowFullScreen(bool isFullScreen)
+    {
+        // Player Full Screen Takes The Whole Monitor
+        if (isFullScreen)
+        {
+            _windowedState = WindowState;
+            WindowStyle = WindowStyle.None;
+            WindowState = WindowState.Normal;
+            WindowState = WindowState.Maximized;
+            return;
+        }
+
+        WindowStyle = WindowStyle.SingleBorderWindow;
+        WindowState = _windowedState;
     }
 
     private void MapClipsFolder()

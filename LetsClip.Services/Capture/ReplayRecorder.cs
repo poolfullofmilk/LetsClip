@@ -12,9 +12,14 @@ public sealed record CaptureOptions(
     int Seconds,
     int FrameRate,
     bool FullResolution,
-    AudioDeviceInfo? SystemAudio,
-    AudioDeviceInfo? Microphone
-);
+    string? SystemAudioId,
+    string? MicrophoneId,
+    nint GameWindow,
+    string? GameName
+)
+{
+    public string Label => GameName ?? Monitor.Label;
+}
 
 public sealed record SaveOutcome(ClipInfo? Clip, string? Error);
 
@@ -33,6 +38,9 @@ public sealed class ReplayRecorder : IDisposable
     private static readonly TimeSpan s_startTimeout = TimeSpan.FromSeconds(12);
     private static readonly TimeSpan s_stallTimeout = TimeSpan.FromSeconds(8);
 
+    // A Session That Ran This Long Restarts When It Drops
+    private static readonly TimeSpan s_restartAfter = TimeSpan.FromSeconds(30);
+
     private readonly ClipLibrary _library;
     private readonly SemaphoreSlim _transition = new(1, 1);
     private readonly SemaphoreSlim _saveTurn = new(1, 1);
@@ -42,10 +50,10 @@ public sealed class ReplayRecorder : IDisposable
     private int _saves;
     private int _healthTicks;
 
-    public ReplayRecorder(ClipLibrary library, int seconds)
+    public ReplayRecorder(ClipLibrary library)
     {
         _library = library;
-        Status = CaptureStatus.Idle(seconds);
+        Status = CaptureStatus.Idle;
         _health = new Timer(
             _ => CheckHealth(),
             null,
@@ -58,23 +66,9 @@ public sealed class ReplayRecorder : IDisposable
 
     public event Action<ClipInfo>? ClipSaved;
 
+    public event Action? Dropped;
+
     public CaptureStatus Status { get; private set; }
-
-    public void ShowIdle(int seconds)
-    {
-        // Settings Changed While Stopped Show Before The Next Start
-        lock (_gate)
-        {
-            if (_session is not null)
-            {
-                return;
-            }
-
-            Status = Status with { RequestedSeconds = seconds };
-        }
-
-        StatusChanged?.Invoke();
-    }
 
     #region Start And Stop
     public async Task StartAsync(CaptureOptions options)
@@ -87,13 +81,7 @@ public sealed class ReplayRecorder : IDisposable
                 return;
             }
 
-            SetStatus(
-                CaptureStatus.Idle(options.Seconds) with
-                {
-                    State = CaptureState.Starting,
-                    MonitorLabel = options.Monitor.Label,
-                }
-            );
+            SetStatus(CaptureStatus.Idle with { State = CaptureState.Starting });
             var session = await Task.Run(() => LaunchAsync(options));
             lock (_gate)
             {
@@ -102,9 +90,7 @@ public sealed class ReplayRecorder : IDisposable
 
             _ = WatchEndAsync(session);
             UpdateStatus(session, CaptureState.Buffering);
-            s_logger.Info(
-                $"Started Buffering {session.Options.Monitor.Label} With {session.Encoder.Name}"
-            );
+            s_logger.Info($"Started Buffering {session.Options.Label} With {session.Encoder.Name}");
         }
         catch (CaptureException exception)
         {
@@ -128,8 +114,14 @@ public sealed class ReplayRecorder : IDisposable
                 session = _session;
             }
 
+            // A Session Gone To An Error Still Takes The Reason
             if (session is null)
             {
+                if (Status.State == CaptureState.Error)
+                {
+                    SetStatus(Status with { State = CaptureState.Stopped, Message = reason });
+                }
+
                 return;
             }
 
@@ -145,7 +137,6 @@ public sealed class ReplayRecorder : IDisposable
                 {
                     State = CaptureState.Stopped,
                     Message = reason,
-                    AvailableSeconds = 0,
                     Warning = null,
                 }
             );
@@ -262,11 +253,21 @@ public sealed class ReplayRecorder : IDisposable
     private async Task WatchEndAsync(CaptureSession session)
     {
         await session.Ended;
-        if (!session.Stopping)
+        if (session.Stopping)
         {
-            var reason =
-                session.Video?.LastError ?? session.Audio?.LastError ?? "The encoder exited";
-            await FailAsync(session, $"Recording stopped, {reason}");
+            return;
+        }
+
+        var exited = session.Video is { HasExited: true } video ? video : session.Audio;
+        var reason =
+            session.Video?.LastError
+            ?? session.Audio?.LastError
+            ?? $"the encoder exited with code {exited?.ExitCode}";
+        var ranLong = Stopwatch.GetElapsedTime(session.OriginTimestamp) > s_restartAfter;
+        await FailAsync(session, $"Recording stopped, {reason}");
+        if (ranLong)
+        {
+            Dropped?.Invoke();
         }
     }
 
@@ -287,14 +288,7 @@ public sealed class ReplayRecorder : IDisposable
             }
 
             await Task.Run(session.Shutdown);
-            SetStatus(
-                Status with
-                {
-                    State = CaptureState.Error,
-                    Message = message,
-                    AvailableSeconds = 0,
-                }
-            );
+            SetStatus(Status with { State = CaptureState.Error, Message = message });
             s_logger.Warn($"Stopped Buffering With An Error, {message}");
         }
         finally
@@ -403,7 +397,6 @@ public sealed class ReplayRecorder : IDisposable
             Math.Min(end, session.NewestEnd),
             session.Folder,
             _library.Folder,
-            session.Options.Monitor.FriendlyName,
             recordedAt,
             _library,
             CancellationToken.None
@@ -429,12 +422,11 @@ public sealed class ReplayRecorder : IDisposable
             return;
         }
 
-        // A Stalled Encoder Or Nearly Full Disk Ends The Session
-        var since =
-            session.Audio is { } audio && audio.SinceLastSegment > video.SinceLastSegment
-                ? audio.SinceLastSegment
-                : video.SinceLastSegment;
-        if (since > s_stallTimeout)
+        // Ponytail: Minimised Games Send Nothing, Only Their Exit Ends It
+        var isWindow = session.Options.GameWindow != 0;
+        var videoSince = isWindow ? TimeSpan.Zero : video.SinceLastSegment;
+        var audioSince = session.Audio?.SinceLastSegment ?? TimeSpan.Zero;
+        if ((videoSince > audioSince ? videoSince : audioSince) > s_stallTimeout)
         {
             _ = FailAsync(session, "Capture stalled, nothing arrived for several seconds");
             return;
@@ -446,7 +438,11 @@ public sealed class ReplayRecorder : IDisposable
             return;
         }
 
-        video.JudgeFrameRate(session.Options.FrameRate);
+        if (!isWindow)
+        {
+            video.JudgeFrameRate(session.Options.FrameRate);
+        }
+
         UpdateStatus(session, null);
     }
 
@@ -459,15 +455,6 @@ public sealed class ReplayRecorder : IDisposable
                 return;
             }
 
-            var newest = session.NewestEnd;
-            var available =
-                newest > 0
-                    ? Math.Clamp(
-                        session.MediaNow() - session.OldestStart,
-                        0,
-                        session.Options.Seconds
-                    )
-                    : 0;
             var video = session.Video;
             var target = session.Options.FrameRate;
             var slow = video is { SlowReports: >= 3, FramesPerSecond: { } measured }
@@ -478,11 +465,7 @@ public sealed class ReplayRecorder : IDisposable
             Status = new CaptureStatus(
                 state ?? Status.State,
                 null,
-                session.Options.Monitor.Label,
-                session.Options.Seconds,
-                available,
                 _saves > 0,
-                Math.Max(0, _saves - 1),
                 session.Mixer?.Problem ?? slow ?? session.Warning
             );
         }

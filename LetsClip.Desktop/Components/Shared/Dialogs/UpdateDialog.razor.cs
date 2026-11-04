@@ -26,7 +26,6 @@ public partial class UpdateDialog
     public required ReleaseInfo Release { get; set; }
 
     private bool _isInstalling;
-    private List<string> _notes = [];
 
     // Bytes So Far, Zero Total While No Length Is Sent
     private long _received;
@@ -37,11 +36,6 @@ public partial class UpdateDialog
         _total > 0 && _received >= _total ? "Starting the new version"
         : _total > 0 ? $"{Formatter.FormatSize(_received)} of {Formatter.FormatSize(_total)}"
         : Formatter.FormatSize(_received);
-
-    protected override async Task OnInitializedAsync()
-    {
-        _notes = await Updater.NotesAsync(Release.Tag);
-    }
 
     public static Task ShowAsync(IDialogService dialogService, ReleaseInfo release)
     {

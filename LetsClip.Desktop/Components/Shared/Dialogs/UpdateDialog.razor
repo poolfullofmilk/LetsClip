@@ -9,23 +9,7 @@
                      Class="text-relaxed">
                 @($"You have {AppInfo.VersionText}. Updating restarts LetsClip, buffering starts again by itself")
             </MudText>
-            @if (_notes.Count > 0)
-            {
-                <MudText Typo="Typo.subtitle2">What Changed</MudText>
-                <MudStack Spacing="1">
-                    @foreach (var note in _notes)
-                    {
-                        <MudStack Row
-                                  AlignItems="AlignItems.Start"
-                                  Spacing="2">
-                            <MudIcon Icon="@Icons.Material.Rounded.CheckCircle"
-                                     Color="Color.Info"
-                                     Size="Size.Small" />
-                            <MudText Typo="Typo.body2">@note</MudText>
-                        </MudStack>
-                    }
-                </MudStack>
-            }
+
             @if (_isInstalling)
             {
                 @* Download Progress *@

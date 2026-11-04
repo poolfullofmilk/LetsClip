@@ -55,31 +55,6 @@ public static class Updater
         }
     }
 
-    public static async Task<List<string>> NotesAsync(string tag)
-    {
-        try
-        {
-            using var release = await GetJsonAsync(AppInfo.ReleaseApiUrl + tag);
-            var body = release.RootElement.TryGetProperty("body", out var text)
-                ? text.GetString()
-                : null;
-            return
-            [
-                .. (body ?? string.Empty)
-                    .Split('\n')
-                    .Select(line => line.Trim().TrimStart('-', '*').Trim())
-                    .Where(line => line.Length > 0)
-                    .Distinct(),
-            ];
-        }
-        catch (Exception exception)
-            when (exception is HttpRequestException or TaskCanceledException or JsonException)
-        {
-            // Notes Are Extra, The Update Works Without Them
-            return [];
-        }
-    }
-
     private static async Task<JsonDocument> GetJsonAsync(string url)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, url);

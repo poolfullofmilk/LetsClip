@@ -23,8 +23,6 @@ public static class Formatter
 
     private static string Point => Shown.NumberFormat.NumberDecimalSeparator;
 
-    public static string ClockPattern => $"m:ss{Point}s";
-
     public static string FormatSize(long bytes)
     {
         // Decimal Units, The Same Megabyte The Size Target Uses
@@ -59,39 +57,6 @@ public static class Formatter
         return string.Create(s_invariant, $"{minutes}:{rest / 10:00}{Point}{rest % 10}");
     }
 
-    public static double? ParseClock(string? text)
-    {
-        // Reads 65.3, 1:05.3 And 1:05, A Decimal Comma Too
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return null;
-        }
-
-        var parts = text.Trim().Replace(',', '.').Split(':');
-        if (
-            parts.Length > 2
-            || !double.TryParse(
-                parts[^1],
-                NumberStyles.AllowDecimalPoint,
-                s_invariant,
-                out var seconds
-            )
-        )
-        {
-            return null;
-        }
-
-        if (parts.Length == 1)
-        {
-            return seconds;
-        }
-
-        return
-            int.TryParse(parts[0], NumberStyles.None, s_invariant, out var minutes) && seconds < 60
-            ? minutes * 60 + seconds
-            : null;
-    }
-
     public static string FormatDateTime(DateTimeOffset time)
     {
         return time.ToLocalTime().ToString(DisplayDateTimeFormat, s_invariant);
@@ -124,12 +89,6 @@ public static class Formatter
             && FormatDuration(192) == "3m 12s"
             && FormatDuration(7500) == "2h 5m"
             && FormatClock(65.34) == $"1:05{Point}3"
-            && FormatClock(59.96) == $"1:00{Point}0"
-            && ParseClock("1:05.3") is > 65.29 and < 65.31
-            && ParseClock("1:05,3") is > 65.29 and < 65.31
-            && ParseClock("65.3") is > 65.29 and < 65.31
-            && ParseClock("1:75") is null
-            && ParseClock("-2") is null
-            && ParseClock("a:b") is null;
+            && FormatClock(59.96) == $"1:00{Point}0";
     }
 }

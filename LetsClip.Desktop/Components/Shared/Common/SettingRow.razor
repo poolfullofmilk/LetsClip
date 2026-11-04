@@ -2,19 +2,10 @@
 <MudStack Row
           AlignItems="AlignItems.Center"
           Spacing="4"
-          Class="py-3">
-    <MudStack Spacing="0"
-              Class="flex-grow-1"
-              Style="min-width:0">
-        <MudText Typo="Typo.subtitle2">@Title</MudText>
-        @if (HasDescription)
-        {
-            <MudText Typo="Typo.body2"
-                     Class="mud-text-secondary text-relaxed">
-                @Description
-                @DescriptionContent
-            </MudText>
-        }
-    </MudStack>
+          Class="setting-row">
+    <MudText Typo="Typo.subtitle2"
+             Class="flex-grow-1 ellipsis">
+        @Title
+    </MudText>
     @ChildContent
 </MudStack>

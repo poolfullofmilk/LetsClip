@@ -47,7 +47,6 @@ public static unsafe partial class MonitorCatalog
                         continue;
                     }
 
-                    var adapterName = new string(adapterDescription.Description).TrimEnd('\0');
                     for (uint outputIndex = 0; ; outputIndex++)
                     {
                         if (Call(adapter, 7, outputIndex, out var output) < 0)
@@ -89,9 +88,7 @@ public static unsafe partial class MonitorCatalog
                                     description.Left == 0 && description.Top == 0,
                                     detail?.IsHdr ?? false,
                                     (int)adapterIndex,
-                                    (int)outputIndex,
-                                    adapterName,
-                                    (int)adapterDescription.VendorId
+                                    (int)outputIndex
                                 )
                             );
                         }
@@ -113,6 +110,24 @@ public static unsafe partial class MonitorCatalog
         }
 
         return [.. monitors.OrderBy(monitor => monitor.Left).ThenBy(monitor => monitor.Top)];
+    }
+
+    public static MonitorInfo? MonitorOf(IEnumerable<MonitorInfo> monitors, nint window)
+    {
+        // The Monitor Holding The Middle Of The Window
+        if (!GetWindowRect(window, out var bounds))
+        {
+            return null;
+        }
+
+        var x = (bounds.Left + bounds.Right) / 2;
+        var y = (bounds.Top + bounds.Bottom) / 2;
+        return monitors.FirstOrDefault(monitor =>
+            x >= monitor.Left
+            && x < monitor.Left + monitor.Width
+            && y >= monitor.Top
+            && y < monitor.Top + monitor.Height
+        );
     }
 
     public static IReadOnlyList<int> AdapterVendors()
@@ -409,6 +424,18 @@ public static unsafe partial class MonitorCatalog
 
     [LibraryImport("dxgi.dll")]
     private static partial int CreateDXGIFactory1(in Guid riid, out nint factory);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetWindowRect(nint window, out WindowBounds bounds);
+
+    private struct WindowBounds
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
 
     [LibraryImport("user32.dll")]
     private static partial int GetDisplayConfigBufferSizes(

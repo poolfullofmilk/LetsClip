@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using LetsClip.Services.Media;
@@ -63,8 +63,6 @@ public sealed class CaptureSession(
     public double NewestEnd =>
         Math.Min(Video?.Segments.NewestEnd ?? 0, Audio?.Segments.NewestEnd ?? double.MaxValue);
 
-    public double OldestStart => Video?.Segments.OldestStart ?? double.MaxValue;
-
     public double MediaNow()
     {
         return Stopwatch.GetElapsedTime(OriginTimestamp).TotalSeconds + LeadSeconds;
@@ -77,9 +75,9 @@ public sealed class CaptureSession(
         var originWall = DateTime.UtcNow;
         var baseMicroseconds =
             ((originWall - DateTime.UnixEpoch).Ticks / 10) - (long)(LeadSeconds * 1_000_000);
-        if (Options.SystemAudio is not null || Options.Microphone is not null)
+        if (Options.SystemAudioId is not null || Options.MicrophoneId is not null)
         {
-            Mixer = new AudioMixer(OriginTimestamp, Options.SystemAudio, Options.Microphone);
+            Mixer = new AudioMixer(OriginTimestamp, Options.SystemAudioId, Options.MicrophoneId);
             Audio = new SegmentProcess("Audio", AudioArguments(), true, Folder, OnSegmentAdded);
             Mixer.Attach(Audio.Process.StandardInput.BaseStream);
         }
@@ -158,7 +156,20 @@ public sealed class CaptureSession(
     {
         var monitor = Options.Monitor;
         var rate = Options.FrameRate.ToString(CultureInfo.InvariantCulture);
-        var rotated = monitor.Rotation is 90 or 270;
+
+        // A Game Window Arrives Upright And Sized, A Monitor Unrotated
+        var isWindow = Options.GameWindow != 0;
+        var rotation = isWindow ? 0 : monitor.Rotation;
+        var rotated = rotation is 90 or 270;
+        var source = isWindow
+            ? string.Create(
+                CultureInfo.InvariantCulture,
+                $"gfxcapture=hwnd={Options.GameWindow}:max_framerate={rate}:capture_cursor=1:width={width}:height={height}:resize_mode=scale_aspect"
+            )
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $"ddagrab=output_idx={monitor.OutputIndex}:framerate={rate}:draw_mouse=1:dup_frames=1"
+            );
 
         // One Wall Clock Reading Puts Video On The Media Clock
         var clock = string.Create(
@@ -167,10 +178,7 @@ public sealed class CaptureSession(
         );
         var chain = new List<string>
         {
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"ddagrab=output_idx={monitor.OutputIndex}:framerate={rate}:draw_mouse=1:dup_frames=1"
-            ),
+            source,
             $"setpts='{clock}'",
             "hwdownload",
             "format=bgra",
@@ -181,7 +189,7 @@ public sealed class CaptureSession(
             "format=nv12",
         };
         chain.AddRange(
-            monitor.Rotation switch
+            rotation switch
             {
                 90 => ["transpose=clock"],
                 270 => ["transpose=cclock"],
@@ -210,6 +218,9 @@ public sealed class CaptureSession(
             "-map",
             "[video]",
             .. VideoEncoders.CaptureArguments(Encoder, Options.FrameRate, width, height),
+            // A Keyframe Each Second, Game Windows Send Frames Unevenly
+            "-force_key_frames",
+            "expr:gte(t,n_forced)",
             "-fps_mode",
             "passthrough",
             "-colorspace",
@@ -383,6 +394,8 @@ public sealed class CaptureSession(
         public Task Exited => _exited.Task;
 
         public bool HasExited => _exited.Task.IsCompleted;
+
+        public int? ExitCode => HasExited ? Process.ExitCode : null;
 
         public double? FramesPerSecond { get; private set; }
 

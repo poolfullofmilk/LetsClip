@@ -1,6 +1,7 @@
 using System.Globalization;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
+using LetsClip.Desktop.Components.Shared.Dialogs;
 using LetsClip.Desktop.Interop;
 using LetsClip.Services.Capture;
 using LetsClip.Services.Media;
@@ -33,6 +34,9 @@ public partial class ClipEditor : IAsyncDisposable
     [Inject]
     public required ISnackbar Snackbar { get; set; }
 
+    [Inject]
+    public required IDialogService DialogService { get; set; }
+
     private readonly CancellationTokenSource _closing = new();
     private DotNetObjectReference<ClipEditor>? _reference;
     private ElementReference _video;
@@ -52,10 +56,6 @@ public partial class ClipEditor : IAsyncDisposable
     private double _duration;
     private double _time;
     private TrimRange _range;
-    private string _startText = "";
-    private string _endText = "";
-    private string? _startError;
-    private string? _endError;
     private Timer? _trimTimer;
 
     private string VideoUrl => _path is null ? "" : Shell.ClipUrl(_path);
@@ -65,9 +65,6 @@ public partial class ClipEditor : IAsyncDisposable
     private string MuteTip => _muted ? "Unmute Preview" : "Mute Preview";
 
     private string PlayTip => _paused ? "Play" : "Pause";
-
-    private static string TrimHint =>
-        $"Drag the blue handles or focus one and use the arrow keys, {Formatter.FormatSeconds(TrimRange.Step)} a step, Shift for {Formatter.FormatDuration(1)}";
 
     // Saved Clips Open On The Asked Moment, Pre-Roll Left Outside
     private TrimRange DefaultRange =>
@@ -107,7 +104,6 @@ public partial class ClipEditor : IAsyncDisposable
             : DefaultRange;
         _muted = Controller.IsBuffering;
         _time = _range.Start;
-        ShowRange();
         _ = LoadStripAsync(path, token);
     }
 
@@ -198,52 +194,8 @@ public partial class ClipEditor : IAsyncDisposable
         }
 
         _range = range;
-        ShowRange();
         StateHasChanged();
         ScheduleTrimSave();
-    }
-
-    private void ShowRange()
-    {
-        _startText = Formatter.FormatClock(_range.Start);
-        _endText = Formatter.FormatClock(_range.End);
-        _startError = null;
-        _endError = null;
-    }
-
-    private void SetStartText(string text)
-    {
-        // A Typed Time Must Stay Before The Out Point
-        if (
-            Formatter.ParseClock(text) is { } start
-            && start >= 0
-            && start <= _range.End - TrimRange.Step
-        )
-        {
-            SetRange(_range with { Start = start });
-            ShowRange();
-            return;
-        }
-
-        _startText = text;
-        _startError = $"Use {Formatter.ClockPattern} before {Formatter.FormatClock(_range.End)}";
-    }
-
-    private void SetEndText(string text)
-    {
-        if (
-            Formatter.ParseClock(text) is { } end
-            && end <= _duration
-            && end >= _range.Start + TrimRange.Step
-        )
-        {
-            SetRange(_range with { End = end });
-            ShowRange();
-            return;
-        }
-
-        _endText = text;
-        _endError = $"Use {Formatter.ClockPattern} up to {Formatter.FormatClock(_duration)}";
     }
 
     private void SetStartAtPlayhead()
@@ -319,6 +271,31 @@ public partial class ClipEditor : IAsyncDisposable
         {
             Snackbar.Add("Preview sound is recorded too while buffering", Severity.Warning);
         }
+    }
+
+    private async Task FullScreenAsync()
+    {
+        await JavaScript.InvokeVoidAsync("letsClip.fullScreen");
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (
+            _path is not { } path
+            || !await DialogService.ConfirmAsync(Clips.DeleteTitle, Clips.DeleteText)
+        )
+        {
+            return;
+        }
+
+        // The Preview Lets Go Of The File First
+        await JavaScript.InvokeVoidAsync("letsClip.detach");
+        if (!Explorer.Recycle(path))
+        {
+            Snackbar.Add("The clip could not be deleted, it may be in use", Severity.Warning);
+        }
+
+        Back();
     }
 
     private void ShowInFolder()

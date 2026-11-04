@@ -1,4 +1,4 @@
-﻿namespace LetsClip.Data.ViewModels;
+namespace LetsClip.Data.ViewModels;
 
 public sealed record MonitorInfo(
     string DevicePath,
@@ -13,12 +13,8 @@ public sealed record MonitorInfo(
     bool IsPrimary,
     bool IsHdr,
     int AdapterIndex,
-    int OutputIndex,
-    string AdapterName,
-    int AdapterVendorId
+    int OutputIndex
 )
 {
     public string Label => $"{FriendlyName} ({Width} × {Height})";
-
-    public string ListLabel => IsPrimary ? $"{Label}, Primary" : Label;
 }

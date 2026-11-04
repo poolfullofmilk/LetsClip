@@ -10,7 +10,6 @@ namespace LetsClip.Services.Storage;
 
 public sealed record UserSettings(
     string? MonitorDevicePath = null,
-    string? MonitorName = null,
     int ReplaySeconds = 30,
     int FrameRate = 60,
     bool FullResolution = false,

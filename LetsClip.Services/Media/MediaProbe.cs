@@ -59,10 +59,8 @@ public static class MediaProbe
 
         string? VideoText(string name) => video is { } stream ? TextOf(stream, name) : null;
         double VideoNumber(string name) => video is { } stream ? NumberOf(stream, name) : 0;
-        double AudioNumber(string name) => audio is { } stream ? NumberOf(stream, name) : 0;
 
         return new MediaInfo(
-            TextOf(format, "format_name") ?? "",
             NumberOf(format, "duration"),
             NumberOf(format, "start_time"),
             (long)NumberOf(format, "size"),
@@ -72,12 +70,7 @@ public static class MediaProbe
             (int)VideoNumber("height"),
             video is { } rateStream ? FrameRateOf(rateStream) : 0,
             VideoNumber("start_time"),
-            audio is { } audioStream ? TextOf(audioStream, "codec_name") : null,
-            (int)AudioNumber("channels"),
-            AudioNumber("start_time"),
-            VideoText("color_primaries"),
-            VideoText("color_transfer"),
-            VideoText("color_space")
+            audio is { } audioStream ? TextOf(audioStream, "codec_name") : null
         );
     }
 

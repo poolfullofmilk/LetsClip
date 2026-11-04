@@ -160,6 +160,21 @@
         width: 400px;
     }
 
+    .fixed-width.narrow {
+        width: 130px;
+    }
+
+/* Setting Rows Share One Height, Switch Or Button Alike */
+.setting-row {
+    min-height: 56px;
+    padding-block: 8px;
+}
+
+/* A Removal Stays Grey Until Aimed At */
+.danger-hover:hover,
+.danger-hover:focus-visible {
+    color: var(--mud-palette-error) !important;
+}
 
 /* Two Columns Side By Side, Stacked Once The Window Narrows */
 .split {
@@ -351,7 +366,6 @@ html, body {
 
 /* Keyboard Focus Shows Wherever Focus Lands */
 [data-keyclick]:focus-visible,
-.timeline:focus-visible,
 .timeline-handle:focus-visible {
     outline: 2px solid var(--mud-palette-info);
     outline-offset: 2px;
@@ -384,10 +398,14 @@ html, body {
     white-space: pre-line;
 }
 
-/* Chips Carry The Slightest Theme Shadow */
+/* Chips Carry The Slightest Theme Shadow, Their Icon Clear Of The Text */
 .mud-chip {
     box-shadow: var(--mud-elevation-1);
 }
+
+    .mud-chip .mud-chip-icon {
+        margin-inline-end: 6px;
+    }
 
 /* No Material Ripple, Buttons Fade Their Colour Instead */
 .mud-ripple-effect {
@@ -530,28 +548,7 @@ html, body {
         bottom: 8px;
     }
 
-/* Recording Dot Breathes While Buffering */
-.live-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background-color: var(--mud-palette-error);
-    box-shadow: 0 0 0 3px var(--tonal-error);
-    animation: slow-pulse 2s ease-in-out infinite;
-    flex-shrink: 0;
-}
 
-@keyframes slow-pulse {
-    50% {
-        opacity: 0.45;
-    }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .live-dot {
-        animation: none;
-    }
-}
 /* #endregion */
 
 /* #region Editor */
@@ -564,25 +561,32 @@ html, body {
     min-height: 220px;
 }
 
+    /* The Clip Lifts Off The Panel On The Theme Shadow, No Frame */
     .player video {
         display: block;
         max-width: 100%;
         max-height: 100%;
-        border: 2px solid var(--mud-palette-black);
         border-radius: var(--radius-inner);
+        box-shadow: var(--mud-elevation-4);
         background-color: var(--mud-palette-black);
     }
 
-/* The Timeline: Thumbnails Under A Selection With Two Handles And A Playhead */
+/* The Timeline: Thumbnails In A Track, Each Handle Outside The Part Kept */
 .timeline {
-    position: relative;
+    --handle-width: 14px;
     height: 64px;
+    padding: 0 var(--handle-width);
     border-radius: var(--radius-inner);
     overflow: hidden;
     background-color: var(--inset-fill);
+    user-select: none;
+}
+
+.timeline-track {
+    position: relative;
+    height: 100%;
     touch-action: none;
     cursor: pointer;
-    user-select: none;
 }
 
 .timeline-strip {
@@ -611,23 +615,22 @@ html, body {
     pointer-events: none;
 }
 
-/* Each Handle Sits Just Inside The Selection, Rounded Only On Its Outer Side */
+/* The Inner Edge Of Each Handle Is The Time, So Handles Never Meet */
 .timeline-handle {
     position: absolute;
     top: 0;
     bottom: 0;
-    width: 10px;
+    width: var(--handle-width);
     background-color: var(--mud-palette-info);
     cursor: ew-resize;
-    box-shadow: var(--mud-elevation-1);
 }
 
     .timeline-handle[data-handle="start"] {
+        margin-left: calc(-1 * var(--handle-width));
         border-radius: var(--radius-thumb) 0 0 var(--radius-thumb);
     }
 
     .timeline-handle[data-handle="end"] {
-        margin-left: -10px;
         border-radius: 0 var(--radius-thumb) var(--radius-thumb) 0;
     }
 
@@ -667,10 +670,6 @@ html, body {
     font-variant-numeric: tabular-nums;
 }
 
-/* Time Fields Keep One Width */
-.time-field {
-    width: 120px;
-}
 
 /* The Exported File Drags From Here Into Discord */
 .drag-handle {

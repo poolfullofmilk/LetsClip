@@ -1,0 +1,16 @@
+@* Device Label *@
+<MudStack Row
+          Justify="Justify.SpaceBetween"
+          Spacing="4">
+    <MudText Typo="Typo.body2"
+             Class="ellipsis">
+        @Device.Name
+    </MudText>
+    @if (Device.IsDefault)
+    {
+        <MudText Typo="Typo.body2"
+                 Class="mud-text-secondary">
+            Default
+        </MudText>
+    }
+</MudStack>

@@ -15,17 +15,6 @@ public sealed class SegmentCache
         Debug.Assert(SelfTestPasses());
     }
 
-    public long TotalBytes
-    {
-        get
-        {
-            lock (_gate)
-            {
-                return _segments.Sum(segment => segment.Bytes);
-            }
-        }
-    }
-
     public double NewestEnd
     {
         get
@@ -33,28 +22,6 @@ public sealed class SegmentCache
             lock (_gate)
             {
                 return _segments.Count == 0 ? 0 : _segments[^1].End;
-            }
-        }
-    }
-
-    public double OldestStart
-    {
-        get
-        {
-            lock (_gate)
-            {
-                return _segments.Count == 0 ? double.MaxValue : _segments[0].Start;
-            }
-        }
-    }
-
-    public double AvailableSeconds
-    {
-        get
-        {
-            lock (_gate)
-            {
-                return _segments.Count == 0 ? 0 : _segments[^1].End - _segments[0].Start;
             }
         }
     }
@@ -162,8 +129,8 @@ public sealed class SegmentCache
             && pinnedEvictions.All(segment => segment.End <= 20)
             && released.Count > 0
             && released.All(segment => segment.Start < 40)
-            && small.TotalBytes <= 3500
-            && small.AvailableSeconds == 3
+            && small.Covering(0, 10).Sum(segment => segment.Bytes) <= 3500
+            && small.Covering(0, 10).Count == 3
             && small.NewestEnd == 10;
     }
 }

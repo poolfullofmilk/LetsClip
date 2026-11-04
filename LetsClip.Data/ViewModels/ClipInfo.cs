@@ -8,11 +8,7 @@ public sealed record ClipInfo(
     DateTimeOffset RecordedAt,
     double Duration,
     long SizeBytes,
-    string? ThumbnailPath,
-    bool HasAudio,
-    int Width,
-    int Height,
-    double FrameRate
+    string? ThumbnailPath
 )
 {
     public string FileName => System.IO.Path.GetFileName(Path);

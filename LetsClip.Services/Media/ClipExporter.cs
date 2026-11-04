@@ -110,18 +110,18 @@ public sealed class ClipExporter
             );
         }
 
-        // Past The Clip's Own Share Only Bloats And Overflows FFmpeg
+        // Past The Ceiling Only Bloats, And Overflows FFmpeg's Rates
         var duration = request.Range.Length;
+        var withAudio = request.IncludeAudio && source.HasAudio;
+        var (width, height) = OutputSize(source.Width, source.Height, request.Use720p);
+        var frameRate = FrameRateOf(source.FrameRate, request.FullFrameRate);
         request = request with
         {
             Megabytes = Math.Min(
                 request.Megabytes,
-                SizeBudget.CeilingMegabytes(source.SizeBytes, duration, source.Duration)
+                SizeBudget.CeilingMegabytes(duration, width, height, frameRate, withAudio)
             ),
         };
-        var withAudio = request.IncludeAudio && source.HasAudio;
-        var (width, height) = OutputSize(source.Width, source.Height, request.Use720p);
-        var frameRate = FrameRateOf(source.FrameRate, request.FullFrameRate);
         var budget = SizeBudget.Plan(
             request.Megabytes,
             duration,

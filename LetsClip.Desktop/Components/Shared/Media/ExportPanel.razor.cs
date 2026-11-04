@@ -43,8 +43,21 @@ public partial class ExportPanel : IDisposable
         set;
     }
 
-    private double MaximumMegabytes =>
-        SizeBudget.CeilingMegabytes(Media.SizeBytes, Range.Length, Media.Duration);
+    // The Largest Size Worth Picking At These Settings
+    private double MaximumMegabytes
+    {
+        get
+        {
+            var (width, height) = OutputSize;
+            return SizeBudget.CeilingMegabytes(
+                Range.Length,
+                width,
+                height,
+                FrameRate,
+                _includeAudio && Media.HasAudio
+            );
+        }
+    }
 
     private bool Use720p => Controller.Settings.Export720p && CanShrink;
 

@@ -1,7 +1,9 @@
 using LetsClip.Data.ViewModels;
+using LetsClip.Desktop.Components.Shared.Dialogs;
 using LetsClip.Desktop.Interop;
 using LetsClip.Services.Capture;
 using Microsoft.AspNetCore.Components;
+using MudBlazor;
 
 namespace LetsClip.Desktop.Components.Pages;
 
@@ -12,6 +14,15 @@ public partial class Clips : IDisposable
 
     [Inject]
     public required NavigationManager NavigationManager { get; set; }
+
+    [Inject]
+    public required IDialogService DialogService { get; set; }
+
+    [Inject]
+    public required ISnackbar Snackbar { get; set; }
+
+    internal const string DeleteTitle = "Delete Clip";
+    internal const string DeleteText = "It goes to the Recycle Bin, its exports stay";
 
     private readonly CancellationTokenSource _closing = new();
     private IReadOnlyList<ClipInfo>? _clips;
@@ -28,16 +39,10 @@ public partial class Clips : IDisposable
     protected override async Task OnInitializedAsync()
     {
         Controller.Library.Changed += OnLibraryChanged;
-        Controller.Recorder.ClipSaved += OnClipSaved;
         await LoadAsync();
     }
 
     private void OnLibraryChanged()
-    {
-        _ = InvokeAsync(LoadAsync);
-    }
-
-    private void OnClipSaved(ClipInfo clip)
     {
         _ = InvokeAsync(LoadAsync);
     }
@@ -60,6 +65,19 @@ public partial class Clips : IDisposable
         NavigationManager.NavigateTo(ClipRoutes.EditorOf(clip.Path));
     }
 
+    private async Task DeleteAsync(ClipInfo clip)
+    {
+        if (!await DialogService.ConfirmAsync(DeleteTitle, DeleteText))
+        {
+            return;
+        }
+
+        if (!Explorer.Recycle(clip.Path))
+        {
+            Snackbar.Add("The clip could not be deleted, it may be in use", Severity.Warning);
+        }
+    }
+
     private void OpenFolder()
     {
         Explorer.OpenFolder(Controller.Settings.ClipsDirectory);
@@ -68,7 +86,6 @@ public partial class Clips : IDisposable
     public void Dispose()
     {
         Controller.Library.Changed -= OnLibraryChanged;
-        Controller.Recorder.ClipSaved -= OnClipSaved;
         _closing.Cancel();
         _closing.Dispose();
         GC.SuppressFinalize(this);

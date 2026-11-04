@@ -28,17 +28,17 @@ public sealed class AudioMixer : IDisposable
     private long _emittedFrames;
     private long _muteUntilFrame = long.MinValue;
 
-    public AudioMixer(long originTimestamp, AudioDeviceInfo? system, AudioDeviceInfo? microphone)
+    public AudioMixer(long originTimestamp, string? systemId, string? microphoneId)
     {
         _origin = originTimestamp;
-        if (system is not null)
+        if (systemId is not null)
         {
-            _sources.Add(new AudioSource(this, "System Audio", system, true));
+            _sources.Add(new AudioSource(this, "System Audio", systemId, true));
         }
 
-        if (microphone is not null)
+        if (microphoneId is not null)
         {
-            _sources.Add(new AudioSource(this, "Microphone", microphone, false));
+            _sources.Add(new AudioSource(this, "Microphone", microphoneId, false));
         }
 
         _notifications = _enumerator.CreateNotificationClient(useSynchronizationContext: false);
@@ -61,8 +61,6 @@ public sealed class AudioMixer : IDisposable
     }
 
     public event Action? ProblemChanged;
-
-    public bool HasSources => _sources.Count > 0;
 
     public string? Problem =>
         _sources.Select(source => source.Problem).FirstOrDefault(problem => problem is not null);
@@ -172,12 +170,8 @@ public sealed class AudioMixer : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    private sealed class AudioSource(
-        AudioMixer mixer,
-        string kind,
-        AudioDeviceInfo device,
-        bool loopback
-    ) : IDisposable
+    private sealed class AudioSource(AudioMixer mixer, string kind, string deviceId, bool loopback)
+        : IDisposable
     {
         // Eight Seconds Of Room While The Encoder Starts Reading
         private const int RingFrames = SampleRate * 8;
@@ -191,21 +185,21 @@ public sealed class AudioMixer : IDisposable
         private WasapiRecorder? _recorder;
         private long? _expectedFrame;
         private long _drainedFrame;
-        private string? _activeName;
+
         private bool _disposed;
         private long _lateFrames;
         private long _lateReported;
 
         public string? Problem { get; private set; }
 
-        public bool FollowsDefault => loopback && device.Id.Length == 0;
+        public bool FollowsDefault => loopback && deviceId.Length == 0;
 
-        public bool Wants(string deviceId)
+        public bool Wants(string changedId)
         {
             return Problem is not null
                 && (
                     FollowsDefault
-                    || string.Equals(deviceId, device.Id, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(changedId, deviceId, StringComparison.OrdinalIgnoreCase)
                 );
         }
 
@@ -224,7 +218,7 @@ public sealed class AudioMixer : IDisposable
                     // An Empty Id Follows The Default Playback Device
                     var endpoint = FollowsDefault
                         ? mixer._enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Console)
-                        : mixer._enumerator.GetDevice(device.Id);
+                        : mixer._enumerator.GetDevice(deviceId);
                     var builder = new WasapiRecorderBuilder()
                         .WithDevice(endpoint)
                         .WithFormat(WaveFormat.CreateIeeeFloatWaveFormat(SampleRate, Channels))
@@ -237,7 +231,7 @@ public sealed class AudioMixer : IDisposable
                     var recorder = builder.Build();
                     recorder.DataAvailable += OnData;
                     recorder.RecordingStopped += OnStopped;
-                    _activeName = endpoint.FriendlyName;
+
                     lock (_gate)
                     {
                         _expectedFrame = null;
@@ -246,7 +240,7 @@ public sealed class AudioMixer : IDisposable
                     recorder.StartRecording();
                     _recorder = recorder;
                     SetProblem(null);
-                    s_logger.Info($"Started {kind} From {_activeName}");
+                    s_logger.Info($"Started {kind} From {endpoint.FriendlyName}");
                 }
                 catch (Exception exception)
                     when (exception

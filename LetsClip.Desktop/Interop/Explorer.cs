@@ -1,5 +1,6 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Diagnostics;
+using Microsoft.VisualBasic.FileIO;
 using NLog;
 
 namespace LetsClip.Desktop.Interop;
@@ -33,6 +34,26 @@ public static class Explorer
     {
         Directory.CreateDirectory(folder);
         Start(new ProcessStartInfo("explorer.exe", $"\"{folder}\""));
+    }
+
+    public static bool Recycle(string path)
+    {
+        // To The Recycle Bin, So A Mistake Comes Back
+        try
+        {
+            FileSystem.DeleteFile(path, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
+            return true;
+        }
+        catch (Exception exception)
+            when (exception
+                    is IOException
+                        or UnauthorizedAccessException
+                        or OperationCanceledException
+            )
+        {
+            s_logger.Warn($"Failed To Delete Clip {exception.GetType().Name}");
+            return false;
+        }
     }
 
     public static void OpenLink(string url)

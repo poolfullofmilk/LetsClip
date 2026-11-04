@@ -144,11 +144,7 @@ public sealed class ClipLibrary : IDisposable
             metadata.RecordedAt,
             metadata.KeepEnd - metadata.KeepStart,
             file.Length,
-            File.Exists(thumbnail) ? thumbnail : null,
-            metadata.HasAudio,
-            metadata.Width,
-            metadata.Height,
-            metadata.FrameRate
+            File.Exists(thumbnail) ? thumbnail : null
         );
     }
 
@@ -288,18 +284,14 @@ public sealed class ClipLibrary : IDisposable
                 return null;
             }
 
+            // Generated Names Know Their Recording Time, Copies Do Not
             var metadata = new ClipMetadata(
-                new DateTimeOffset(file.CreationTimeUtc, TimeSpan.Zero),
-                null,
-                media.Duration,
+                ClipNames.DateOf(Path.GetFileNameWithoutExtension(file.Name))
+                    ?? new DateTimeOffset(file.CreationTimeUtc, TimeSpan.Zero),
                 0,
                 media.Duration,
                 null,
                 null,
-                media.HasAudio,
-                media.Width,
-                media.Height,
-                media.FrameRate,
                 file.Length,
                 file.LastWriteTimeUtc
             );

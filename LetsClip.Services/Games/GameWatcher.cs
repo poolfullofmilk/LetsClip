@@ -7,17 +7,15 @@ namespace LetsClip.Services.Games;
 
 public sealed partial class GameWatcher : IDisposable
 {
-    // One Foreground Look Every Two Seconds, Nothing When Off
+    // One Process Look Every Two Seconds, Nothing When Off
     private static readonly TimeSpan s_interval = TimeSpan.FromSeconds(2);
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
-
-    private const uint QueryLimitedInformation = 0x1000;
 
     private readonly Timer _timer;
     private volatile bool _enabled;
     private int _checking;
     private bool _failing;
-    private Process? _game;
+    private int _gameProcessId;
     private volatile IReadOnlyDictionary<string, string> _games = new Dictionary<string, string>();
 
     public GameWatcher()
@@ -42,7 +40,24 @@ public sealed partial class GameWatcher : IDisposable
         }
 
         _enabled = enabled;
+        GameName = null;
+        _gameProcessId = 0;
         _timer.Change(enabled ? TimeSpan.Zero : Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+    }
+
+    public nint GameWindow()
+    {
+        // Read Fresh, Games Recreate Their Window On A Mode Change
+        try
+        {
+            using var process = Process.GetProcessById(_gameProcessId);
+            return process.MainWindowHandle;
+        }
+        catch (Exception exception)
+            when (exception is ArgumentException or InvalidOperationException)
+        {
+            return 0;
+        }
     }
 
     private void Check()
@@ -53,33 +68,52 @@ public sealed partial class GameWatcher : IDisposable
             return;
         }
 
+        var processes = Process.GetProcesses();
         try
         {
             if (!_enabled)
             {
-                Forget();
                 return;
             }
 
-            // A Seen Game Counts Until It Exits, Alt Tab Included
-            if (_game is { HasExited: true })
+            // A Found Game Counts Until Its Process Exits
+            if (GameName is { } running)
             {
-                Forget();
+                if (processes.Any(process => process.Id == _gameProcessId))
+                {
+                    return;
+                }
+
+                s_logger.Info($"Found {running} Closed");
+                GameName = null;
+                _gameProcessId = 0;
                 GameChanged?.Invoke(null);
             }
 
-            if (_game is null && ForegroundGame() is ({ } process, { } name))
+            // A New Game Needs A Window On Screen To Record
+            foreach (var process in processes)
             {
-                _game = process;
-                GameName = name;
-                s_logger.Info($"Found {name} Running");
-                GameChanged?.Invoke(name);
+                if (
+                    process.Id != Environment.ProcessId
+                    && _games.TryGetValue(
+                        GameScanner.NormalizeProcessKey(process.ProcessName),
+                        out var name
+                    )
+                    && process.MainWindowHandle is not 0 and var window
+                    && !IsIconic(window)
+                )
+                {
+                    _gameProcessId = process.Id;
+                    GameName = name;
+                    s_logger.Info($"Found {name} Running");
+                    GameChanged?.Invoke(name);
+                    return;
+                }
             }
 
             _failing = false;
         }
-        catch (Exception exception)
-            when (exception is InvalidOperationException or Win32Exception or ArgumentException)
+        catch (Exception exception) when (exception is InvalidOperationException or Win32Exception)
         {
             // A Process Gone Mid Check Waits For The Next Tick
             if (!_failing)
@@ -90,6 +124,11 @@ public sealed partial class GameWatcher : IDisposable
         }
         finally
         {
+            foreach (var process in processes)
+            {
+                process.Dispose();
+            }
+
             Volatile.Write(ref _checking, 0);
             if (_enabled)
             {
@@ -98,83 +137,14 @@ public sealed partial class GameWatcher : IDisposable
         }
     }
 
-    private void Forget()
-    {
-        _game?.Dispose();
-        _game = null;
-        GameName = null;
-    }
-
-    private (Process Process, string Name)? ForegroundGame()
-    {
-        _ = GetWindowThreadProcessId(GetForegroundWindow(), out var processId);
-        if (processId == 0 || processId == Environment.ProcessId)
-        {
-            return null;
-        }
-
-        var executable = ExecutableName(processId);
-        return
-            executable is not null
-            && _games.TryGetValue(GameScanner.NormalizeProcessKey(executable), out var name)
-            ? (Process.GetProcessById((int)processId), name)
-            : null;
-    }
-
-    private static string? ExecutableName(uint processId)
-    {
-        // Limited Rights Read Any Process Name, Elevated Games Too
-        var handle = OpenProcess(QueryLimitedInformation, false, processId);
-        if (handle == 0)
-        {
-            return null;
-        }
-
-        try
-        {
-            Span<char> buffer = stackalloc char[1024];
-            var length = buffer.Length;
-            return QueryFullProcessImageNameW(handle, 0, buffer, ref length)
-                ? Path.GetFileNameWithoutExtension(buffer[..length].ToString())
-                : null;
-        }
-        finally
-        {
-            _ = CloseHandle(handle);
-        }
-    }
-
     public void Dispose()
     {
         _enabled = false;
         _timer.Dispose();
-        _game?.Dispose();
         GC.SuppressFinalize(this);
     }
 
     [LibraryImport("user32.dll")]
-    private static partial nint GetForegroundWindow();
-
-    [LibraryImport("user32.dll")]
-    private static partial uint GetWindowThreadProcessId(nint window, out uint processId);
-
-    [LibraryImport("kernel32.dll")]
-    private static partial nint OpenProcess(
-        uint access,
-        [MarshalAs(UnmanagedType.Bool)] bool inherit,
-        uint processId
-    );
-
-    [LibraryImport("kernel32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool CloseHandle(nint handle);
-
-    [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool QueryFullProcessImageNameW(
-        nint process,
-        uint flags,
-        Span<char> name,
-        ref int size
-    );
+    private static partial bool IsIconic(nint window);
 }

@@ -1,4 +1,4 @@
-﻿@page "/settings"
+@page "/settings"
 
 <PageTitle>Settings</PageTitle>
 
@@ -13,28 +13,22 @@
                     Buffering
                 </MudText>
                 <SettingRow Title="Games Only">
-                    <DescriptionContent>
-                        Buffers only while a game runs,
-                        @* Games Link *@
-                        <MudLink Typo="Typo.body2"
-                                 Color="Color.Info"
-                                 OnClick="ShowGamesAsync">
-                            @GamesLinkText
-                        </MudLink>
-                    </DescriptionContent>
-                    <ChildContent>
-                        @* Games Only Switch *@
-                        <MudSwitch T="bool"
-                                   Value="Controller.Settings.GamesOnly"
-                                   ValueChanged="SetGamesOnly"
-                                   Color="Color.Info"
-                                   aria-label="Games Only"
-                                   Class="ma-0" />
-                    </ChildContent>
+                    @* Games Link *@
+                    <MudLink Typo="Typo.body2"
+                             Color="Color.Info"
+                             OnClick="ShowGamesAsync">
+                        @GamesLinkText
+                    </MudLink>
+                    @* Games Only Switch *@
+                    <MudSwitch T="bool"
+                               Value="Controller.Settings.GamesOnly"
+                               ValueChanged="SetGamesOnly"
+                               Color="Color.Info"
+                               aria-label="Games Only"
+                               Class="ma-0" />
                 </SettingRow>
                 <MudDivider />
-                <SettingRow Title="Start with Windows"
-                            Description="Opens in the tray when you sign in, ready to clip">
+                <SettingRow Title="Start with Windows">
                     @* Start With Windows Switch *@
                     <MudSwitch T="bool"
                                Value="Controller.Settings.StartWithWindows"
@@ -52,8 +46,7 @@
                          Class="pt-2">
                     Saving
                 </MudText>
-                <SettingRow Title="Save Hotkey"
-                            Description="@HotkeyDescription">
+                <SettingRow Title="Save Hotkey">
                     @if (_capturingKey)
                     {
                         <MudText Typo="Typo.body2"
@@ -87,8 +80,7 @@
                     </MudAlert>
                 }
                 <MudDivider />
-                <SettingRow Title="Save Sound"
-                            Description="A soft chime when a clip is saved, never heard in the clip">
+                <SettingRow Title="Save Sound">
                     @* Save Sound Switch *@
                     <MudSwitch T="bool"
                                Value="Controller.Settings.SaveSound"
@@ -106,8 +98,37 @@
                          Class="pt-2">
                     Audio
                 </MudText>
-                <SettingRow Title="System Audio"
-                            Description="Records what plays on one output device, all apps mixed">
+                <SettingRow Title="System Audio">
+                    @if (Controller.Settings.SystemAudio)
+                    {
+                        @* Playback Device Select *@
+                        <MudElement HtmlTag="div"
+                                    Class="fixed-width wide">
+                            <MudSelect T="string"
+                                       Value="Controller.Settings.SystemAudioDeviceId"
+                                       ValueChanged="SetPlaybackDevice"
+                                       ToStringFunc="PlaybackLabel"
+                                       aria-label="Playback Device"
+                                       Variant="Variant.Outlined"
+                                       Margin="Margin.Dense"
+                                       Dense
+                                       AnchorOrigin="Origin.BottomLeft"
+                                       TransformOrigin="Origin.TopLeft"
+                                       Class="my-0">
+                                <MudSelectItem T="string"
+                                               Value="@AudioDevices.DefaultPlaybackId">
+                                    Automatic
+                                </MudSelectItem>
+                                @foreach (var device in _playback)
+                                {
+                                    <MudSelectItem T="string"
+                                                   Value="device.Id">
+                                        <DeviceLabel Device="device" />
+                                    </MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudElement>
+                    }
                     @* System Audio Switch *@
                     <MudSwitch T="bool"
                                Value="Controller.Settings.SystemAudio"
@@ -116,54 +137,34 @@
                                aria-label="System Audio"
                                Class="ma-0" />
                 </SettingRow>
-                @if (Controller.Settings.SystemAudio)
-                {
-                    @* Playback Device Select *@
-                    <MudElement HtmlTag="div"
-                                Class="fixed-width wide mb-3">
-                        <MudSelect T="string"
-                                   Value="Controller.Settings.SystemAudioDeviceId"
-                                   ValueChanged="SetPlaybackDevice"
-                                   ToStringFunc="PlaybackLabel"
-                                   aria-label="Playback Device"
-                                   Variant="Variant.Outlined"
-                                   Margin="Margin.Dense"
-                                   Dense
-                                   AnchorOrigin="Origin.BottomLeft"
-                                   TransformOrigin="Origin.TopLeft">
-                            <MudSelectItem T="string"
-                                           Value="@AudioDevices.DefaultPlaybackId">
-                                <MudStack Row
-                                          Justify="Justify.SpaceBetween"
-                                          Spacing="4">
-                                    <MudText Typo="Typo.body2">Windows Default</MudText>
-                                    <MudText Typo="Typo.body2"
-                                             Class="mud-text-secondary ellipsis">
-                                        @_defaultPlaybackName
-                                    </MudText>
-                                </MudStack>
-                            </MudSelectItem>
-                            @foreach (var device in _playback)
-                            {
-                                <MudSelectItem T="string"
-                                               Value="device.Id">
-                                    <MudStack Row
-                                              Justify="Justify.SpaceBetween"
-                                              Spacing="4">
-                                        <MudText Typo="Typo.body2">@device.Name</MudText>
-                                        <MudText Typo="Typo.body2"
-                                                 Class="mud-text-secondary ellipsis">
-                                            @device.Kind
-                                        </MudText>
-                                    </MudStack>
-                                </MudSelectItem>
-                            }
-                        </MudSelect>
-                    </MudElement>
-                }
                 <MudDivider />
-                <SettingRow Title="Microphone"
-                            Description="Off by default, mixed in with system audio when on">
+                <SettingRow Title="Microphone">
+                    @if (Controller.Settings.Microphone)
+                    {
+                        @* Microphone Select *@
+                        <MudElement HtmlTag="div"
+                                    Class="fixed-width wide">
+                            <MudSelect T="string"
+                                       Value="Controller.Settings.MicrophoneDeviceId"
+                                       ValueChanged="SetMicrophoneDevice"
+                                       ToStringFunc="MicrophoneLabel"
+                                       aria-label="Microphone Device"
+                                       Variant="Variant.Outlined"
+                                       Margin="Margin.Dense"
+                                       Dense
+                                       AnchorOrigin="Origin.BottomLeft"
+                                       TransformOrigin="Origin.TopLeft"
+                                       Class="my-0">
+                                @foreach (var device in _microphones)
+                                {
+                                    <MudSelectItem T="string"
+                                                   Value="device.Id">
+                                        <DeviceLabel Device="device" />
+                                    </MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudElement>
+                    }
                     @* Microphone Switch *@
                     <MudSwitch T="bool"
                                Value="Controller.Settings.Microphone"
@@ -173,39 +174,6 @@
                                Disabled="@(_microphones.Count == 0)"
                                Class="ma-0" />
                 </SettingRow>
-                @if (Controller.Settings.Microphone)
-                {
-                    @* Microphone Select *@
-                    <MudElement HtmlTag="div"
-                                Class="fixed-width wide mb-3">
-                        <MudSelect T="string"
-                                   Value="Controller.Settings.MicrophoneDeviceId"
-                                   ValueChanged="SetMicrophoneDevice"
-                                   ToStringFunc="MicrophoneLabel"
-                                   aria-label="Microphone Device"
-                                   Variant="Variant.Outlined"
-                                   Margin="Margin.Dense"
-                                   Dense
-                                   AnchorOrigin="Origin.BottomLeft"
-                                   TransformOrigin="Origin.TopLeft">
-                            @foreach (var device in _microphones)
-                            {
-                                <MudSelectItem T="string"
-                                               Value="device.Id">
-                                    <MudStack Row
-                                              Justify="Justify.SpaceBetween"
-                                              Spacing="4">
-                                        <MudText Typo="Typo.body2">@device.Name</MudText>
-                                        <MudText Typo="Typo.body2"
-                                                 Class="mud-text-secondary ellipsis">
-                                            @device.Kind
-                                        </MudText>
-                                    </MudStack>
-                                </MudSelectItem>
-                            }
-                        </MudSelect>
-                    </MudElement>
-                }
             </MudPaper>
 
             @* Storage Settings *@
@@ -215,8 +183,7 @@
                          Class="pt-2">
                     Storage
                 </MudText>
-                <SettingRow Title="Clips Folder"
-                            Description="Where clips and their exports are saved">
+                <SettingRow Title="Clips Folder">
                     <MudText Typo="Typo.body2"
                              Class="mud-text-secondary ellipsis">
                         @ClipsFolderText

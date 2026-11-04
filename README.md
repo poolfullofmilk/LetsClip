@@ -5,11 +5,12 @@
 - Press a hotkey anywhere, even in a game, and the last moments become a clip
 - Records in 1080p or your monitor's own resolution, up to its refresh rate, 240 FPS included
 - Records what your speakers or headphones play, with your microphone mixed in if you want it
-- Buffers only while a game runs if you like, from a list of found games you can add to or remove from
+- Games Only records just the game's own window while it runs, so chats, other apps and notifications stay out of your clips, from a list of found games you can add to or remove from
 - Starts with Windows in the tray, and pauses or resumes from the tray icon
 - Trim a clip by dragging the handles, typing the times or setting them at the frame you watch, and the trim is kept for next time
 - Export an MP4 under the size you pick, 10 MB for Discord's free limit, in 1080p or 720p, at 60 FPS or the clip's own rate
 - Copy the export and paste it into Discord, drag it in, or open its folder
+- Watch a clip full screen, and delete clips you do not want, they go to the Recycle Bin
 - Plays a soft chime when a clip is saved, never heard in the clip itself
 - Updates itself
 
@@ -19,7 +20,7 @@
 3. When something happens, press Ctrl+Shift+F8, then open the clip, trim it and export it
 
 ## ⚠️ Important
-- LetsClip records everything visible on the chosen monitor, notifications and chats included, into a short rolling cache on your PC. Nothing is kept until you save a clip and nothing leaves your PC
+- LetsClip records everything visible on the chosen monitor, notifications and chats included, into a short rolling cache on your PC, or with Games Only just the game's window. Nothing is kept until you save a clip and nothing leaves your PC
 - Locking Windows, sleep, the display turning off or a monitor change clears what was not saved, then buffering starts over by itself
 - HDR monitors are not supported yet: turn HDR off for the monitor you record
 - Games in exclusive fullscreen may not be captured, borderless or windowed works best
