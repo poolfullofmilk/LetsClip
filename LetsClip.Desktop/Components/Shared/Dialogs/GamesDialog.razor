@@ -1,0 +1,95 @@
+<MudDialog>
+
+    <TitleContent>
+        <MudText Typo="Typo.h6">Games</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.body2"
+                     Class="mud-text-secondary text-relaxed">
+                Found in your game libraries or added by you. Removed games stay at the bottom, ready to add back
+            </MudText>
+            @if (Controller.GameCount is null)
+            {
+                <MudStack Row
+                          AlignItems="AlignItems.Center"
+                          Spacing="2"
+                          Class="py-4">
+                    <MudProgressCircular Color="Color.Info"
+                                         Size="Size.Small"
+                                         Indeterminate />
+                    <MudText Typo="Typo.body2"
+                             Class="mud-text-secondary">
+                        Looking for installed games
+                    </MudText>
+                </MudStack>
+            }
+            else if (_games.Count == 0)
+            {
+                <EmptyState Icon="@Icons.Material.Rounded.SportsEsports"
+                            Text="No Games Found" />
+            }
+            else
+            {
+                @* Games Table *@
+                <MudTable T="GameEntry"
+                          Items="_games"
+                          Dense
+                          Hover
+                          FixedHeader
+                          Elevation="0"
+                          Class="fit"
+                          Style="max-height:50vh">
+
+                    <HeaderContent>
+                        <MudTh>Name</MudTh>
+                        <MudTh />
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>
+                            <MudText Typo="Typo.body2"
+                                     Class="@NameClass(context)">
+                                @context.Name
+                            </MudText>
+                        </MudTd>
+                        <MudTd Class="text-right">
+                            @if (context.IsRemoved)
+                            {
+                                @* Add Back Button *@
+                                <Tooltip Text="Add Back"
+                                         RootClass="d-inline-flex">
+                                    <MudIconButton Icon="@Icons.Material.Rounded.AddCircleOutline"
+                                                   aria-label="Add Back"
+                                                   Size="Size.Small"
+                                                   OnClick="() => Controller.RestoreGame(context.Key)" />
+                                </Tooltip>
+                            }
+                            else
+                            {
+                                @* Remove Button *@
+                                <Tooltip Text="Remove"
+                                         RootClass="d-inline-flex">
+                                    <MudIconButton Icon="@Icons.Material.Rounded.RemoveCircleOutline"
+                                                   aria-label="Remove"
+                                                   Size="Size.Small"
+                                                   OnClick="() => Controller.RemoveGame(context.Key)" />
+                                </Tooltip>
+                            }
+                        </MudTd>
+                    </RowTemplate>
+
+                </MudTable>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        @* Add Game Button *@
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Info"
+                   StartIcon="@Icons.Material.Rounded.Add"
+                   OnClick="AddGame">
+            Add Game
+        </MudButton>
+    </DialogActions>
+
+</MudDialog>

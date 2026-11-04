@@ -1,0 +1,116 @@
+﻿@inherits LayoutComponentBase
+
+@* Providers *@
+<MudThemeProvider Theme="AppTheme.Custom"
+                  IsDarkMode
+                  DefaultScrollbar />
+<MudPopoverProvider />
+<MudDialogProvider BackdropClick="false"
+                   CloseButton="true"
+                   CloseOnEscapeKey="true"
+                   MaxWidth="MaxWidth.False" />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="4"
+               Style="background-color:color-mix(in srgb, var(--mud-palette-appbar-background) var(--glass-opacity), transparent); backdrop-filter:var(--glass-blur)">
+        <MudStack Row
+                  AlignItems="AlignItems.Center"
+                  Class="mud-width-full px-2"
+                  Spacing="2">
+            <MudText Typo="Typo.h6"
+                     Class="mud-typography-nowrap mr-2">
+                @AppInfo.DisplayName
+            </MudText>
+
+            @* Help Menu *@
+            <Tooltip Text="Help"
+                     RootClass="d-flex">
+                <MudBadge Dot
+                          Color="Color.Error"
+                          Overlap
+                          Visible="@(_availableUpdate is not null)"
+                          Class="d-flex">
+                    <MudMenu Icon="@Icons.Material.Rounded.Help"
+                             AriaLabel="Help"
+                             Size="Size.Small"
+                             Dense
+                             AnchorOrigin="Origin.BottomLeft"
+                             TransformOrigin="Origin.TopLeft">
+                        @* Check Updates *@
+                        <MudMenuItem Icon="@Icons.Material.Rounded.SystemUpdateAlt"
+                                     Label="Check for Updates"
+                                     Class="@UpdateDotClass"
+                                     OnClick="() => CheckForUpdatesAsync(true)" />
+                        @* Open Logs *@
+                        <MudMenuItem Icon="@Icons.Material.Rounded.Description"
+                                     Label="Open Logs Folder"
+                                     OnClick="OpenLogs" />
+                        <MudDivider />
+                        @* About *@
+                        <MudMenuItem Icon="@Icons.Material.Rounded.Info"
+                                     Label="About"
+                                     OnClick="ShowAboutAsync" />
+                    </MudMenu>
+                </MudBadge>
+            </Tooltip>
+
+            <MudSpacer />
+
+            @* Capture Chip *@
+            <CaptureChip />
+        </MudStack>
+    </MudAppBar>
+
+    @* Main Content *@
+    <MudMainContent Class="page-gutter">
+        <MudStack Row
+                  AlignItems="AlignItems.Start"
+                  Spacing="6">
+            @* Navigation Panel *@
+            <MudPaper Elevation="4"
+                      Class="rounded-panel pa-2 nav-panel">
+                <MudNavMenu Color="Color.Info"
+                            Rounded
+                            Margin="Margin.Dense">
+                    @* Clips Link *@
+                    <MudNavLink Href="clips"
+                                Match="NavLinkMatch.Prefix"
+                                Icon="@Icons.Material.Rounded.VideoLibrary">
+                        Clips
+                    </MudNavLink>
+                    @* Settings Link *@
+                    <MudNavLink Href="settings"
+                                Match="NavLinkMatch.All"
+                                Icon="@Icons.Material.Rounded.Settings">
+                        Settings
+                    </MudNavLink>
+                </MudNavMenu>
+            </MudPaper>
+
+            @* Page *@
+            <MudElement HtmlTag="section"
+                        Class="flex-grow-1"
+                        Style="min-width:0">
+                <ErrorBoundary @ref="_errorBoundary">
+                    <ChildContent>
+                        @Body
+                    </ChildContent>
+                    <ErrorContent Context="exception">
+                        <EmptyState Icon="@Icons.Material.Rounded.Error"
+                                    Color="Color.Error"
+                                    Text="Something went wrong on this page">
+                            @* Recover *@
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Info"
+                                       Size="Size.Small"
+                                       OnClick="RecoverFromError">
+                                Back to Clips
+                            </MudButton>
+                        </EmptyState>
+                    </ErrorContent>
+                </ErrorBoundary>
+            </MudElement>
+        </MudStack>
+    </MudMainContent>
+</MudLayout>

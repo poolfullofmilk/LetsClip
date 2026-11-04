@@ -1,0 +1,34 @@
+name: Build
+
+# Every Branch Push And Pull Request Builds, Releases Are Made By Hand
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+
+# A Newer Push Replaces A Run Still Going On The Same Branch
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      # The Pinned FFmpeg Is Fetched And Hash Checked, Never Committed
+      - name: Fetch FFmpeg
+        shell: pwsh
+        run: ./LetsClip.Desktop/FFmpeg/Get-FFmpeg.ps1
+
+      - name: Build
+        run: dotnet build LetsClip.slnx -c Release

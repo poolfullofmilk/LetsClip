@@ -1,0 +1,151 @@
+@page "/"
+@page "/clips"
+
+<PageTitle>Clips</PageTitle>
+
+<MudElement HtmlTag="div"
+            Class="split">
+    <MudElement HtmlTag="div"
+                Class="side-panel">
+        <CapturePanel />
+    </MudElement>
+
+    <MudElement HtmlTag="div"
+                Class="main-panel">
+        <Header Title="Clips">
+            <TitleContent>
+                <MudText Typo="Typo.subtitle1"
+                         Class="mud-text-secondary">
+                    @CountText
+                </MudText>
+                <MudSpacer />
+                @* Open Folder *@
+                <Tooltip Text="Open Clips Folder"
+                         RootClass="d-flex">
+                    <MudIconButton Icon="@Icons.Material.Rounded.FolderOpen"
+                                   aria-label="Open Clips Folder"
+                                   Size="Size.Small"
+                                   OnClick="OpenFolder" />
+                </Tooltip>
+                @* Refresh *@
+                <Tooltip Text="Refresh"
+                         RootClass="d-flex">
+                    <MudIconButton Icon="@Icons.Material.Rounded.Refresh"
+                                   aria-label="Refresh"
+                                   Size="Size.Small"
+                                   OnClick="LoadAsync" />
+                </Tooltip>
+            </TitleContent>
+            <ChildContent>
+                @if (_clips is null)
+                {
+                    @* Clip Skeletons *@
+                    <MudGrid Spacing="3">
+
+                        @for (var index = 0; index < 6; index++)
+                        {
+                            <MudItem xs="12"
+                                     sm="6"
+                                     lg="4"
+                                     xl="3">
+                                <MudPaper Elevation="4"
+                                          Class="rounded-panel pa-3">
+                                    <MudSkeleton SkeletonType="SkeletonType.Rectangle"
+                                                 Animation="Animation.Wave"
+                                                 Class="rounded-inner"
+                                                 Style="aspect-ratio:16/9; height:auto" />
+                                    <MudText Typo="Typo.subtitle2"
+                                             Class="mt-2">
+                                        <MudSkeleton Animation="Animation.Wave"
+                                                     Width="60%" />
+                                    </MudText>
+                                    <MudText Typo="Typo.caption">
+                                        <MudSkeleton Animation="Animation.Wave"
+                                                     Width="40%" />
+                                    </MudText>
+                                </MudPaper>
+                            </MudItem>
+                        }
+
+                    </MudGrid>
+                }
+                else if (_clips.Count == 0)
+                {
+                    <MudPaper Elevation="4"
+                              Class="rounded-panel">
+                        <EmptyState Icon="@Icons.Material.Rounded.VideoLibrary"
+                                    Color="Color.Default"
+                                    Text="@EmptyText" />
+                    </MudPaper>
+                }
+                else
+                {
+                    @* Clip Cards *@
+                    <MudGrid Spacing="3">
+
+                        @foreach (var clip in _clips)
+                        {
+                            <MudItem @key="clip.Path"
+                                     xs="12"
+                                     sm="6"
+                                     lg="4"
+                                     xl="3">
+                                @* Clip Card *@
+                                <MudPaper Elevation="4"
+                                          Class="rounded-panel pa-3 hover-card"
+                                          role="button"
+                                          tabindex="0"
+                                          data-keyclick
+                                          aria-label="@($"Open {clip.Title}")"
+                                          @onclick="() => Open(clip)">
+                                    <MudElement HtmlTag="div"
+                                                Class="clip-thumb rounded-inner">
+                                        @if (DesktopShell.ThumbnailUrl(clip.ThumbnailPath) is { Length: > 0 } thumbnail)
+                                        {
+                                            <MudImage Src="@thumbnail"
+                                                      Alt="@clip.Title" />
+                                        }
+                                        <MudChip T="string"
+                                                 Size="Size.Small"
+                                                 Variant="Variant.Filled"
+                                                 Color="Color.Dark"
+                                                 Class="clip-duration ma-0">
+                                            @Formatter.FormatDuration(clip.Duration)
+                                        </MudChip>
+                                    </MudElement>
+                                    <MudStack Row
+                                              AlignItems="AlignItems.Center"
+                                              Spacing="1"
+                                              Class="mt-2">
+                                        <MudStack Spacing="0"
+                                                  Class="flex-grow-1"
+                                                  Style="min-width:0">
+                                            <MudText Typo="Typo.subtitle2"
+                                                     Class="ellipsis">
+                                                @clip.Title
+                                            </MudText>
+                                            <MudText Typo="Typo.caption"
+                                                     Class="mud-text-secondary ellipsis">
+                                                @clip.Details
+                                            </MudText>
+                                        </MudStack>
+                                        @* Show In Folder *@
+                                        <MudElement HtmlTag="span"
+                                                    ClickPropagation="false">
+                                            <MudIconButton Icon="@Icons.Material.Rounded.FolderOpen"
+                                                           aria-label="Show in Folder"
+                                                           title="Show in Folder"
+                                                           Size="Size.Small"
+                                                           OnClick="() => Explorer.ShowFile(clip.Path)" />
+                                        </MudElement>
+                                    </MudStack>
+                                </MudPaper>
+                            </MudItem>
+                        }
+
+                    </MudGrid>
+                }
+            </ChildContent>
+        </Header>
+    </MudElement>
+</MudElement>

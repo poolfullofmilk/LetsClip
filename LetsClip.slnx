@@ -1,0 +1,5 @@
+<Solution>
+    <Project Path="LetsClip.Data/LetsClip.Data.csproj" />
+    <Project Path="LetsClip.Services/LetsClip.Services.csproj" />
+    <Project Path="LetsClip.Desktop/LetsClip.Desktop.csproj" />
+</Solution>

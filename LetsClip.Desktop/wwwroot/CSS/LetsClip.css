@@ -1,0 +1,683 @@
+/* Nunito, Self Hosted, Latin And Latin Extended */
+@font-face {
+    font-family: "Nunito";
+    font-style: normal;
+    font-weight: 200 1000;
+    font-display: swap;
+    src: url("../Fonts/Nunito-Latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+    font-family: "Nunito";
+    font-style: normal;
+    font-weight: 200 1000;
+    font-display: swap;
+    src: url("../Fonts/Nunito-LatinExt.woff2") format("woff2");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* Shared Tokens */
+:root {
+    --radius-panel: 20px;
+    --radius-inner: 10px;
+    --radius-thumb: 6px;
+    --page-gutter: 28px;
+    --page-top: 80px;
+    --page-bottom: 28px;
+    --nav-width: 240px;
+    --side-width: 360px;
+    --glass-opacity: 66%;
+    --glass-blur: blur(12px);
+    --row-hover-amount: 12%;
+    --row-hover: color-mix(in srgb, var(--mud-palette-black) var(--row-hover-amount), transparent);
+    --popover-opacity: 92%;
+    --inset-fill: color-mix(in srgb, var(--mud-palette-black) 22%, transparent);
+    --shade: color-mix(in srgb, var(--mud-palette-black) 58%, transparent);
+    --tonal-info: color-mix(in srgb, var(--mud-palette-info) 20%, transparent);
+    --tonal-info-hover: color-mix(in srgb, var(--mud-palette-info) 30%, transparent);
+    --tonal-info-text: color-mix(in srgb, var(--mud-palette-info) 40%, var(--mud-palette-white));
+    --tonal-error: color-mix(in srgb, var(--mud-palette-error) 20%, transparent);
+    --tonal-error-hover: color-mix(in srgb, var(--mud-palette-error) 30%, transparent);
+    --tonal-error-text: color-mix(in srgb, var(--mud-palette-error) 40%, var(--mud-palette-white));
+    --tooltip-surface: color-mix(in srgb, var(--mud-palette-white) 9%, var(--mud-palette-surface));
+    --scrollbar-thumb: color-mix(in srgb, var(--mud-palette-white) 18%, transparent);
+    --scrollbar-thumb-hover: color-mix(in srgb, var(--mud-palette-white) 32%, transparent);
+    --quick: 120ms ease-out;
+}
+
+/* A 1080p Screen At 125 Or 150 Percent Gets A Slimmer Frame */
+@media (max-width: 1440px) {
+    :root {
+        --nav-width: 200px;
+        --side-width: 300px;
+        --page-gutter: 20px;
+    }
+}
+
+/* Menus, Selects And Dropdowns Frost Nearly Opaque, Text Behind Never Shows */
+.mud-popover.mud-paper {
+    background-color: color-mix(in srgb, var(--mud-palette-surface) var(--popover-opacity), transparent);
+    backdrop-filter: var(--glass-blur);
+}
+
+/* Thin Scrollbars With No Arrows, Like The Rest Of Windows */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+::-webkit-scrollbar-button {
+    display: none;
+}
+
+::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 10px;
+    background-clip: padding-box;
+    background-color: var(--scrollbar-thumb);
+}
+
+    ::-webkit-scrollbar-thumb:hover {
+        background-color: var(--scrollbar-thumb-hover);
+    }
+
+/* Dialogs Blur The Page Behind Them */
+.mud-overlay-scrim.mud-overlay-dark {
+    backdrop-filter: var(--glass-blur);
+}
+
+/* Inset Surfaces Sit Below Their Panel */
+.inset {
+    background-color: var(--inset-fill) !important;
+}
+
+/* Shared Radii */
+.rounded-panel {
+    border-radius: var(--radius-panel) !important;
+}
+
+.rounded-inner {
+    border-radius: var(--radius-inner) !important;
+    overflow: hidden;
+}
+
+/* Page Gutters, Top Clears The App Bar */
+.page-gutter {
+    padding: var(--page-top) var(--page-gutter) var(--page-bottom) !important;
+}
+
+/* Fill Pages End On The Bottom Gutter, What Is Left Goes To One Part */
+.page-fill {
+    height: calc(100vh - var(--page-top) - var(--page-bottom));
+    min-height: 0;
+}
+
+.fill-column {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.fill {
+    flex: 1 1 0;
+    min-height: 0;
+}
+
+/* A Dialog Table Scrolls Its Rows Under A Fixed Header */
+.mud-table.fit {
+    display: flex;
+    flex-direction: column;
+}
+
+    .mud-table.fit > .mud-table-container {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+    }
+
+.split.fill {
+    align-items: stretch;
+}
+
+    .split.fill > .side-panel {
+        overflow-y: auto;
+    }
+
+/* Fields Keep One Width, Device Names Need A Wider One */
+.fixed-width {
+    flex: none !important;
+    width: 250px;
+    max-width: 100%;
+}
+
+    .fixed-width.wide {
+        width: 400px;
+    }
+
+
+/* Two Columns Side By Side, Stacked Once The Window Narrows */
+.split {
+    display: flex;
+    align-items: flex-start;
+    gap: 24px;
+}
+
+.side-panel {
+    width: var(--side-width);
+    flex-shrink: 0;
+}
+
+.main-panel {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+@media (max-width: 1100px) {
+    .split {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .side-panel {
+        width: auto;
+    }
+
+    /* Stacked, The Page Scrolls And The Player Keeps 16 By 9 */
+    .page-fill {
+        height: auto;
+    }
+
+    .player {
+        aspect-ratio: 16 / 9;
+    }
+}
+
+/* The Navigation Panel Stays Beside The Page While It Scrolls */
+.nav-panel {
+    position: sticky;
+    top: var(--page-top);
+    width: var(--nav-width);
+    flex-shrink: 0;
+}
+
+/* A Narrow Window Keeps Only The Icons, Names Stay For Screen Readers */
+@media (max-width: 900px) {
+    .nav-panel {
+        width: auto;
+    }
+
+    .nav-panel .mud-nav-link-text {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+    }
+}
+
+/* Info Icons Lift Softly On A Wide Light Shadow */
+.info-icon svg {
+    filter: drop-shadow(0 3px 12px rgba(0,0,0, 0.22));
+}
+
+/* Badges Lift Off Their Surface Like Chips */
+.mud-badge {
+    box-shadow: var(--mud-elevation-1);
+}
+
+/* The Help Dot Leads Down To Check For Updates */
+.update-dot .mud-menu-item-text::after {
+    content: "";
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    margin-left: 4px;
+    border-radius: 50%;
+    background-color: var(--mud-palette-error);
+    box-shadow: var(--mud-elevation-1);
+    vertical-align: top;
+}
+
+/* A Real Size Thumb, A Scaled 4 Px One Rasterizes Lopsided At 125% */
+.mud-slider.mud-slider-medium .mud-slider-input::-webkit-slider-thumb {
+    width: 16px;
+    height: 16px;
+    margin-top: -6px;
+    transform: none;
+}
+
+/* Tracks Run Rounded, The Filled Part Too */
+.mud-slider .mud-slider-filled {
+    border-radius: 4px;
+}
+
+.mud-slider.mud-slider-info .mud-slider-input:is(:active, :focus-visible)::-webkit-slider-thumb {
+    box-shadow: 0 0 0 8px rgba(var(--mud-palette-info-rgb), 0.24);
+}
+
+/* Header Actions Keep One Line, Only The Title Gives Way */
+.header-row > * {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+    .header-row > .header-title {
+        flex-shrink: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+/* Two Line Heights, Titles Tight And Prose Relaxed */
+.text-tight {
+    line-height: 1.3 !important;
+}
+
+.text-relaxed {
+    line-height: 1.6 !important;
+}
+
+/* Long Names Stop At The Edge Of Their Box */
+.ellipsis {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* An Empty Or Error State Sits Centred In Its Panel */
+.empty-state {
+    min-height: 320px;
+    height: 100%;
+}
+
+/* Theme Values For The Page */
+html, body {
+    margin: 0;
+    background-color: var(--mud-palette-background);
+    color: var(--mud-palette-text-primary);
+    font-family: var(--mud-typography-default-family);
+}
+
+/* Marks Values Selectable Where MudBlazor Suppresses Selection */
+.selectable-text {
+    user-select: text;
+}
+
+/* Tooltips Rise On A Lighter Surface, Long Ones Wrap, Each Line Centred */
+.mud-tooltip.mud-tooltip-default {
+    max-width: 320px !important;
+    padding: 6px 10px;
+    border-radius: var(--radius-inner);
+    background-color: var(--tooltip-surface);
+    color: var(--mud-palette-text-primary);
+    box-shadow: var(--mud-elevation-4);
+    font-size: 13px;
+    font-weight: 400;
+}
+
+    .mud-tooltip.mud-tooltip-default.mud-tooltip-arrow::after {
+        border-color: var(--tooltip-surface) transparent transparent transparent;
+    }
+
+/* A Button's Tooltip Steps Aside While Its Menu Is Open */
+.mud-popover-provider:has(.mud-popover-open .mud-menu-list) .mud-tooltip {
+    visibility: hidden;
+}
+
+/* Blazor Shows This Only After A Crash */
+#blazor-error-ui {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 2000;
+    padding: 12px 24px;
+    background: var(--mud-palette-error);
+    color: var(--mud-palette-error-text);
+}
+
+    #blazor-error-ui .reload {
+        color: inherit;
+        margin-left: 8px;
+    }
+
+/* Keyboard Focus Shows Wherever Focus Lands */
+[data-keyclick]:focus-visible,
+.timeline:focus-visible,
+.timeline-handle:focus-visible {
+    outline: 2px solid var(--mud-palette-info);
+    outline-offset: 2px;
+}
+
+/* #region MudBlazor Overrides */
+/* Clip Horizontally Only So Sticky Children Still Work */
+.mud-main-content {
+    min-height: 0 !important;
+    overflow-x: clip !important;
+}
+
+/* Dialogs Are Panels, So Their Cards Never Out Round Them */
+.mud-dialog {
+    border-radius: var(--radius-panel) !important;
+}
+
+    /* Raised Sections Keep Their Shadow Clear Of The Actions */
+    .mud-dialog .mud-dialog-content {
+        padding-bottom: 24px;
+    }
+
+    /* Actions Line Up With The Content's Edges */
+    .mud-dialog .mud-dialog-actions {
+        padding: 0 24px 20px;
+    }
+
+/* A Question Keeps Its Line Breaks */
+.pre-line {
+    white-space: pre-line;
+}
+
+/* Chips Carry The Slightest Theme Shadow */
+.mud-chip {
+    box-shadow: var(--mud-elevation-1);
+}
+
+/* No Material Ripple, Buttons Fade Their Colour Instead */
+.mud-ripple-effect {
+    display: none !important;
+}
+
+.mud-button-root {
+    transition: background-color var(--quick), color var(--quick), opacity var(--quick);
+}
+
+/* Filled Buttons Take The Theme Shadow Instead Of Material's Own */
+.mud-button-filled,
+.mud-button-filled:hover,
+.mud-button-filled:focus-visible,
+.mud-button-filled:active {
+    box-shadow: var(--mud-elevation-1);
+}
+
+/* Every Blue Button, Pick And Info Alert Is Tonal Like The Open Page */
+.mud-button-filled.mud-button-filled-info:not(:disabled, .mud-disabled) {
+    background-color: var(--tonal-info);
+    color: var(--tonal-info-text);
+    box-shadow: none;
+}
+
+    .mud-button-filled.mud-button-filled-info:not(:disabled, .mud-disabled):is(:hover, :focus-visible, :active) {
+        background-color: var(--tonal-info-hover);
+    }
+
+/* A Stop Is Tonal Too, In Red */
+.mud-button-filled.mud-button-filled-error:not(:disabled, .mud-disabled) {
+    background-color: var(--tonal-error);
+    color: var(--tonal-error-text);
+    box-shadow: none;
+}
+
+    .mud-button-filled.mud-button-filled-error:not(:disabled, .mud-disabled):is(:hover, :focus-visible, :active) {
+        background-color: var(--tonal-error-hover);
+    }
+
+.mud-alert-text-info {
+    background-color: var(--tonal-info);
+}
+
+    .mud-alert-text-info,
+    .mud-alert-text-info .mud-alert-icon {
+        color: var(--tonal-info-text);
+    }
+
+/* A Picked Chip Is Tonal Like A Picked Button */
+.mud-chip.mud-chip-selected.mud-chip-color-info {
+    background-color: var(--tonal-info);
+    color: var(--tonal-info-text);
+    box-shadow: none;
+}
+
+/* Fields Sit Inset, Their Edge Shows On Hover And Turns Blue On Focus */
+.mud-input.mud-input-outlined {
+    border-radius: var(--mud-default-borderradius);
+    background-color: var(--inset-fill);
+}
+
+    .mud-input.mud-input-outlined .mud-input-outlined-border,
+    .mud-input.mud-input-outlined.mud-disabled .mud-input-outlined-border {
+        border-color: transparent;
+    }
+
+    .mud-input.mud-input-outlined:focus-within .mud-input-outlined-border {
+        border-color: var(--mud-palette-info);
+    }
+
+.mud-input-control:focus-within .mud-input-label {
+    color: var(--mud-palette-info);
+}
+
+/* The Navigation Marks Its Page Tonal And Darkens On Hover */
+.mud-navmenu.mud-navmenu-info .mud-nav-link.active:not(.mud-nav-link-disabled) {
+    background-color: var(--tonal-info);
+    color: var(--tonal-info-text);
+}
+
+    .mud-navmenu.mud-navmenu-info .mud-nav-link.active:not(.mud-nav-link-disabled):hover {
+        background-color: var(--tonal-info-hover);
+    }
+
+    .mud-navmenu.mud-navmenu-info .mud-nav-link.active:not(.mud-nav-link-disabled) .mud-nav-link-icon {
+        color: var(--tonal-info-text);
+    }
+
+.mud-navmenu .mud-nav-link:not(.active):hover {
+    background-color: var(--row-hover);
+}
+
+.mud-nav-link .mud-nav-link-text {
+    font-weight: 500;
+}
+
+/* Icon Text Buttons Take Filled Padding, Clear Of The Edge */
+.mud-button-text-size-small:has(.mud-button-icon-start) {
+    padding-inline: 10px;
+}
+
+/* Progress Bars Run Rounded */
+.mud-progress-linear,
+.mud-progress-linear .mud-progress-linear-bar {
+    border-radius: 4px;
+}
+/* #endregion */
+
+/* #region Clips */
+/* Clip Cards Fill The Row At A Readable Size */
+/* Cards Darken As One Surface In A Faint Blue Ring And Never Move */
+.hover-card {
+    cursor: pointer;
+    transition: background-color var(--quick), box-shadow var(--quick);
+}
+
+    .hover-card:hover {
+        background-color: color-mix(in srgb, var(--mud-palette-black) var(--row-hover-amount), var(--mud-palette-surface));
+        box-shadow: 0 0 0 2px var(--tonal-info-hover), var(--mud-elevation-4);
+    }
+
+/* Thumbnails Keep The Clip's Shape, Portrait Ones Fit Inside */
+.clip-thumb {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    background-color: var(--inset-fill);
+}
+
+    .clip-thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+    }
+
+    .clip-thumb .clip-duration {
+        position: absolute;
+        right: 8px;
+        bottom: 8px;
+    }
+
+/* Recording Dot Breathes While Buffering */
+.live-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: var(--mud-palette-error);
+    box-shadow: 0 0 0 3px var(--tonal-error);
+    animation: slow-pulse 2s ease-in-out infinite;
+    flex-shrink: 0;
+}
+
+@keyframes slow-pulse {
+    50% {
+        opacity: 0.45;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .live-dot {
+        animation: none;
+    }
+}
+/* #endregion */
+
+/* #region Editor */
+/* The Player Takes The Height Left, The Clip Sits Centred At Its Own Shape */
+.player {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 220px;
+}
+
+    .player video {
+        display: block;
+        max-width: 100%;
+        max-height: 100%;
+        border: 2px solid var(--mud-palette-black);
+        border-radius: var(--radius-inner);
+        background-color: var(--mud-palette-black);
+    }
+
+/* The Timeline: Thumbnails Under A Selection With Two Handles And A Playhead */
+.timeline {
+    position: relative;
+    height: 64px;
+    border-radius: var(--radius-inner);
+    overflow: hidden;
+    background-color: var(--inset-fill);
+    touch-action: none;
+    cursor: pointer;
+    user-select: none;
+}
+
+.timeline-strip {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: fill;
+    pointer-events: none;
+}
+
+.timeline-shade {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background-color: var(--shade);
+    pointer-events: none;
+}
+
+.timeline-selection {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    border-top: 3px solid var(--mud-palette-info);
+    border-bottom: 3px solid var(--mud-palette-info);
+    pointer-events: none;
+}
+
+/* Each Handle Sits Just Inside The Selection, Rounded Only On Its Outer Side */
+.timeline-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 10px;
+    background-color: var(--mud-palette-info);
+    cursor: ew-resize;
+    box-shadow: var(--mud-elevation-1);
+}
+
+    .timeline-handle[data-handle="start"] {
+        border-radius: var(--radius-thumb) 0 0 var(--radius-thumb);
+    }
+
+    .timeline-handle[data-handle="end"] {
+        margin-left: -10px;
+        border-radius: 0 var(--radius-thumb) var(--radius-thumb) 0;
+    }
+
+    .timeline-handle::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 2px;
+        height: 18px;
+        transform: translate(-50%, -50%);
+        border-radius: 1px;
+        background-color: var(--mud-palette-white);
+        opacity: 0.8;
+    }
+
+.timeline-playhead {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    margin-left: -1px;
+    background-color: var(--mud-palette-white);
+    box-shadow: 0 0 4px rgba(0,0,0, 0.6);
+    pointer-events: none;
+}
+
+/* Time On The Left, Transport Centred, Length On The Right */
+.player-controls {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 8px;
+}
+
+.player-time {
+    font-variant-numeric: tabular-nums;
+}
+
+/* Time Fields Keep One Width */
+.time-field {
+    width: 120px;
+}
+
+/* The Exported File Drags From Here Into Discord */
+.drag-handle {
+    cursor: grab;
+}
+
+    .drag-handle:active {
+        cursor: grabbing;
+    }
+/* #endregion */

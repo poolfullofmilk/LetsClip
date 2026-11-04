@@ -1,0 +1,21 @@
+@* Empty State *@
+<MudStack AlignItems="AlignItems.Center"
+          Justify="Justify.Center"
+          Spacing="4"
+          Class="pa-8 empty-state">
+    @if (!string.IsNullOrEmpty(Icon))
+    {
+        <MudIcon Icon="@Icon"
+                 Size="Size.Large"
+                 Color="Color" />
+    }
+    @if (!string.IsNullOrEmpty(Text))
+    {
+        <MudText Typo="Typo.subtitle1"
+                 Align="Align.Center"
+                 Class="mud-text-secondary">
+            @Text
+        </MudText>
+    }
+    @ChildContent
+</MudStack>

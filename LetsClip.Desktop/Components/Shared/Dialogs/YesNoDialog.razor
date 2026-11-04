@@ -1,0 +1,23 @@
+<MudDialog>
+
+    <DialogContent>
+        <MudText Typo="Typo.body1"
+                 Class="pre-line">
+            @Message
+        </MudText>
+    </DialogContent>
+    <DialogActions>
+        @* No Button *@
+        <MudButton Variant="Variant.Text"
+                   OnClick="No">
+            No
+        </MudButton>
+        @* Yes Button *@
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Info"
+                   OnClick="Yes">
+            Yes
+        </MudButton>
+    </DialogActions>
+
+</MudDialog>

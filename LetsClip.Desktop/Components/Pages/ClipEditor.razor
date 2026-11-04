@@ -1,0 +1,294 @@
+@page "/clips/{FileName}"
+
+<PageTitle>@Title</PageTitle>
+
+@if (_missing)
+{
+    <MudPaper Elevation="4"
+              Class="rounded-panel">
+        <EmptyState Icon="@Icons.Material.Rounded.VideocamOff"
+                    Color="Color.Warning"
+                    Text="This clip was moved or deleted outside LetsClip">
+            @* Back Button *@
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Info"
+                       Size="Size.Small"
+                       StartIcon="@Icons.Material.Rounded.ArrowBack"
+                       OnClick="Back">
+                All Clips
+            </MudButton>
+        </EmptyState>
+    </MudPaper>
+}
+else
+{
+    <MudStack Spacing="6"
+              Class="page-fill">
+        <MudStack Row
+                  AlignItems="AlignItems.Center"
+                  Spacing="2"
+                  Class="header-row">
+            @* Back Button *@
+            <Tooltip Text="All Clips"
+                     RootClass="d-flex">
+                <MudIconButton Icon="@Icons.Material.Rounded.ArrowBack"
+                               aria-label="All Clips"
+                               Variant="Variant.Filled"
+                               Size="Size.Small"
+                               OnClick="Back" />
+            </Tooltip>
+            <MudStack Spacing="0"
+                      Class="header-title">
+                <MudText Typo="Typo.h5"
+                         Class="ellipsis">
+                    @Title
+                </MudText>
+                <MudText Typo="Typo.body2"
+                         Class="mud-text-secondary ellipsis">
+                    @_clip?.Details
+                </MudText>
+            </MudStack>
+            <MudSpacer />
+            @* Show In Folder *@
+            <MudButton Variant="Variant.Text"
+                       Size="Size.Small"
+                       StartIcon="@Icons.Material.Rounded.FolderOpen"
+                       OnClick="ShowInFolder">
+                Show in Folder
+            </MudButton>
+        </MudStack>
+
+        <MudElement HtmlTag="div"
+                    Class="split fill">
+            <MudElement HtmlTag="div"
+                        Class="main-panel fill-column">
+                <MudPaper Elevation="4"
+                          Class="rounded-panel pa-4 fill fill-column">
+                    <MudStack Spacing="3"
+                              Class="fill">
+                        @* Player *@
+                        <MudElement HtmlTag="div"
+                                    Class="player fill">
+                            <MudElement @bind-Ref="_video"
+                                        HtmlTag="video"
+                                        src="@VideoUrl"
+                                        preload="auto"
+                                        muted="@_muted"
+                                        playsinline
+                                        aria-label="Clip Preview" />
+                        </MudElement>
+
+                        @if (_playError)
+                        {
+                            <MudAlert Severity="Severity.Warning"
+                                      Dense
+                                      Elevation="4"
+                                      Class="rounded-panel mud-warning-text">
+                                This clip could not play, it may be in use or damaged
+                            </MudAlert>
+                        }
+
+                        @* Player Controls *@
+                        <MudElement HtmlTag="div"
+                                    Class="player-controls">
+                            <MudText Typo="Typo.body2"
+                                     Class="selectable-text player-time">
+                                @Formatter.FormatClock(_time)
+                            </MudText>
+                            <MudStack Row
+                                      AlignItems="AlignItems.Center"
+                                      Justify="Justify.Center"
+                                      Spacing="1">
+                                @* Set Start Button *@
+                                <Tooltip Text="Start the Clip at This Frame"
+                                         Disabled="@(!_ready)"
+                                         RootClass="d-flex">
+                                    <MudButton Variant="Variant.Text"
+                                               Size="Size.Small"
+                                               StartIcon="@Icons.Material.Rounded.FirstPage"
+                                               Disabled="@(!_ready)"
+                                               OnClick="SetStartAtPlayhead">
+                                        Set Start
+                                    </MudButton>
+                                </Tooltip>
+                                @* Back Button *@
+                                <Tooltip Text="Back 5 Seconds"
+                                         Disabled="@(!_ready)"
+                                         RootClass="d-flex">
+                                    <MudIconButton Icon="@Icons.Material.Rounded.Replay5"
+                                                   aria-label="Back 5 Seconds"
+                                                   Size="Size.Small"
+                                                   Disabled="@(!_ready)"
+                                                   OnClick="() => NudgeAsync(-SeekStep)" />
+                                </Tooltip>
+                                @* Play Button *@
+                                <Tooltip Text="@PlayTip"
+                                         Disabled="@(!_ready)"
+                                         RootClass="d-flex">
+                                    <MudIconButton Icon="@(_paused ? Icons.Material.Rounded.PlayArrow : Icons.Material.Rounded.Pause)"
+                                                   aria-label="@PlayTip"
+                                                   Variant="Variant.Filled"
+                                                   Color="Color.Info"
+                                                   Size="Size.Small"
+                                                   Disabled="@(!_ready)"
+                                                   OnClick="TogglePlayAsync" />
+                                </Tooltip>
+                                @* Forward Button *@
+                                <Tooltip Text="Forward 5 Seconds"
+                                         Disabled="@(!_ready)"
+                                         RootClass="d-flex">
+                                    <MudIconButton Icon="@Icons.Material.Rounded.Forward5"
+                                                   aria-label="Forward 5 Seconds"
+                                                   Size="Size.Small"
+                                                   Disabled="@(!_ready)"
+                                                   OnClick="() => NudgeAsync(SeekStep)" />
+                                </Tooltip>
+                                @* Set End Button *@
+                                <Tooltip Text="End the Clip at This Frame"
+                                         Disabled="@(!_ready)"
+                                         RootClass="d-flex">
+                                    <MudButton Variant="Variant.Text"
+                                               Size="Size.Small"
+                                               EndIcon="@Icons.Material.Rounded.LastPage"
+                                               Disabled="@(!_ready)"
+                                               OnClick="SetEndAtPlayhead">
+                                        Set End
+                                    </MudButton>
+                                </Tooltip>
+                            </MudStack>
+                            <MudStack Row
+                                      AlignItems="AlignItems.Center"
+                                      Justify="Justify.FlexEnd"
+                                      Spacing="1">
+                                @* Mute Button *@
+                                <Tooltip Text="@MuteTip"
+                                         RootClass="d-flex">
+                                    <MudIconButton Icon="@(_muted ? Icons.Material.Rounded.VolumeOff : Icons.Material.Rounded.VolumeUp)"
+                                                   aria-label="@MuteTip"
+                                                   Size="Size.Small"
+                                                   OnClick="ToggleMuteAsync" />
+                                </Tooltip>
+                                <MudText Typo="Typo.body2"
+                                         Class="selectable-text player-time">
+                                    @Formatter.FormatClock(_duration)
+                                </MudText>
+                            </MudStack>
+                        </MudElement>
+
+                        @* Timeline *@
+                        <MudElement @bind-Ref="_timeline"
+                                    HtmlTag="div"
+                                    Class="timeline"
+                                    aria-label="Trim Timeline">
+                            @if (_stripUrl is { } strip)
+                            {
+                                <MudImage Src="@strip"
+                                          Alt=""
+                                          Class="timeline-strip" />
+                            }
+                            <MudElement HtmlTag="div"
+                                        Class="timeline-shade"
+                                        Style="@($"left:0; width:{Percent(_range.Start)}")" />
+                            <MudElement HtmlTag="div"
+                                        Class="timeline-shade"
+                                        Style="@($"left:{Percent(_range.End)}; right:0")" />
+                            <MudElement HtmlTag="div"
+                                        Class="timeline-selection"
+                                        Style="@($"left:{Percent(_range.Start)}; width:{Percent(_range.Length)}")" />
+                            <MudElement @bind-Ref="_playhead"
+                                        HtmlTag="div"
+                                        Class="timeline-playhead"
+                                        Style="left:0" />
+                            @* Start Handle *@
+                            <MudElement HtmlTag="div"
+                                        Class="timeline-handle"
+                                        Style="@($"left:{Percent(_range.Start)}")"
+                                        role="slider"
+                                        tabindex="0"
+                                        data-handle="start"
+                                        aria-label="Trim Start"
+                                        aria-valuemin="0"
+                                        aria-valuemax="@Number(_range.End)"
+                                        aria-valuenow="@Number(_range.Start)"
+                                        aria-valuetext="@Formatter.FormatClock(_range.Start)" />
+                            @* End Handle *@
+                            <MudElement HtmlTag="div"
+                                        Class="timeline-handle"
+                                        Style="@($"left:{Percent(_range.End)}")"
+                                        role="slider"
+                                        tabindex="0"
+                                        data-handle="end"
+                                        aria-label="Trim End"
+                                        aria-valuemin="@Number(_range.Start)"
+                                        aria-valuemax="@Number(_duration)"
+                                        aria-valuenow="@Number(_range.End)"
+                                        aria-valuetext="@Formatter.FormatClock(_range.End)" />
+                        </MudElement>
+
+                        <MudStack Row
+                                  Wrap="Wrap.Wrap"
+                                  AlignItems="AlignItems.Center"
+                                  Spacing="3">
+                            @* Start Field *@
+                            <MudTextField T="string"
+                                          Value="_startText"
+                                          ValueChanged="SetStartText"
+                                          aria-label="Start Time"
+                                          Adornment="Adornment.Start"
+                                          AdornmentText="Start"
+                                          Variant="Variant.Outlined"
+                                          Margin="Margin.Dense"
+                                          Error="@(_startError is not null)"
+                                          ErrorText="@_startError"
+                                          Class="time-field" />
+                            @* End Field *@
+                            <MudTextField T="string"
+                                          Value="_endText"
+                                          ValueChanged="SetEndText"
+                                          aria-label="End Time"
+                                          Adornment="Adornment.Start"
+                                          AdornmentText="End"
+                                          Variant="Variant.Outlined"
+                                          Margin="Margin.Dense"
+                                          Error="@(_endError is not null)"
+                                          ErrorText="@_endError"
+                                          Class="time-field" />
+                            <MudStack Spacing="0">
+                                <MudText Typo="Typo.caption"
+                                         Class="mud-text-secondary">
+                                    Selected
+                                </MudText>
+                                <MudText Typo="Typo.subtitle2">
+                                    @Formatter.FormatSeconds(_range.Length)
+                                </MudText>
+                            </MudStack>
+                            <MudSpacer />
+                            @* Reset Button *@
+                            <MudButton Variant="Variant.Text"
+                                       Size="Size.Small"
+                                       StartIcon="@Icons.Material.Rounded.RestartAlt"
+                                       Disabled="@(_range == DefaultRange)"
+                                       OnClick="ResetTrim">
+                                Reset Trim
+                            </MudButton>
+                        </MudStack>
+                        <MudText Typo="Typo.caption"
+                                 Class="mud-text-secondary">
+                            @TrimHint
+                        </MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudElement>
+
+            <MudElement HtmlTag="div"
+                        Class="side-panel">
+                @if (_media is { } media && _path is { } path)
+                {
+                    <ExportPanel SourcePath="@path"
+                                 Range="_range"
+                                 Media="media" />
+                }
+            </MudElement>
+        </MudElement>
+    </MudStack>
+}

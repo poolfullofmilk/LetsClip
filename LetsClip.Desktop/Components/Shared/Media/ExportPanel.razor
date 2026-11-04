@@ -1,0 +1,222 @@
+@* Export Panel *@
+<MudPaper Elevation="4"
+          Class="rounded-panel pa-4">
+    <MudStack Spacing="4">
+        <MudText Typo="Typo.h6">Export for Discord</MudText>
+
+        <MudStack Spacing="1">
+            <MudStack Row
+                      AlignItems="AlignItems.Center"
+                      Spacing="1">
+                <MudText Typo="Typo.subtitle2">Size Limit</MudText>
+                <InfoIcon Text="Free Discord accounts upload up to 10 MB and Nitro raises it. Discord can change this, LetsClip cannot check yours" />
+                <MudSpacer />
+                <MudText Typo="Typo.body2"
+                         Class="mud-text-secondary">
+                    @Formatter.FormatMegabytes(Megabytes)
+                </MudText>
+            </MudStack>
+            @* Size Slider *@
+            <MudSlider T="double"
+                       @bind-Value="Megabytes"
+                       Min="SizeBudget.MinimumMegabytes"
+                       Max="MaximumMegabytes"
+                       Step="1"
+                       Color="Color.Info"
+                       Size="Size.Medium"
+                       Variant="Variant.Filled"
+                       Immediate
+                       Disabled="@IsExporting"
+                       aria-label="Size Limit" />
+        </MudStack>
+
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.subtitle2">Resolution</MudText>
+            @* Resolution Buttons *@
+            <MudButtonGroup OverrideStyles="false"
+                            Size="Size.Small">
+                <MudButton Variant="Variant.Filled"
+                           Color="@(!Use720p ? Color.Info : Color.Default)"
+                           Size="Size.Small"
+                           Disabled="@IsExporting"
+                           OnClick="() => SetResolution(false)">
+                    @OriginalLabel
+                </MudButton>
+                <MudButton Variant="Variant.Filled"
+                           Color="@(Use720p ? Color.Info : Color.Default)"
+                           Size="Size.Small"
+                           Disabled="@(IsExporting || !CanShrink)"
+                           OnClick="() => SetResolution(true)">
+                    720p
+                </MudButton>
+            </MudButtonGroup>
+        </MudStack>
+
+        @if (SourceFrameRate > 60)
+        {
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.subtitle2">Frame Rate</MudText>
+                @* Frame Rate Buttons *@
+                <MudButtonGroup OverrideStyles="false"
+                                Size="Size.Small">
+                    <MudButton Variant="Variant.Filled"
+                               Color="@(Controller.Settings.ExportFullFrameRate ? Color.Default : Color.Info)"
+                               Size="Size.Small"
+                               Disabled="@IsExporting"
+                               OnClick="() => SetFullFrameRate(false)">
+                        60 FPS
+                    </MudButton>
+                    <MudButton Variant="Variant.Filled"
+                               Color="@(Controller.Settings.ExportFullFrameRate ? Color.Info : Color.Default)"
+                               Size="Size.Small"
+                               Disabled="@IsExporting"
+                               OnClick="() => SetFullFrameRate(true)">
+                        @($"{SourceFrameRate} FPS")
+                    </MudButton>
+                </MudButtonGroup>
+            </MudStack>
+        }
+
+        @if (Media.HasAudio)
+        {
+            @* Audio Switch *@
+            <MudSwitch T="bool"
+                       Value="_includeAudio"
+                       ValueChanged="SetAudio"
+                       Color="Color.Info"
+                       Disabled="@IsExporting"
+                       Class="ma-0">
+                <MudText Typo="Typo.subtitle2"
+                         HtmlTag="span">
+                    Include Audio
+                </MudText>
+            </MudSwitch>
+        }
+
+        <MudStack Spacing="1">
+            <MudStack Row
+                      AlignItems="AlignItems.Center"
+                      Spacing="2">
+                <MudText Typo="Typo.body2">
+                    @BudgetText
+                </MudText>
+                <MudChip T="string"
+                         Size="Size.Small"
+                         Variant="Variant.Text"
+                         Color="@VerdictColor">
+                    @VerdictText
+                </MudChip>
+            </MudStack>
+            @if (VerdictHint is { } hint)
+            {
+                <MudText Typo="Typo.caption"
+                         Class="@VerdictHintClass">
+                    @hint
+                </MudText>
+            }
+        </MudStack>
+
+        @if (_progress is { } progress)
+        {
+            <MudStack Spacing="2">
+                <MudStack Row
+                          Justify="Justify.SpaceBetween">
+                    <MudText Typo="Typo.body2">@progress.Phase</MudText>
+                    <MudText Typo="Typo.body2"
+                             Class="mud-text-secondary">
+                        @($"{progress.Fraction * 100:0}%")
+                    </MudText>
+                </MudStack>
+                <MudProgressLinear Color="Color.Info"
+                                   Value="@(progress.Fraction * 100)"
+                                   Size="Size.Small" />
+                @* Cancel Button *@
+                <MudButton Variant="Variant.Text"
+                           Color="Color.Error"
+                           Size="Size.Small"
+                           OnClick="Cancel">
+                    Cancel Export
+                </MudButton>
+                <MudText Typo="Typo.caption"
+                         Class="mud-text-secondary">
+                    Leaving this clip cancels the export, capture keeps running
+                </MudText>
+            </MudStack>
+        }
+        else
+        {
+            @* Export Button *@
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Info"
+                       Size="Size.Small"
+                       StartIcon="@Icons.Material.Rounded.Movie"
+                       Disabled="@(!CanExport)"
+                       OnClick="ExportAsync">
+                @ExportLabel
+            </MudButton>
+        }
+
+        @if (_error is { } error)
+        {
+            <MudAlert Severity="Severity.Warning"
+                      Dense
+                      Elevation="4"
+                      Class="rounded-panel mud-warning-text">
+                @error
+            </MudAlert>
+        }
+
+        @if (_result is { } result && File.Exists(result.Path))
+        {
+            <MudPaper Elevation="0"
+                      Class="inset rounded-inner pa-3">
+                <MudStack Spacing="2">
+                    <MudStack Row
+                              AlignItems="AlignItems.Center"
+                              Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Rounded.CheckCircle"
+                                 Color="Color.Success"
+                                 Size="Size.Small" />
+                        <MudText Typo="Typo.subtitle2"
+                                 Class="ellipsis">
+                            @Path.GetFileName(result.Path)
+                        </MudText>
+                    </MudStack>
+                    <MudText Typo="Typo.body2"
+                             Class="mud-text-secondary">
+                        @ResultText(result)
+                    </MudText>
+                    <MudStack Row
+                              Wrap="Wrap.Wrap"
+                              Spacing="2">
+                        @* Copy File Button *@
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Info"
+                                   Size="Size.Small"
+                                   StartIcon="@Icons.Material.Rounded.ContentCopy"
+                                   OnClick="CopyFile">
+                            Copy File
+                        </MudButton>
+                        @* Show In Folder Button *@
+                        <MudButton Variant="Variant.Text"
+                                   Size="Size.Small"
+                                   StartIcon="@Icons.Material.Rounded.FolderOpen"
+                                   OnClick="() => Explorer.ShowFile(result.Path)">
+                            Show in Folder
+                        </MudButton>
+                    </MudStack>
+                    @* Drag Handle *@
+                    <MudPaper Elevation="1"
+                              Class="rounded-inner pa-2 drag-handle d-flex align-center gap-2"
+                              aria-label="Drag the File Into Discord"
+                              title="Drag the File Into Discord"
+                              @onmousedown="() => DesktopShell.DragFile(result.Path)">
+                        <MudIcon Icon="@Icons.Material.Rounded.DragIndicator"
+                                 Size="Size.Small" />
+                        <MudText Typo="Typo.body2">Drag Into Discord</MudText>
+                    </MudPaper>
+                </MudStack>
+            </MudPaper>
+        }
+    </MudStack>
+</MudPaper>

@@ -1,0 +1,67 @@
+<MudDialog>
+
+    <TitleContent>
+        <MudText Typo="Typo.h6">@($"LetsClip {Release.Tag.TrimStart('v')} Is Out")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.body2"
+                     Class="text-relaxed">
+                @($"You have {AppInfo.VersionText}. Updating restarts LetsClip, buffering starts again by itself")
+            </MudText>
+            @if (_notes.Count > 0)
+            {
+                <MudText Typo="Typo.subtitle2">What Changed</MudText>
+                <MudStack Spacing="1">
+                    @foreach (var note in _notes)
+                    {
+                        <MudStack Row
+                                  AlignItems="AlignItems.Start"
+                                  Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Rounded.CheckCircle"
+                                     Color="Color.Info"
+                                     Size="Size.Small" />
+                            <MudText Typo="Typo.body2">@note</MudText>
+                        </MudStack>
+                    }
+                </MudStack>
+            }
+            @if (_isInstalling)
+            {
+                @* Download Progress *@
+                <MudStack Spacing="1"
+                          Class="mt-2">
+                    <MudProgressLinear Color="Color.Info"
+                                       Value="@_percent"
+                                       Indeterminate="@(_total == 0)"
+                                       Rounded
+                                       Size="Size.Medium" />
+                    <MudStack Row
+                              Justify="Justify.SpaceBetween">
+                        <MudText Typo="Typo.caption"
+                                 Class="mud-text-secondary">
+                            @ProgressText
+                        </MudText>
+                        @if (_total > 0)
+                        {
+                            <MudText Typo="Typo.caption"
+                                     Class="mud-text-secondary">
+                                @($"{_percent}%")
+                            </MudText>
+                        }
+                    </MudStack>
+                </MudStack>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        @* Update Button *@
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Info"
+                   StartIcon="@(_isInstalling ? null : Icons.Material.Rounded.SystemUpdateAlt)"
+                   OnClick="InstallAsync">
+            @(_isInstalling ? "Downloading" : "Update Now")
+        </MudButton>
+    </DialogActions>
+
+</MudDialog>

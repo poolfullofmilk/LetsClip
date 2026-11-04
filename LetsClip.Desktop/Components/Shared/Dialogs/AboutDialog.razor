@@ -1,0 +1,43 @@
+﻿<MudDialog>
+
+    <TitleContent>
+        <MudText Typo="Typo.h6">About</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="4">
+            <MudStack Spacing="0">
+                <MudText Typo="Typo.h5">@AppInfo.DisplayName</MudText>
+                <MudText Typo="Typo.body2"
+                         Class="mud-text-secondary">
+                    @($"Version {AppInfo.VersionText} · {AppInfo.Author}")
+                </MudText>
+            </MudStack>
+            <MudText Typo="Typo.body1"
+                     Class="text-relaxed">
+                Keeps the last moments of one monitor in a rolling buffer on this PC. A hotkey saves them as a clip, and a clip exports as an MP4 under the size you pick, ready to paste into Discord. Nothing leaves your PC.
+            </MudText>
+            <MudText Typo="Typo.caption"
+                     Class="mud-text-secondary text-relaxed">
+                Recording and export run on FFmpeg 9.0.2 (GPL v3 build) and NAudio. LetsClip is GPL v3 too
+            </MudText>
+            <MudStack Row
+                      Spacing="2">
+                @* Notices Button *@
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Info"
+                           Size="Size.Small"
+                           StartIcon="@Icons.Material.Rounded.Description"
+                           OnClick="OpenNotices">
+                    Third Party Notices
+                </MudButton>
+                @* FFmpeg Licence Button *@
+                <MudButton Variant="Variant.Text"
+                           Size="Size.Small"
+                           OnClick="OpenFFmpegLicence">
+                    FFmpeg Licence
+                </MudButton>
+            </MudStack>
+        </MudStack>
+    </DialogContent>
+
+</MudDialog>

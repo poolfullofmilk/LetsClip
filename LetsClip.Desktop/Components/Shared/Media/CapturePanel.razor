@@ -1,0 +1,217 @@
+@* Capture Header *@
+<Header Title="Capture">
+    <TitleContent>
+        <MudSpacer />
+        @if (Status.State == CaptureState.Buffering)
+        {
+            <MudElement HtmlTag="span"
+                        Class="live-dot" />
+        }
+        <MudText Typo="Typo.subtitle2"
+                 Class="@StateClass">
+            @StateText
+        </MudText>
+    </TitleContent>
+    <ChildContent>
+        @* Capture Panel *@
+        <MudPaper Elevation="4"
+                  Class="rounded-panel pa-4">
+            <MudStack Spacing="4">
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.subtitle2">Monitor</MudText>
+                    @* Monitor Select *@
+                    <MudSelect T="MonitorInfo"
+                               Value="Controller.SelectedMonitor"
+                               ValueChanged="SelectMonitor"
+                               OpenChanged="OutlineMonitors"
+                               ToStringFunc="MonitorLabel"
+                               Placeholder="Pick the Monitor to Record"
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Dense"
+                               Dense
+                               aria-label="Monitor"
+                               AnchorOrigin="Origin.BottomLeft"
+                               TransformOrigin="Origin.TopLeft"
+                               Class="my-0">
+                        @foreach (var monitor in Controller.Monitors)
+                        {
+                            <MudSelectItem T="MonitorInfo"
+                                           Value="monitor">
+                                <MudStack Row
+                                          Justify="Justify.SpaceBetween"
+                                          Spacing="4">
+                                    <MudText Typo="Typo.body2">@MonitorName(monitor)</MudText>
+                                    <MudText Typo="Typo.body2"
+                                             Class="mud-text-secondary">
+                                        @MonitorDetails(monitor)
+                                    </MudText>
+                                </MudStack>
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudStack>
+
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.subtitle2">Replay Length</MudText>
+                    @* Replay Length Buttons *@
+                    <MudButtonGroup OverrideStyles="false"
+                                    Size="Size.Small">
+                        @foreach (var seconds in UserSettings.ReplayChoices)
+                        {
+                            <MudButton Variant="Variant.Filled"
+                                       Color="@(seconds == Controller.Settings.ReplaySeconds ? Color.Info : Color.Default)"
+                                       Size="Size.Small"
+                                       OnClick="() => SetReplay(seconds)">
+                                @($"{seconds}s")
+                            </MudButton>
+                        }
+                    </MudButtonGroup>
+                </MudStack>
+
+                @if (NativeLabel is { } nativeLabel)
+                {
+                    <MudStack Spacing="2">
+                        <MudText Typo="Typo.subtitle2">Resolution</MudText>
+                        @* Resolution Buttons *@
+                        <MudButtonGroup OverrideStyles="false"
+                                        Size="Size.Small">
+                            <MudButton Variant="Variant.Filled"
+                                       Color="@(Controller.Settings.FullResolution ? Color.Default : Color.Info)"
+                                       Size="Size.Small"
+                                       OnClick="() => SetFullResolution(false)">
+                                1080p
+                            </MudButton>
+                            <MudButton Variant="Variant.Filled"
+                                       Color="@(Controller.Settings.FullResolution ? Color.Info : Color.Default)"
+                                       Size="Size.Small"
+                                       OnClick="() => SetFullResolution(true)">
+                                @nativeLabel
+                            </MudButton>
+                        </MudButtonGroup>
+                    </MudStack>
+                }
+
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.subtitle2">Frame Rate</MudText>
+                    @* Frame Rate Select *@
+                    <MudSelect T="int"
+                               Value="Controller.FrameRate"
+                               ValueChanged="SetFrameRate"
+                               ToStringFunc="FrameRateLabel"
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Dense"
+                               Dense
+                               aria-label="Frame Rate"
+                               AnchorOrigin="Origin.BottomLeft"
+                               TransformOrigin="Origin.TopLeft"
+                               Class="my-0">
+                        @foreach (var rate in Controller.FrameRateChoices)
+                        {
+                            <MudSelectItem T="int"
+                                           Value="rate">
+                                @FrameRateLabel(rate)
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudStack>
+
+                @if (Status.State is CaptureState.Buffering or CaptureState.Starting)
+                {
+                    <MudStack Spacing="1">
+                        <MudStack Row
+                                  Justify="Justify.SpaceBetween">
+                            <MudText Typo="Typo.subtitle2">History</MudText>
+                            <MudText Typo="Typo.body2"
+                                     Class="mud-text-secondary">
+                                @HistoryText
+                            </MudText>
+                        </MudStack>
+                        <MudProgressLinear Color="Color.Info"
+                                           Value="@HistoryPercent"
+                                           Size="Size.Small" />
+                    </MudStack>
+                }
+
+                @if (Status.State == CaptureState.Error && Status.Message is { } error)
+                {
+                    <MudAlert Severity="Severity.Error"
+                              Dense
+                              Elevation="4"
+                              Class="rounded-panel">
+                        @error
+                    </MudAlert>
+                }
+                else if (Status.Message is { } message)
+                {
+                    <MudAlert Severity="Severity.Info"
+                              Dense
+                              Elevation="4"
+                              Class="rounded-panel">
+                        @message
+                    </MudAlert>
+                }
+
+                @if (Status.Warning is { } warning && Status.IsBuffering)
+                {
+                    <MudAlert Severity="Severity.Warning"
+                              Dense
+                              Elevation="4"
+                              Class="rounded-panel mud-warning-text">
+                        @warning
+                    </MudAlert>
+                }
+
+                @if (_saveError is { } saveError)
+                {
+                    <MudAlert Severity="Severity.Warning"
+                              Dense
+                              Elevation="4"
+                              Class="rounded-panel mud-warning-text">
+                        @saveError
+                    </MudAlert>
+                }
+
+                <MudStack Row
+                          Wrap="Wrap.Wrap"
+                          Spacing="2">
+                    @if (!Controller.Settings.HasSeenCaptureNotice)
+                    {
+                        @* Start Button *@
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Info"
+                                   Size="Size.Small"
+                                   StartIcon="@Icons.Material.Rounded.FiberManualRecord"
+                                   OnClick="StartAsync">
+                            Start Buffering
+                        </MudButton>
+                    }
+                    else if (Status.State == CaptureState.Error)
+                    {
+                        @* Try Again Button *@
+                        <MudButton Variant="Variant.Text"
+                                   Size="Size.Small"
+                                   StartIcon="@Icons.Material.Rounded.Refresh"
+                                   OnClick="StartAsync">
+                            Try Again
+                        </MudButton>
+                    }
+
+                    @* Save Button *@
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Info"
+                               Size="Size.Small"
+                               StartIcon="@Icons.Material.Rounded.Save"
+                               Disabled="@(!Status.IsBuffering)"
+                               OnClick="SaveAsync">
+                        @($"Save Last {Controller.Settings.ReplaySeconds} Seconds")
+                    </MudButton>
+                </MudStack>
+
+                <MudText Typo="Typo.caption"
+                         Class="@HotkeyClass">
+                    @HotkeyText
+                </MudText>
+            </MudStack>
+        </MudPaper>
+    </ChildContent>
+</Header>
