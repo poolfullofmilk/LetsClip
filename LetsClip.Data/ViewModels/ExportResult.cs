@@ -7,7 +7,5 @@ public sealed record ExportResult(
     int Width,
     int Height,
     double FrameRate,
-    bool HasAudio,
-    string EncoderName,
-    int Attempts
+    bool HasAudio
 );

@@ -103,6 +103,11 @@ public partial class CapturePanel : IDisposable
         Controller.UpdateSettings(settings => settings with { FullResolution = full });
     }
 
+    private void SetQuality(CaptureQuality quality)
+    {
+        Controller.UpdateSettings(settings => settings with { Quality = quality });
+    }
+
     private void SetFrameRate(int rate)
     {
         Controller.UpdateSettings(settings => settings with { FrameRate = rate });

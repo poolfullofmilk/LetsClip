@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using LetsClip.Data.Enums;
 using NLog;
 
 namespace LetsClip.Services.Media;
@@ -39,9 +40,25 @@ public static class VideoEncoders
         return candidates;
     }
 
-    public static long PeakBytesPerSecond(int width, int height, int frameRate)
+    public static long PeakBytesPerSecond(
+        int width,
+        int height,
+        int frameRate,
+        CaptureQuality quality
+    )
     {
-        return (long)(LoadOf(width, height, frameRate) * 40_000_000 / 8);
+        return (long)(LoadOf(width, height, frameRate) * TuningOf(quality).Scale * 40_000_000 / 8);
+    }
+
+    private static (double Scale, string Level) TuningOf(CaptureQuality quality)
+    {
+        // More Bits And A Lower Quality Level Look Crisper
+        return quality switch
+        {
+            CaptureQuality.High => (1.75, "19"),
+            CaptureQuality.Max => (2.5, "16"),
+            _ => (1, "22"),
+        };
     }
 
     private static double LoadOf(int width, int height, int frameRate)
@@ -59,11 +76,13 @@ public static class VideoEncoders
         VideoEncoder encoder,
         int frameRate,
         int width,
-        int height
+        int height,
+        CaptureQuality quality
     )
     {
         // Peaks Stay Capped So The Replay Cache Stays Bounded
-        var load = LoadOf(width, height, frameRate);
+        var (scale, level) = TuningOf(quality);
+        var load = LoadOf(width, height, frameRate) * scale;
         var target = Megabits(20 * load);
         var peak = Megabits(40 * load);
         // A Keyframe Every Second, So Every Segment Starts Decodable
@@ -82,7 +101,7 @@ public static class VideoEncoders
                 "-rc",
                 "qvbr",
                 "-qvbr_quality_level",
-                "22",
+                level,
                 "-b:v",
                 target,
                 "-maxrate",
@@ -103,7 +122,7 @@ public static class VideoEncoders
                 "-rc",
                 "vbr",
                 "-cq",
-                "22",
+                level,
                 "-b:v",
                 "0",
                 "-maxrate",
@@ -120,7 +139,7 @@ public static class VideoEncoders
                 "-preset",
                 "medium",
                 "-global_quality",
-                "22",
+                level,
                 "-look_ahead",
                 "0",
             ],
@@ -131,7 +150,7 @@ public static class VideoEncoders
                 "-preset",
                 "veryfast",
                 "-crf",
-                "22",
+                level,
                 "-maxrate",
                 peak,
                 "-bufsize",
@@ -172,7 +191,7 @@ public static class VideoEncoders
                 "12",
                 "-vf",
                 "format=nv12",
-                .. CaptureArguments(encoder, frameRate, width, height),
+                .. CaptureArguments(encoder, frameRate, width, height, CaptureQuality.Normal),
                 "-f",
                 "null",
                 "-",

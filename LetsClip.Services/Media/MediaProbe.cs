@@ -62,14 +62,11 @@ public static class MediaProbe
 
         return new MediaInfo(
             NumberOf(format, "duration"),
-            NumberOf(format, "start_time"),
-            (long)NumberOf(format, "size"),
             VideoText("codec_name"),
             VideoText("pix_fmt"),
             (int)VideoNumber("width"),
             (int)VideoNumber("height"),
             video is { } rateStream ? FrameRateOf(rateStream) : 0,
-            VideoNumber("start_time"),
             audio is { } audioStream ? TextOf(audioStream, "codec_name") : null
         );
     }

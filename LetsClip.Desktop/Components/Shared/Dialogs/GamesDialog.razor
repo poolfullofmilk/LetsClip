@@ -4,7 +4,7 @@
         <MudText Typo="Typo.h6">Games</MudText>
     </TitleContent>
     <DialogContent>
-        <MudStack Spacing="2">
+        <MudStack Spacing="3">
             <MudText Typo="Typo.body2"
                      Class="mud-text-secondary text-relaxed">
                 Found in your game libraries or added by you. Removed games stay at the bottom, ready to add back
@@ -36,6 +36,8 @@
                           Items="_games"
                           Dense
                           Hover
+                          Bordered
+                          Outlined
                           FixedHeader
                           Elevation="0"
                           Class="fit"
@@ -43,7 +45,7 @@
 
                     <HeaderContent>
                         <MudTh>Name</MudTh>
-                        <MudTh />
+                        <MudTh Style="width:56px" />
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd>
@@ -52,28 +54,26 @@
                                 @context.Name
                             </MudText>
                         </MudTd>
-                        <MudTd Class="text-right">
+                        <MudTd Class="text-center">
                             @if (context.IsRemoved)
                             {
                                 @* Add Back Button *@
-                                <Tooltip Text="Add Back"
-                                         RootClass="d-inline-flex">
-                                    <MudIconButton Icon="@Icons.Material.Rounded.AddCircleOutline"
-                                                   aria-label="Add Back"
-                                                   Size="Size.Small"
-                                                   OnClick="() => Controller.RestoreGame(context.Key)" />
-                                </Tooltip>
+                                <MudIconButton Icon="@Icons.Material.Rounded.Add"
+                                               aria-label="Add Back"
+                                               title="Add Back"
+                                               Color="Color.Info"
+                                               Size="Size.Small"
+                                               OnClick="() => Controller.RestoreGame(context.Key)" />
                             }
                             else
                             {
                                 @* Remove Button *@
-                                <Tooltip Text="Remove"
-                                         RootClass="d-inline-flex">
-                                    <MudIconButton Icon="@Icons.Material.Rounded.RemoveCircleOutline"
-                                                   aria-label="Remove"
-                                                   Size="Size.Small"
-                                                   OnClick="() => Controller.RemoveGame(context.Key)" />
-                                </Tooltip>
+                                <MudIconButton Icon="@Icons.Material.Rounded.Close"
+                                               aria-label="Remove"
+                                               title="Remove"
+                                               Color="Color.Error"
+                                               Size="Size.Small"
+                                               OnClick="() => Controller.RemoveGame(context.Key)" />
                             }
                         </MudTd>
                     </RowTemplate>
@@ -83,13 +83,31 @@
         </MudStack>
     </DialogContent>
     <DialogActions>
-        @* Add Game Button *@
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Info"
-                   StartIcon="@Icons.Material.Rounded.Add"
-                   OnClick="AddGame">
-            Add Game
-        </MudButton>
+        @* Add Game Menu *@
+        <MudMenu Label="Add Game"
+                 StartIcon="@Icons.Material.Rounded.Add"
+                 Variant="Variant.Filled"
+                 Color="Color.Info"
+                 Dense
+                 MaxHeight="360"
+                 AnchorOrigin="Origin.TopRight"
+                 TransformOrigin="Origin.BottomRight">
+            <ChildContent>
+                @foreach (var app in RunningApps)
+                {
+                    <MudMenuItem Label="@app.Name"
+                                 OnClick="() => Controller.AddGame(app)" />
+                }
+                @if (RunningApps.Count > 0)
+                {
+                    <MudDivider />
+                }
+                @* Browse Item *@
+                <MudMenuItem Icon="@Icons.Material.Rounded.FolderOpen"
+                             Label="Browse for an Exe"
+                             OnClick="BrowseForGame" />
+            </ChildContent>
+        </MudMenu>
     </DialogActions>
 
 </MudDialog>

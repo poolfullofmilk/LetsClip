@@ -50,20 +50,22 @@ else
             </MudStack>
             <MudSpacer />
             @* Show In Folder Button *@
-            <MudButton Variant="Variant.Text"
-                       Size="Size.Small"
-                       StartIcon="@Icons.Material.Rounded.FolderOpen"
-                       OnClick="ShowInFolder">
-                Show in Folder
-            </MudButton>
+            <Tooltip Text="Show in Folder"
+                     RootClass="d-flex">
+                <MudIconButton Icon="@Icons.Material.Rounded.FolderOpen"
+                               aria-label="Show in Folder"
+                               Size="Size.Small"
+                               OnClick="ShowInFolder" />
+            </Tooltip>
             @* Delete Button *@
-            <MudButton Variant="Variant.Text"
-                       Size="Size.Small"
-                       StartIcon="@Icons.Material.Rounded.Delete"
-                       Class="danger-hover"
-                       OnClick="DeleteAsync">
-                Delete
-            </MudButton>
+            <Tooltip Text="Delete Clip"
+                     RootClass="d-flex">
+                <MudIconButton Icon="@Icons.Material.Rounded.Delete"
+                               aria-label="Delete Clip"
+                               Color="Color.Error"
+                               Size="Size.Small"
+                               OnClick="DeleteAsync" />
+            </Tooltip>
         </MudStack>
 
         <MudElement HtmlTag="div"
@@ -71,7 +73,7 @@ else
             <MudElement HtmlTag="div"
                         Class="main-panel fill-column">
                 <MudPaper Elevation="4"
-                          Class="rounded-panel pa-4 fill fill-column">
+                          Class="rounded-panel pa-6 fill fill-column">
                     <MudStack Spacing="3"
                               Class="fill">
                         @* Player *@
@@ -187,6 +189,7 @@ else
                                             role="slider"
                                             tabindex="0"
                                             data-handle="start"
+                                            data-time="@Exact(_range.Start)"
                                             aria-label="Trim Start"
                                             aria-valuemin="0"
                                             aria-valuemax="@Number(_range.End)"
@@ -199,6 +202,7 @@ else
                                             role="slider"
                                             tabindex="0"
                                             data-handle="end"
+                                            data-time="@Exact(_range.End)"
                                             aria-label="Trim End"
                                             aria-valuemin="@Number(_range.Start)"
                                             aria-valuemax="@Number(_duration)"

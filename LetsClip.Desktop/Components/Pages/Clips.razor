@@ -41,7 +41,7 @@
                                      lg="4"
                                      xl="3">
                                 <MudPaper Elevation="4"
-                                          Class="rounded-panel pa-3">
+                                          Class="rounded-panel pa-4">
                                     <MudSkeleton SkeletonType="SkeletonType.Rectangle"
                                                  Animation="Animation.Wave"
                                                  Class="rounded-inner"
@@ -84,7 +84,7 @@
                                      xl="3">
                                 @* Clip Card *@
                                 <MudPaper Elevation="4"
-                                          Class="rounded-panel pa-3 hover-card"
+                                          Class="rounded-panel pa-4 hover-card"
                                           role="button"
                                           tabindex="0"
                                           data-keyclick
@@ -127,8 +127,8 @@
                                             <MudIconButton Icon="@Icons.Material.Rounded.Delete"
                                                            aria-label="Delete Clip"
                                                            title="Delete Clip"
+                                                           Color="Color.Error"
                                                            Size="Size.Small"
-                                                           Class="danger-hover"
                                                            OnClick="() => DeleteAsync(clip)" />
                                         </MudElement>
                                     </MudStack>

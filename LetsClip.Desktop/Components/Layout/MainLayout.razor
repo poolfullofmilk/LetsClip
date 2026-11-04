@@ -1,4 +1,4 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 
 @* Providers *@
 <MudThemeProvider Theme="AppTheme.Custom"
@@ -23,16 +23,16 @@
                 @AppInfo.DisplayName
             </MudText>
 
-            @* Help Menu *@
-            <Tooltip Text="Help"
+            @* More Menu *@
+            <Tooltip Text="More"
                      RootClass="d-flex">
                 <MudBadge Dot
                           Color="Color.Error"
                           Overlap
                           Visible="@(_availableUpdate is not null)"
                           Class="d-flex">
-                    <MudMenu Icon="@Icons.Material.Rounded.Help"
-                             AriaLabel="Help"
+                    <MudMenu Icon="@Icons.Material.Rounded.MoreVert"
+                             AriaLabel="More"
                              Size="Size.Small"
                              Dense
                              AnchorOrigin="Origin.BottomLeft"

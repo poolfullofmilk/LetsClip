@@ -3,9 +3,9 @@
 ## Features
 - Keeps the last 30, 60 or 120 seconds of one monitor in the background, ready to save
 - Press a hotkey anywhere, even in a game, and the last moments become a clip
-- Records in 1080p or your monitor's own resolution, up to its refresh rate, 240 FPS included
+- Records in 1080p or your monitor's own resolution, up to its refresh rate, 240 FPS included, at Normal, High or Max quality
 - Records what your speakers or headphones play, with your microphone mixed in if you want it
-- Games Only records just the game's own window while it runs, so chats, other apps and notifications stay out of your clips, from a list of found games you can add to or remove from
+- Games Only records just the game's own window while it runs, so chats, other apps and notifications stay out of your clips, from a list of found games you can add to, from your open apps or any exe, or remove from
 - Starts with Windows in the tray, and pauses or resumes from the tray icon
 - Trim a clip by dragging the handles, typing the times or setting them at the frame you watch, and the trim is kept for next time
 - Export an MP4 under the size you pick, 10 MB for Discord's free limit, in 1080p or 720p, at 60 FPS or the clip's own rate

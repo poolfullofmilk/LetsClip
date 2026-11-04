@@ -19,9 +19,6 @@ public partial class MainWindow : Window
 {
     private const int BalloonMilliseconds = 4000;
 
-    // The Chime Starts A Moment Late, Its Mute Covers That
-    private static readonly TimeSpan s_chimeMargin = TimeSpan.FromMilliseconds(400);
-
     // A Quick Hide And Show Never Suspends
     private static readonly TimeSpan s_suspendDelay = TimeSpan.FromSeconds(1);
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
@@ -159,8 +156,7 @@ public partial class MainWindow : Window
         // A Soft Chime, Muted Out Of The Next Clip
         if (_controller.Settings.SaveSound)
         {
-            _controller.Recorder.MuteSystemAudio(SaveChime.Duration + s_chimeMargin);
-            SaveChime.Play();
+            SaveChime.Play(_controller.Recorder);
         }
 
         TrayBalloon.ShowQuiet(

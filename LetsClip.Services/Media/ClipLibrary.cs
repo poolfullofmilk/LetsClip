@@ -94,8 +94,7 @@ public sealed class ClipLibrary : IDisposable
                 var made = 0;
                 foreach (var clip in missing)
                 {
-                    var metadata = MetadataOf(clip.Path);
-                    var at = (metadata?.KeepStart ?? 0) + Math.Min(1, clip.Duration / 2);
+                    var at = Math.Min(1, clip.Duration / 2);
                     if (
                         await EnsureThumbnailAsync(clip.Path, at, CancellationToken.None)
                         is not null
@@ -142,7 +141,7 @@ public sealed class ClipLibrary : IDisposable
             file.FullName,
             Path.GetFileNameWithoutExtension(file.Name),
             metadata.RecordedAt,
-            metadata.KeepEnd - metadata.KeepStart,
+            metadata.Duration,
             file.Length,
             File.Exists(thumbnail) ? thumbnail : null
         );
@@ -288,7 +287,6 @@ public sealed class ClipLibrary : IDisposable
             var metadata = new ClipMetadata(
                 ClipNames.DateOf(Path.GetFileNameWithoutExtension(file.Name))
                     ?? new DateTimeOffset(file.CreationTimeUtc, TimeSpan.Zero),
-                0,
                 media.Duration,
                 null,
                 null,
@@ -317,7 +315,7 @@ public sealed class ClipLibrary : IDisposable
                 metadata is not null
                 && metadata.FileSize == file.Length
                 && metadata.FileWriteTimeUtc == file.LastWriteTimeUtc
-                && metadata.KeepEnd > metadata.KeepStart
+                && metadata.Duration > 0
                 ? metadata
                 : null;
         }

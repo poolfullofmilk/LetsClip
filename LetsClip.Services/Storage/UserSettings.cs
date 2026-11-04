@@ -1,6 +1,7 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using LetsClip.Data.Enums;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
 using NLog;
@@ -11,8 +12,9 @@ namespace LetsClip.Services.Storage;
 public sealed record UserSettings(
     string? MonitorDevicePath = null,
     int ReplaySeconds = 30,
-    int FrameRate = 60,
+    int FrameRate = 30,
     bool FullResolution = false,
+    CaptureQuality Quality = CaptureQuality.Normal,
     bool GamesOnly = false,
     string[]? RemovedGames = null,
     AddedGame[]? AddedGames = null,
@@ -92,7 +94,8 @@ public sealed record UserSettings(
         return this with
         {
             ReplaySeconds = ReplayChoices.Contains(ReplaySeconds) ? ReplaySeconds : 30,
-            FrameRate = FrameRateChoices.Contains(FrameRate) ? FrameRate : 60,
+            FrameRate = FrameRateChoices.Contains(FrameRate) ? FrameRate : 30,
+            Quality = Enum.IsDefined(Quality) ? Quality : CaptureQuality.Normal,
             RemovedGames = RemovedGames?.OfType<string>().ToArray() ?? [],
             AddedGames = AddedGames?.OfType<AddedGame>().ToArray() ?? [],
             SystemAudioDeviceId = SystemAudioDeviceId ?? "",

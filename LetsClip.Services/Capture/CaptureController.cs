@@ -108,7 +108,7 @@ public sealed class CaptureController : IDisposable
 
         ApplyGames();
         Changed?.Invoke();
-        _ = ApplyChangeAsync(before, updated);
+        _ = ApplyChangeAsync();
     }
 
     public void SelectMonitor(MonitorInfo monitor)
@@ -169,22 +169,20 @@ public sealed class CaptureController : IDisposable
         ];
     }
 
-    public void AddGame(string executablePath)
+    public void AddGame(AddedGame game)
     {
-        // Process Name Is The Key, Product Name Reads Best
-        var file = Path.GetFileNameWithoutExtension(executablePath);
-        var key = GameScanner.NormalizeProcessKey(file);
-        var product = FileVersionInfo.GetVersionInfo(executablePath).ProductName?.Trim();
-        var name = string.IsNullOrEmpty(product) ? file : product;
         UpdateSettings(settings =>
             settings with
             {
                 AddedGames =
                 [
-                    .. (settings.AddedGames ?? []).Where(game => game.Key != key),
-                    new AddedGame(key, name),
+                    .. (settings.AddedGames ?? []).Where(added => added.Key != game.Key),
+                    game,
                 ],
-                RemovedGames = [.. (settings.RemovedGames ?? []).Where(removed => removed != key)],
+                RemovedGames =
+                [
+                    .. (settings.RemovedGames ?? []).Where(removed => removed != game.Key),
+                ],
             }
         );
     }
@@ -215,49 +213,21 @@ public sealed class CaptureController : IDisposable
     #endregion
 
     #region Starts And Stops
-    public async Task StartAsync()
+    public Task StartAsync()
     {
         // Resuming Ends A Pause, Automation Decides The Rest
-        await _steps.WaitAsync();
-        try
-        {
-            IsPaused = false;
-            await StartIfWantedAsync();
-        }
-        finally
-        {
-            _steps.Release();
-        }
-        Changed?.Invoke();
+        return StepAsync(() => IsPaused = false);
     }
 
-    public async Task StopAsync()
+    public Task StopAsync()
     {
         // A Pause Holds Off Every Automatic Start Until Resumed
-        await _steps.WaitAsync();
-        try
-        {
-            IsPaused = true;
-            await Recorder.StopAsync();
-        }
-        finally
-        {
-            _steps.Release();
-        }
-        Changed?.Invoke();
+        return StepAsync(() => IsPaused = true);
     }
 
-    public async Task StartAutomaticallyAsync()
+    public Task StartAutomaticallyAsync()
     {
-        await _steps.WaitAsync();
-        try
-        {
-            await StartIfWantedAsync();
-        }
-        finally
-        {
-            _steps.Release();
-        }
+        return StepAsync(null);
     }
 
     public async Task InterruptAsync(string reason)
@@ -274,112 +244,78 @@ public sealed class CaptureController : IDisposable
         }
     }
 
-    public async Task HoldAsync(CaptureHolds hold, string reason)
+    public Task HoldAsync(CaptureHolds hold, string reason)
     {
-        await _steps.WaitAsync();
-        try
-        {
-            _holds |= hold;
-            await Recorder.StopAsync(reason);
-        }
-        finally
-        {
-            _steps.Release();
-        }
+        return StepAsync(() => _holds |= hold, reason);
     }
 
-    public async Task ReleaseAsync(CaptureHolds hold)
+    public Task ReleaseAsync(CaptureHolds hold)
     {
-        await _steps.WaitAsync();
-        try
-        {
-            _holds &= ~hold;
-            await StartIfWantedAsync();
-        }
-        finally
-        {
-            _steps.Release();
-        }
+        return StepAsync(() => _holds &= ~hold);
     }
 
-    private async Task OnGameChangedAsync(string? game)
+    private Task OnGameChangedAsync(string? game)
     {
+        // The Game Closing Ends The Buffer It Started
+        return game is null
+            ? StepAsync(
+                null,
+                $"Stopped because {_lastGame ?? "the game"} closed, history was cleared"
+            )
+            : StepAsync(() => _lastGame = game);
+    }
+
+    private Task ApplyChangeAsync()
+    {
+        return StepAsync(null);
+    }
+
+    private async Task RestartAfterDropAsync()
+    {
+        // A Dropped Capture Starts Over By Itself
+        await Task.Delay(TimeSpan.FromSeconds(3));
+        await StepAsync(null);
+    }
+
+    private async Task StepAsync(Action? change, string? stopReason = null)
+    {
+        // Each Ask Runs Alone, Then Capture Matches What Is Wanted
         await _steps.WaitAsync();
         try
         {
-            if (game is not null)
+            change?.Invoke();
+            var settings = Settings;
+            var wanted =
+                settings.HasSeenCaptureNotice && !IsPaused && _holds == CaptureHolds.None
+                    ? WantedOptions()
+                    : null;
+
+            // Queued Quick Changes Restart Once, Then Find Nothing To Do
+            var running = Recorder.Options;
+            if (running == wanted && (stopReason is null || wanted is not null))
             {
-                _lastGame = game;
-                await StartIfWantedAsync();
                 return;
             }
 
-            // The Game Closed, So Ends The Buffer It Started
-            if (Settings.GamesOnly)
+            if (running is not null || stopReason is not null)
             {
-                await Recorder.StopAsync(
-                    $"Stopped because {_lastGame ?? "the game"} closed, history was cleared"
-                );
+                await Recorder.StopAsync(wanted is null ? stopReason : null);
+            }
+
+            if (wanted is not null && Recorder.Status.CanStart)
+            {
+                await Recorder.StartAsync(wanted);
             }
         }
         finally
         {
             _steps.Release();
         }
+
         Changed?.Invoke();
     }
 
-    private async Task ApplyChangeAsync(UserSettings before, UserSettings after)
-    {
-        await _steps.WaitAsync();
-        try
-        {
-            // Games Only Swaps The Monitor For The Game's Own Window
-            if (before.GamesOnly != after.GamesOnly)
-            {
-                await Recorder.StopAsync();
-                await StartIfWantedAsync();
-                return;
-            }
-
-            // Monitor, Length, Rate Or Source Changes Apply At Once
-            if (IsBuffering && ChangesCapture(before, after))
-            {
-                await Recorder.StopAsync();
-                await StartNowAsync();
-                return;
-            }
-
-            if (!before.HasSeenCaptureNotice)
-            {
-                await StartIfWantedAsync();
-            }
-        }
-        finally
-        {
-            _steps.Release();
-        }
-    }
-
-    private async Task StartIfWantedAsync()
-    {
-        // Buffering Waits For The Notice, The User And Windows
-        var settings = Settings;
-        if (
-            !settings.HasSeenCaptureNotice
-            || IsPaused
-            || _holds != CaptureHolds.None
-            || (settings.GamesOnly && Games.GameName is null)
-            || !Recorder.Status.CanStart
-        )
-        {
-            return;
-        }
-
-        await StartNowAsync();
-    }
-
-    private async Task StartNowAsync()
+    private CaptureOptions? WantedOptions()
     {
         // Games Only Records The Game's Window, Wherever It Sits
         var settings = Settings;
@@ -387,47 +323,26 @@ public sealed class CaptureController : IDisposable
         var monitor = window != 0 ? MonitorCatalog.MonitorOf(Monitors, window) : null;
         if ((settings.GamesOnly && window == 0) || (monitor ?? SelectedMonitor) is not { } shown)
         {
-            return;
+            return null;
         }
 
-        await Recorder.StartAsync(
-            new CaptureOptions(
-                shown,
-                settings.ReplaySeconds,
-                FrameRate,
-                settings.FullResolution,
-                settings.SystemAudio ? settings.SystemAudioDeviceId : null,
-                settings.Microphone ? settings.MicrophoneDeviceId : null,
-                window,
-                window != 0 ? Games.GameName : null
-            )
+        return new CaptureOptions(
+            shown,
+            settings.ReplaySeconds,
+            FrameRate,
+            settings.FullResolution,
+            settings.Quality,
+            settings.SystemAudio ? settings.SystemAudioDeviceId : null,
+            settings.Microphone ? settings.MicrophoneDeviceId : null,
+            window,
+            window != 0 ? Games.GameName : null
         );
-    }
-
-    private async Task RestartAfterDropAsync()
-    {
-        // A Dropped Capture Starts Over By Itself
-        await Task.Delay(TimeSpan.FromSeconds(3));
-        await StartAutomaticallyAsync();
-        Changed?.Invoke();
     }
     #endregion
 
     public Task<SaveOutcome> SaveAsync()
     {
         return Recorder.SaveAsync();
-    }
-
-    private static bool ChangesCapture(UserSettings before, UserSettings after)
-    {
-        return before.MonitorDevicePath != after.MonitorDevicePath
-            || before.ReplaySeconds != after.ReplaySeconds
-            || before.FrameRate != after.FrameRate
-            || before.FullResolution != after.FullResolution
-            || before.SystemAudio != after.SystemAudio
-            || before.SystemAudioDeviceId != after.SystemAudioDeviceId
-            || before.Microphone != after.Microphone
-            || before.MicrophoneDeviceId != after.MicrophoneDeviceId;
     }
 
     public void Dispose()

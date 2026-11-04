@@ -2,14 +2,11 @@ namespace LetsClip.Data.ViewModels;
 
 public sealed record MediaInfo(
     double Duration,
-    double StartTime,
-    long SizeBytes,
     string? VideoCodec,
     string? PixelFormat,
     int Width,
     int Height,
     double FrameRate,
-    double VideoStart,
     string? AudioCodec
 )
 {

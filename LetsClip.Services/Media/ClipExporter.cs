@@ -228,9 +228,7 @@ public sealed class ClipExporter
                             output.Width,
                             output.Height,
                             output.FrameRate,
-                            output.HasAudio,
-                            encoder.Name,
-                            attempts
+                            output.HasAudio
                         );
                     }
 

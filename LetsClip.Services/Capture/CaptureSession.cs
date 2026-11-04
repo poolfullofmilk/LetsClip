@@ -35,7 +35,12 @@ public sealed class CaptureSession(
             CacheByteFloor,
             (long)(
                 (Options.Seconds + KeepMarginSeconds)
-                * VideoEncoders.PeakBytesPerSecond(width, height, Options.FrameRate)
+                * VideoEncoders.PeakBytesPerSecond(
+                    width,
+                    height,
+                    Options.FrameRate,
+                    Options.Quality
+                )
                 * 1.2
             )
         );
@@ -217,7 +222,13 @@ public sealed class CaptureSession(
             string.Join(",", chain) + "[video]",
             "-map",
             "[video]",
-            .. VideoEncoders.CaptureArguments(Encoder, Options.FrameRate, width, height),
+            .. VideoEncoders.CaptureArguments(
+                Encoder,
+                Options.FrameRate,
+                width,
+                height,
+                Options.Quality
+            ),
             // A Keyframe Each Second, Game Windows Send Frames Unevenly
             "-force_key_frames",
             "expr:gte(t,n_forced)",

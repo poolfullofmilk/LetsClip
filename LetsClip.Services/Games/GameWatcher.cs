@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using LetsClip.Data.ViewModels;
 using NLog;
 
 namespace LetsClip.Services.Games;
@@ -10,6 +11,20 @@ public sealed partial class GameWatcher : IDisposable
     // One Process Look Every Two Seconds, Nothing When Off
     private static readonly TimeSpan s_interval = TimeSpan.FromSeconds(2);
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
+
+    // Windows' Own Windows Never Count As Apps To Add
+    private static readonly HashSet<string> s_shellHosts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "explorer",
+        "ApplicationFrameHost",
+        "TextInputHost",
+        "SystemSettings",
+        "ShellExperienceHost",
+        "StartMenuExperienceHost",
+        "SearchHost",
+        "LockApp",
+        "msedgewebview2",
+    };
 
     private readonly Timer _timer;
     private volatile bool _enabled;
@@ -43,6 +58,66 @@ public sealed partial class GameWatcher : IDisposable
         GameName = null;
         _gameProcessId = 0;
         _timer.Change(enabled ? TimeSpan.Zero : Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+    }
+
+    public static AddedGame GameOf(string executablePath)
+    {
+        // Process Name Is The Key, Product Name Reads Best
+        var file = Path.GetFileNameWithoutExtension(executablePath);
+        var product = FileVersionInfo.GetVersionInfo(executablePath).ProductName?.Trim();
+        return new AddedGame(
+            GameScanner.NormalizeProcessKey(file),
+            string.IsNullOrEmpty(product) ? file : product
+        );
+    }
+
+    public static IReadOnlyList<AddedGame> RunningApps()
+    {
+        // Apps With A Titled Window, Named Like An Added Exe
+        var processes = Process.GetProcesses();
+        try
+        {
+            return
+            [
+                .. processes
+                    .Where(process =>
+                        process.Id != Environment.ProcessId
+                        && process.MainWindowHandle != 0
+                        && process.MainWindowTitle.Length > 0
+                        && !s_shellHosts.Contains(process.ProcessName)
+                    )
+                    .Select(process =>
+                        PathOf(process) is { } path
+                            ? GameOf(path)
+                            : new AddedGame(
+                                GameScanner.NormalizeProcessKey(process.ProcessName),
+                                process.ProcessName
+                            )
+                    )
+                    .DistinctBy(app => app.Key)
+                    .OrderBy(app => app.Name, StringComparer.CurrentCultureIgnoreCase),
+            ];
+        }
+        finally
+        {
+            foreach (var process in processes)
+            {
+                process.Dispose();
+            }
+        }
+    }
+
+    private static string? PathOf(Process process)
+    {
+        try
+        {
+            return process.MainModule?.FileName;
+        }
+        catch (Exception exception) when (exception is Win32Exception or InvalidOperationException)
+        {
+            // An Elevated App Hides Its Path, The Process Name Serves
+            return null;
+        }
     }
 
     public nint GameWindow()

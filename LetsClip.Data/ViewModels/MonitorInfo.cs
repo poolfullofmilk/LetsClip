@@ -3,7 +3,6 @@ namespace LetsClip.Data.ViewModels;
 public sealed record MonitorInfo(
     string DevicePath,
     string FriendlyName,
-    string GdiName,
     int Left,
     int Top,
     int Width,

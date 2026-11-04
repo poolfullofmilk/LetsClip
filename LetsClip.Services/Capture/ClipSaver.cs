@@ -12,8 +12,7 @@ public static class ClipSaver
     public static async Task<ClipInfo> SaveAsync(
         IReadOnlyList<Segment> video,
         IReadOnlyList<Segment> audio,
-        double keepFrom,
-        double keepTo,
+        double to,
         string sessionFolder,
         string clipsFolder,
         DateTimeOffset recordedAt,
@@ -22,14 +21,6 @@ public static class ClipSaver
     )
     {
         Directory.CreateDirectory(clipsFolder);
-
-        // Where The Copied Media Really Starts, Keyframe Pre-Roll Included
-        var firstVideo =
-            await MediaProbe.ProbeAsync(video[0].Path, token)
-            ?? throw new InvalidDataException("Failed To Read The Replay Cache");
-        var firstAudio = audio.Count > 0 ? await MediaProbe.ProbeAsync(audio[0].Path, token) : null;
-        var fileStart = Math.Min(firstVideo.StartTime, firstAudio?.StartTime ?? double.MaxValue);
-
         var temporary = Path.Combine(
             clipsFolder,
             $"{ClipLibrary.PartialPrefix}{Guid.NewGuid():N}.mp4"
@@ -61,7 +52,7 @@ public static class ClipSaver
                 "-c",
                 "copy",
                 "-to",
-                Seconds(keepTo),
+                Seconds(to),
                 "-avoid_negative_ts",
                 "make_zero",
                 "-movflags",
@@ -88,23 +79,15 @@ public static class ClipSaver
                 throw new InvalidDataException("The saved clip did not read back");
             }
 
-            // The Logical Clip Starts At The Asked Moment Or Frame
-            var keepStart = Math.Clamp(
-                Math.Max(keepFrom, firstVideo.VideoStart) - fileStart,
-                0,
-                media.Duration
-            );
-            var keepEnd = Math.Clamp(keepTo - fileStart, keepStart + 0.1, media.Duration);
             var finalPath = UniquePath(clipsFolder, ClipNames.For(recordedAt));
             File.Move(temporary, finalPath);
-
             ClipLibrary.Register(
                 finalPath,
-                new ClipMetadata(recordedAt, keepStart, keepEnd, null, null, 0, default)
+                new ClipMetadata(recordedAt, media.Duration, null, null, 0, default)
             );
             await ClipLibrary.EnsureThumbnailAsync(
                 finalPath,
-                keepStart + Math.Min(1, (keepEnd - keepStart) / 2),
+                Math.Min(1, media.Duration / 2),
                 token
             );
             return await library.GetAsync(finalPath, token)

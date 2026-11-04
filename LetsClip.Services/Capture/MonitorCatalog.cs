@@ -78,7 +78,6 @@ public static unsafe partial class MonitorCatalog
                                     string.IsNullOrWhiteSpace(detail?.FriendlyName)
                                         ? $"Display {monitors.Count + 1}"
                                         : detail.FriendlyName,
-                                    gdiName,
                                     description.Left,
                                     description.Top,
                                     width,

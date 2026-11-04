@@ -3,14 +3,24 @@
     <ChildContent>
         @* Capture Panel *@
         <MudPaper Elevation="4"
-                  Class="rounded-panel px-4 py-2">
+                  Class="rounded-panel px-6 py-2">
             @if (Controller.Settings.GamesOnly)
             {
                 <SettingRow Title="Game">
-                    <MudText Typo="Typo.body2"
-                             Class="mud-text-secondary ellipsis">
-                        @(Controller.Games.GameName ?? "Waiting for a Game")
-                    </MudText>
+                    <MudStack Spacing="0"
+                              AlignItems="AlignItems.End"
+                              Style="min-width:0">
+                        <MudText Typo="Typo.body2"
+                                 Class="mud-text-secondary ellipsis">
+                            @(Controller.Games.GameName ?? "Waiting for a Game")
+                        </MudText>
+                        @* Settings Link *@
+                        <MudLink Typo="Typo.caption"
+                                 Color="Color.Info"
+                                 Href="settings">
+                            Or Record a Monitor
+                        </MudLink>
+                    </MudStack>
                 </SettingRow>
             }
             else
@@ -88,6 +98,22 @@
                     </MudButtonGroup>
                 </SettingRow>
             }
+            <MudDivider />
+            <SettingRow Title="Quality">
+                @* Quality Buttons *@
+                <MudButtonGroup OverrideStyles="false"
+                                Size="Size.Small">
+                    @foreach (var quality in Enum.GetValues<CaptureQuality>())
+                    {
+                        <MudButton Variant="Variant.Filled"
+                                   Color="@(quality == Controller.Settings.Quality ? Color.Info : Color.Default)"
+                                   Size="Size.Small"
+                                   OnClick="() => SetQuality(quality)">
+                            @quality
+                        </MudButton>
+                    }
+                </MudButtonGroup>
+            </SettingRow>
             <MudDivider />
             <SettingRow Title="Frame Rate">
                 @* Frame Rate Select *@

@@ -12,6 +12,7 @@ public sealed record CaptureOptions(
     int Seconds,
     int FrameRate,
     bool FullResolution,
+    CaptureQuality Quality,
     string? SystemAudioId,
     string? MicrophoneId,
     nint GameWindow,
@@ -69,6 +70,17 @@ public sealed class ReplayRecorder : IDisposable
     public event Action? Dropped;
 
     public CaptureStatus Status { get; private set; }
+
+    public CaptureOptions? Options
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _session?.Options;
+            }
+        }
+    }
 
     #region Start And Stop
     public async Task StartAsync(CaptureOptions options)
@@ -393,7 +405,6 @@ public sealed class ReplayRecorder : IDisposable
         return await ClipSaver.SaveAsync(
             video,
             session.AudioCovering(from, end),
-            from,
             Math.Min(end, session.NewestEnd),
             session.Folder,
             _library.Folder,

@@ -1,6 +1,7 @@
 using LetsClip.Data.ViewModels;
 using LetsClip.Desktop.Interop;
 using LetsClip.Services.Capture;
+using LetsClip.Services.Games;
 using Microsoft.AspNetCore.Components;
 
 namespace LetsClip.Desktop.Components.Shared.Dialogs;
@@ -12,10 +13,18 @@ public partial class GamesDialog : IDisposable
 
     private IReadOnlyList<GameEntry> _games = [];
 
-    protected override void OnInitialized()
+    // Open Apps Not Listed Yet, Read When The Dialog Opens
+    private IReadOnlyList<AddedGame> RunningApps
+    {
+        get => [.. field.Where(app => !_games.Any(game => !game.IsRemoved && game.Key == app.Key))];
+        set;
+    } = [];
+
+    protected override async Task OnInitializedAsync()
     {
         Controller.Changed += OnChanged;
         _games = Controller.GameList();
+        RunningApps = await Task.Run(GameWatcher.RunningApps);
     }
 
     private void OnChanged()
@@ -32,11 +41,11 @@ public partial class GamesDialog : IDisposable
         return game.IsRemoved ? "mud-text-disabled" : null;
     }
 
-    private void AddGame()
+    private void BrowseForGame()
     {
         if (DesktopShell.PickGame() is { } path)
         {
-            Controller.AddGame(path);
+            Controller.AddGame(GameWatcher.GameOf(path));
         }
     }
 

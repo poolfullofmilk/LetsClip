@@ -66,11 +66,7 @@ public partial class ClipEditor : IAsyncDisposable
 
     private string PlayTip => _paused ? "Play" : "Pause";
 
-    // Saved Clips Open On The Asked Moment, Pre-Roll Left Outside
-    private TrimRange DefaultRange =>
-        _metadata is { } metadata
-            ? TrimRange.Fit(metadata.KeepStart, metadata.KeepEnd, _duration)
-            : TrimRange.Whole(_duration);
+    private TrimRange DefaultRange => TrimRange.Whole(_duration);
 
     protected override async Task OnParametersSetAsync()
     {
@@ -160,21 +156,10 @@ public partial class ClipEditor : IAsyncDisposable
     }
 
     [JSInvokable]
-    public void OnSeek(double time)
+    public void OnRange(double start, double end)
     {
-        _time = time;
-        StateHasChanged();
-    }
-
-    [JSInvokable]
-    public async Task OnHandle(string handle, double time)
-    {
-        // Dragging An Edge Shows That Frame
-        SetRange(handle == "start" ? _range.WithStart(time) : _range.WithEnd(time, _duration));
-        await JavaScript.InvokeVoidAsync(
-            "letsClip.seek",
-            handle == "start" ? _range.Start : _range.End
-        );
+        // The Page Script Dragged The Handles, Here The Range Settles
+        SetRange(TrimRange.Fit(start, end, _duration));
     }
 
     [JSInvokable]
@@ -238,6 +223,11 @@ public partial class ClipEditor : IAsyncDisposable
     {
         var share = _duration > 0 ? Math.Clamp(seconds / _duration, 0, 1) : 0;
         return (share * 100).ToString("0.###", CultureInfo.InvariantCulture) + "%";
+    }
+
+    private static string Exact(double value)
+    {
+        return value.ToString("0.###", CultureInfo.InvariantCulture);
     }
 
     private static string Number(double value)

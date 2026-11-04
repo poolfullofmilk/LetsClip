@@ -1,4 +1,5 @@
 using System.Media;
+using LetsClip.Services.Capture;
 
 namespace LetsClip.Desktop.Interop;
 
@@ -14,12 +15,15 @@ public static class SaveChime
         (1568, 0.07),
     ];
 
-    public static readonly TimeSpan Duration = TimeSpan.FromSeconds(Length);
+    // The Chime Starts A Moment Late, Its Mute Covers That
+    private static readonly TimeSpan s_muted = TimeSpan.FromSeconds(Length + 0.4);
 
     private static readonly SoundPlayer s_player = new(new MemoryStream(Render()));
 
-    public static void Play()
+    public static void Play(ReplayRecorder recorder)
     {
+        // The Loopback Hears Silence, So No Clip Holds The Chime
+        recorder.MuteSystemAudio(s_muted);
         try
         {
             s_player.Play();

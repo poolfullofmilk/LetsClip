@@ -29,19 +29,23 @@ document.addEventListener("click", (event) => {
 });
 
 window.letsClip = (() => {
+    // The Shortest Selection, Matching TrimRange.Step
+    const step = 0.1;
     let state = null;
+
+    const duration = () => state.duration || state.video.duration || 0;
+    const clamp = (time) => Math.min(duration(), Math.max(0, time));
 
     // The Playhead Follows The Video Each Frame, Blazor Hears The Time Ten Times A Second
     const loop = () => {
         if (!state) return;
         const { video, playhead, dotnet } = state;
-        const duration = state.duration || video.duration || 0;
         if (state.stopAt !== null && !video.paused && video.currentTime >= state.stopAt) {
             video.pause();
             video.currentTime = state.stopAt;
         }
-        if (playhead && duration > 0) {
-            playhead.style.left = `${Math.min(100, Math.max(0, (video.currentTime / duration) * 100))}%`;
+        if (playhead && duration() > 0) {
+            playhead.style.left = `${Math.min(100, Math.max(0, (video.currentTime / duration()) * 100))}%`;
         }
         const now = performance.now();
         if (now - state.reported > 100 || video.paused !== state.paused) {
@@ -52,9 +56,9 @@ window.letsClip = (() => {
         state.frame = requestAnimationFrame(loop);
     };
 
-    const attach = (video, playhead, timeline, dotnet, duration) => {
+    const attach = (video, playhead, timeline, dotnet, length) => {
         detach();
-        state = { video, playhead, timeline, dotnet, duration, reported: 0, paused: true, stopAt: null, frame: 0, drag: null, grip: 0 };
+        state = { video, playhead, timeline, dotnet, duration: length, reported: 0, paused: true, stopAt: null, frame: 0, drag: null };
         video.addEventListener("error", state.onError = () => dotnet.invokeMethodAsync("OnPlayerError").catch(() => {}));
         video.addEventListener("dblclick", state.onDouble = () => fullScreen());
         timeline.addEventListener("pointerdown", state.onDown = (event) => down(event));
@@ -63,23 +67,6 @@ window.letsClip = (() => {
         timeline.addEventListener("pointercancel", state.onUp);
         timeline.addEventListener("keydown", state.onKey = (event) => key(event));
         state.frame = requestAnimationFrame(loop);
-    };
-
-    // A Focused Handle Steps 0.1 s With The Arrow Keys, 1 s With Shift
-    const key = (event) => {
-        const handle = event.target instanceof Element ? event.target.closest("[data-handle]") : null;
-        if (!state || !handle) return;
-        // Held Keys Repeat Faster Than Blazor Renders, So The Last Asked Value Is The Base
-        const shown = parseFloat(handle.getAttribute("aria-valuenow") || "0");
-        const recent = handle.pendingAt && performance.now() - handle.pendingAt < 400;
-        const value = recent ? handle.pending : shown;
-        const step = event.shiftKey ? 1 : 0.1;
-        const next = { ArrowLeft: value - step, ArrowDown: value - step, ArrowRight: value + step, ArrowUp: value + step, Home: 0, End: state.duration }[event.key];
-        if (next === undefined) return;
-        event.preventDefault();
-        handle.pending = Math.round(next * 10) / 10;
-        handle.pendingAt = performance.now();
-        state.dotnet.invokeMethodAsync("OnHandle", handle.dataset.handle, handle.pending).catch(() => {});
     };
 
     // Playback Stops And Releases The File When The Editor Closes
@@ -101,10 +88,51 @@ window.letsClip = (() => {
         state = null;
     };
 
+    // The Kept Range Lives In The Handles, Exact To The Millisecond
+    const handleOf = (edge) => state.timeline.querySelector(`[data-handle="${edge}"]`);
+    const readRange = () => ({ start: parseFloat(handleOf("start").dataset.time), end: parseFloat(handleOf("end").dataset.time) });
+
+    const setEdge = (range, edge, time) => {
+        const value = Math.round(time * 1000) / 1000;
+        if (edge === "start") range.start = Math.min(Math.max(0, value), range.end - step);
+        else range.end = Math.max(Math.min(duration(), value), range.start + step);
+    };
+
+    // A Drag Paints The Handles Here, Blazor Hears The Range Once It Settles
+    const paint = ({ start, end }) => {
+        const percent = (time) => `${Math.min(100, Math.max(0, (time / duration()) * 100))}%`;
+        const [before, after] = state.timeline.querySelectorAll(".timeline-shade");
+        const selection = state.timeline.querySelector(".timeline-selection");
+        before.style.width = percent(start);
+        after.style.left = percent(end);
+        selection.style.left = percent(start);
+        selection.style.width = percent(end - start);
+        handleOf("start").style.left = percent(start);
+        handleOf("end").style.left = percent(end);
+    };
+
+    const commit = (range) => state.dotnet.invokeMethodAsync("OnRange", range.start, range.end).catch(() => {});
+
+    // A Focused Handle Steps 0.1 s With The Arrow Keys, 1 s With Shift, Held Keys Build On The Last Step
+    const key = (event) => {
+        const handle = event.target instanceof Element ? event.target.closest("[data-handle]") : null;
+        if (!state || !handle) return;
+        const edge = handle.dataset.handle;
+        const range = state.keyed && performance.now() - state.keyed.at < 600 ? state.keyed.range : readRange();
+        const jump = event.shiftKey ? 1 : step;
+        const time = { ArrowLeft: range[edge] - jump, ArrowDown: range[edge] - jump, ArrowRight: range[edge] + jump, ArrowUp: range[edge] + jump, Home: 0, End: duration() }[event.key];
+        if (time === undefined) return;
+        event.preventDefault();
+        setEdge(range, edge, time);
+        paint(range);
+        state.video.currentTime = range[edge];
+        state.keyed = { range, at: performance.now() };
+        commit(range);
+    };
+
     const timeAt = (event) => {
         const bounds = state.timeline.getBoundingClientRect();
-        const share = Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width));
-        return share * (state.duration || 0);
+        return Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width)) * duration();
     };
 
     // A Handle Drags Its Edge From Where It Was Grabbed, Anywhere Else Seeks
@@ -112,52 +140,54 @@ window.letsClip = (() => {
         if (!state || event.button !== 0) return;
         const handle = event.target instanceof Element ? event.target.closest("[data-handle]") : null;
         state.drag = handle ? handle.dataset.handle : "seek";
-        state.grip = handle ? timeAt(event) - parseFloat(handle.getAttribute("aria-valuenow") || "0") : 0;
+        state.range = readRange();
+        state.moved = false;
+        state.grip = handle ? timeAt(event) - state.range[state.drag] : 0;
         state.timeline.setPointerCapture(event.pointerId);
         event.preventDefault();
         handle?.focus();
-        if (!handle) send(timeAt(event));
+        if (!handle) state.video.currentTime = clamp(timeAt(event));
+    };
+
+    const apply = (time) => {
+        if (state.drag === "seek") {
+            state.video.currentTime = clamp(time);
+            return;
+        }
+        setEdge(state.range, state.drag, time);
+        paint(state.range);
+        state.video.currentTime = state.range[state.drag];
     };
 
     const move = (event) => {
         if (!state?.drag) return;
         state.pending = timeAt(event) - state.grip;
+        state.moved = true;
         if (state.queued) return;
         state.queued = true;
         requestAnimationFrame(() => {
-            if (!state) return;
+            if (!state?.drag) return;
             state.queued = false;
-            send(state.pending);
+            apply(state.pending);
         });
     };
 
     const up = (event) => {
         if (!state?.drag) return;
-        send(timeAt(event) - state.grip);
-        state.drag = null;
-    };
-
-    const send = (time) => {
-        if (state.drag === "seek") {
-            state.video.currentTime = time;
-            state.dotnet.invokeMethodAsync("OnSeek", time).catch(() => {});
-        } else {
-            state.dotnet.invokeMethodAsync("OnHandle", state.drag, time).catch(() => {});
+        if (state.moved) {
+            apply(timeAt(event) - state.grip);
+            if (state.drag !== "seek") commit(state.range);
         }
+        state.drag = null;
+        state.queued = false;
     };
 
-    // Play Runs From The Playhead To The End Point, Starting Over Once There
+    // Play Runs To The End Point, Starting At The Start Point When The Playhead Sits Outside
     const play = (start, end) => {
         if (!state) return;
         const { video } = state;
-        const time = video.currentTime;
-        const duration = state.duration || video.duration || 0;
-        if (Math.abs(time - end) < 0.05 || time >= duration - 0.05) {
-            video.currentTime = start;
-            state.stopAt = end;
-        } else {
-            state.stopAt = time < end ? end : null;
-        }
+        if (video.currentTime < start - 0.05 || video.currentTime >= end - 0.05) video.currentTime = start;
+        state.stopAt = end;
         video.play().catch(() => {});
     };
 
@@ -166,12 +196,9 @@ window.letsClip = (() => {
     // A Jump Past The End Point Lets Playback Run On From There
     const nudge = (seconds) => {
         if (!state) return;
-        const { video } = state;
-        const duration = state.duration || video.duration || 0;
-        const time = Math.min(duration, Math.max(0, video.currentTime + seconds));
-        video.currentTime = time;
+        const time = clamp(state.video.currentTime + seconds);
+        state.video.currentTime = time;
         if (state.stopAt !== null && time >= state.stopAt) state.stopAt = null;
-        state.dotnet.invokeMethodAsync("OnSeek", time).catch(() => {});
     };
 
     const seek = (time) => {
@@ -199,7 +226,7 @@ window.letsClip = (() => {
     });
 
     // The Next Key Pressed With Its Modifiers Becomes The Hotkey, Escape Cancels
-    const captureKey = (dotnet) =>
+    const captureKey = () =>
         new Promise((resolve) => {
             const listener = (event) => {
                 if (["Control", "Shift", "Alt", "Meta"].includes(event.key)) return;
