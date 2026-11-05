@@ -2,6 +2,7 @@ using System.Globalization;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
 using LetsClip.Desktop.Components.Shared.Dialogs;
+using LetsClip.Desktop.Components.Shared.Media;
 using LetsClip.Desktop.Interop;
 using LetsClip.Services.Capture;
 using LetsClip.Services.Media;
@@ -23,9 +24,6 @@ public partial class ClipEditor : IAsyncDisposable
     public required CaptureController Controller { get; set; }
 
     [Inject]
-    public required DesktopShell Shell { get; set; }
-
-    [Inject]
     public required IJSRuntime JavaScript { get; set; }
 
     [Inject]
@@ -37,8 +35,11 @@ public partial class ClipEditor : IAsyncDisposable
     [Inject]
     public required IDialogService DialogService { get; set; }
 
-    private readonly CancellationTokenSource _closing = new();
+    // Each Loaded Clip Has Its Own Lifetime
+    private CancellationTokenSource? _lifetime;
     private DotNetObjectReference<ClipEditor>? _reference;
+    private Action? _pendingTrim;
+    private PlayerClock? _clock;
     private ElementReference _video;
     private ElementReference _playhead;
     private ElementReference _timeline;
@@ -47,20 +48,26 @@ public partial class ClipEditor : IAsyncDisposable
     private MediaInfo? _media;
     private ClipMetadata? _metadata;
     private string? _stripUrl;
+    private string? _loadedName;
     private bool _missing;
     private bool _ready;
     private bool _attached;
     private bool _playError;
     private bool _paused = true;
     private bool _muted;
+    private double _volume = 1;
     private double _duration;
     private double _time;
     private TrimRange _range;
     private Timer? _trimTimer;
 
-    private string VideoUrl => _path is null ? "" : Shell.ClipUrl(_path);
+    private string VideoUrl => _path is null ? "" : DesktopShell.ClipUrl(Path.GetFileName(_path));
 
-    private string Title => _clip?.Title ?? Path.GetFileNameWithoutExtension(FileName);
+    // A Generated Name Shows As Its Date
+    private string Title =>
+        ClipNames.DateOf(Path.GetFileNameWithoutExtension(FileName)) is { } date
+            ? Formatter.FormatDateTime(date)
+            : Path.GetFileNameWithoutExtension(FileName);
 
     private string MuteTip => _muted ? "Unmute Preview" : "Mute Preview";
 
@@ -70,6 +77,21 @@ public partial class ClipEditor : IAsyncDisposable
 
     protected override async Task OnParametersSetAsync()
     {
+        // The Tray Balloon Can Open Another Clip Here
+        if (FileName == _loadedName)
+        {
+            return;
+        }
+
+        _loadedName = FileName;
+        EndClip();
+        var lifetime = new CancellationTokenSource();
+        _lifetime = lifetime;
+        var token = lifetime.Token;
+        (_clip, _media, _path, _metadata, _stripUrl) = (null, null, null, null, null);
+        (_missing, _ready, _playError, _paused) = (false, false, false, true);
+        await DetachAsync();
+
         // Only A Plain File Name In The Clips Folder
         if (
             Path.GetFileName(FileName) != FileName
@@ -81,26 +103,35 @@ public partial class ClipEditor : IAsyncDisposable
         }
 
         var path = Path.Combine(Controller.Settings.ClipsDirectory, FileName);
-        var token = _closing.Token;
-        _clip = await Task.Run(() => Controller.Library.GetAsync(path, token), token);
-        _media = _clip is null
+        var clip = await Task.Run(() => Controller.Library.GetAsync(path, token), token);
+        var media = clip is null
             ? null
             : await Task.Run(() => MediaProbe.ProbeAsync(path, token), token);
-        if (_clip is null || _media is not { HasVideo: true, Duration: > 0 })
+
+        // Another Clip Opened Meanwhile, This Result Belongs To Nobody
+        if (token.IsCancellationRequested)
+        {
+            return;
+        }
+
+        if (clip is null || media is not { HasVideo: true, Duration: > 0 })
         {
             _missing = true;
             return;
         }
 
+        // Window Clips Keep Their Capture Rate, Probes Read Low
+        _clip = clip;
         _path = path;
         _metadata = ClipLibrary.MetadataOf(path);
+        _media = media with { FrameRate = _metadata?.FrameRate ?? media.FrameRate };
         _duration = _media.Duration;
         _range = _metadata is { TrimStart: { } start, TrimEnd: { } end }
             ? TrimRange.Fit(start, end, _duration)
             : DefaultRange;
         _muted = Controller.IsBuffering;
         _time = _range.Start;
-        _ = LoadStripAsync(path, token);
+        _ = LoadStripAsync(path, _duration, token);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -118,6 +149,7 @@ public partial class ClipEditor : IAsyncDisposable
             return;
         }
 
+        // A Reference Of This Clip's Own, Let Go On Detach
         _attached = true;
         _reference = DotNetObjectReference.Create(this);
         await JavaScript.InvokeVoidAsync(
@@ -126,17 +158,49 @@ public partial class ClipEditor : IAsyncDisposable
             _playhead,
             _timeline,
             _reference,
-            _duration
+            _duration,
+            _range.Start
         );
-        await JavaScript.InvokeVoidAsync("letsClip.seek", _range.Start);
-        _ready = true;
-        StateHasChanged();
     }
 
-    private async Task LoadStripAsync(string path, CancellationToken token)
+    private async Task DetachAsync()
+    {
+        if (!_attached)
+        {
+            return;
+        }
+
+        // Playback Stops And The File Is Released
+        _attached = false;
+        var reference = _reference;
+        _reference = null;
+        try
+        {
+            await JavaScript.InvokeVoidAsync("letsClip.detach");
+        }
+        catch (JSDisconnectedException)
+        {
+            // The Window Is Closing, The Browser Releases Everything Itself
+        }
+        finally
+        {
+            reference?.Dispose();
+        }
+    }
+
+    private void EndClip()
+    {
+        // Its Loads Stop And Its Pending Trim Is Written
+        _lifetime?.Cancel();
+        _lifetime?.Dispose();
+        _lifetime = null;
+        SaveTrimNow();
+    }
+
+    private async Task LoadStripAsync(string path, double duration, CancellationToken token)
     {
         var strip = await Task.Run(
-            () => ClipLibrary.EnsureStripAsync(path, _duration, token),
+            () => ClipLibrary.EnsureStripAsync(path, duration, token),
             token
         );
         if (strip is not null && !token.IsCancellationRequested)
@@ -150,9 +214,14 @@ public partial class ClipEditor : IAsyncDisposable
     [JSInvokable]
     public void OnPlayerTime(double time, bool paused)
     {
+        // Only The Clock Follows Playback, Not The Whole Editor
         _time = time;
-        _paused = paused;
-        StateHasChanged();
+        _clock?.Show(time);
+        if (paused != _paused)
+        {
+            _paused = paused;
+            StateHasChanged();
+        }
     }
 
     [JSInvokable]
@@ -160,6 +229,14 @@ public partial class ClipEditor : IAsyncDisposable
     {
         // The Page Script Dragged The Handles, Here The Range Settles
         SetRange(TrimRange.Fit(start, end, _duration));
+    }
+
+    [JSInvokable]
+    public void OnPlayerReady()
+    {
+        // Controls Wait For The First Frame
+        _ready = true;
+        StateHasChanged();
     }
 
     [JSInvokable]
@@ -201,22 +278,26 @@ public partial class ClipEditor : IAsyncDisposable
     private void ScheduleTrimSave()
     {
         // The Selection Survives A Restart, Written Once Dragging Settles
-        var path = _path;
-        var range = _range;
-        var isDefault = range == DefaultRange;
-        _trimTimer?.Dispose();
-        _trimTimer = new Timer(
-            _ =>
-            {
-                if (path is not null)
-                {
-                    ClipLibrary.SaveTrim(path, isDefault ? null : range);
-                }
-            },
+        if (_path is not { } path)
+        {
+            return;
+        }
+
+        var range = _range == DefaultRange ? (TrimRange?)null : _range;
+        Volatile.Write(ref _pendingTrim, () => ClipLibrary.SaveTrim(path, range));
+        _trimTimer ??= new Timer(
+            _ => SaveTrimNow(),
             null,
-            s_trimSaveDelay,
+            Timeout.InfiniteTimeSpan,
             Timeout.InfiniteTimeSpan
         );
+        _trimTimer.Change(s_trimSaveDelay, Timeout.InfiniteTimeSpan);
+    }
+
+    private void SaveTrimNow()
+    {
+        // Taken Once, So The Trim Is Never Written Twice
+        Interlocked.Exchange(ref _pendingTrim, null)?.Invoke();
     }
 
     private string Percent(double seconds)
@@ -257,9 +338,25 @@ public partial class ClipEditor : IAsyncDisposable
     {
         _muted = !_muted;
         await JavaScript.InvokeVoidAsync("letsClip.setMuted", _muted);
+        if (!_muted && _volume == 0)
+        {
+            await SetVolumeAsync(1);
+        }
+
         if (!_muted && Controller.IsBuffering)
         {
             Snackbar.Add("Preview sound is recorded too while buffering", Severity.Warning);
+        }
+    }
+
+    private async Task SetVolumeAsync(double volume)
+    {
+        // Sliding To Zero Mutes, Sliding Up Unmutes
+        _volume = volume;
+        await JavaScript.InvokeVoidAsync("letsClip.setVolume", volume);
+        if (_muted == volume > 0)
+        {
+            await ToggleMuteAsync();
         }
     }
 
@@ -279,7 +376,7 @@ public partial class ClipEditor : IAsyncDisposable
         }
 
         // The Preview Lets Go Of The File First
-        await JavaScript.InvokeVoidAsync("letsClip.detach");
+        await DetachAsync();
         if (!Explorer.Recycle(path))
         {
             Snackbar.Add("The clip could not be deleted, it may be in use", Severity.Warning);
@@ -303,23 +400,10 @@ public partial class ClipEditor : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        _closing.Cancel();
-        _closing.Dispose();
+        // Writes A Pending Trim, Then Lets Go Of The File
         _trimTimer?.Dispose();
-        if (_attached)
-        {
-            try
-            {
-                // Playback Stops And The File Is Released On Leaving
-                await JavaScript.InvokeVoidAsync("letsClip.detach");
-            }
-            catch (JSDisconnectedException)
-            {
-                // The Window Is Closing, The Browser Releases Everything Itself
-            }
-        }
-
-        _reference?.Dispose();
+        EndClip();
+        await DetachAsync();
         GC.SuppressFinalize(this);
     }
 }

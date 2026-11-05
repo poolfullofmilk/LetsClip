@@ -33,7 +33,11 @@ public partial class App : Application
                 configuration
                     .ForLogger()
                     .FilterMinLevel(NLog.LogLevel.Info)
-                    .WriteToFile(Path.Combine(AppInfo.LogsDirectory, "log-${shortdate}.txt"))
+                    // A Month Of Daily Logs, Older Ones Go
+                    .WriteToFile(
+                        Path.Combine(AppInfo.LogsDirectory, "log-${shortdate}.txt"),
+                        maxArchiveFiles: 30
+                    )
             );
 
         // A Second Launch Shows The First Window, Two Recorders Fight
@@ -91,7 +95,7 @@ public partial class App : Application
         );
 
         // A Crash Leaves Cache Behind, Cleared Off The Startup Path
-        _ = Task.Run(() => CacheFolders.DeleteLeftovers(null));
+        _ = Task.Run(CacheFolders.DeleteLeftovers);
 
         // A Failure In The Page Is Logged, Never Fatal
         DispatcherUnhandledException += (_, exceptionArgs) =>
@@ -206,36 +210,7 @@ public partial class App : Application
                 _ => Task.CompletedTask,
             };
         };
-        SystemEvents.DisplaySettingsChanged += (_, _) => _ = OnDisplaysChangedAsync(controller);
-    }
-
-    private static async Task OnDisplaysChangedAsync(CaptureController controller)
-    {
-        var before = controller.SelectedMonitor;
-        controller.RefreshMonitors();
-        var after = controller.SelectedMonitor;
-        if (controller.IsBuffering && !SameMonitor(before, after))
-        {
-            await controller.InterruptAsync(
-                after is null
-                    ? "Stopped because the monitor disconnected"
-                    : "Stopped because the monitor changed mode"
-            );
-        }
-
-        // A Monitor Back Or In Its New Mode Buffers Again
-        await controller.StartAutomaticallyAsync();
-    }
-
-    private static bool SameMonitor(MonitorInfo? before, MonitorInfo? after)
-    {
-        return before is not null
-            && after is not null
-            && before.Width == after.Width
-            && before.Height == after.Height
-            && before.Left == after.Left
-            && before.Top == after.Top
-            && before.Rotation == after.Rotation
-            && before.IsHdr == after.IsHdr;
+        // Any Change To The Recorded Monitor Restarts The Capture
+        SystemEvents.DisplaySettingsChanged += (_, _) => _ = controller.DisplaysChangedAsync();
     }
 }

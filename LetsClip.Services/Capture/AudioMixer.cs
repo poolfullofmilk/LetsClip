@@ -15,7 +15,9 @@ public sealed class AudioMixer : IDisposable
 
     // Writes Trail Real Time So Late Packets Still Land
     private const int TrailFrames = SampleRate * 100 / 1000;
-    private const int ChunkFrames = SampleRate / 100;
+
+    // 40 ms Chunks, Fewer Wakeups Keep The CPU Asleep
+    private const int ChunkFrames = SampleRate / 25;
 
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
 
@@ -59,8 +61,6 @@ public sealed class AudioMixer : IDisposable
             source.Connect();
         }
     }
-
-    public event Action? ProblemChanged;
 
     public string? Problem =>
         _sources.Select(source => source.Problem).FirstOrDefault(problem => problem is not null);
@@ -117,11 +117,6 @@ public sealed class AudioMixer : IDisposable
         });
     }
 
-    private void OnProblemChanged()
-    {
-        ProblemChanged?.Invoke();
-    }
-
     private void WriteLoop(Stream output)
     {
         var mix = new float[ChunkFrames * Channels];
@@ -131,7 +126,7 @@ public sealed class AudioMixer : IDisposable
             {
                 if (_emittedFrames + ChunkFrames > CurrentFrame() - TrailFrames)
                 {
-                    Thread.Sleep(5);
+                    Thread.Sleep(20);
                     continue;
                 }
 
@@ -239,7 +234,7 @@ public sealed class AudioMixer : IDisposable
 
                     recorder.StartRecording();
                     _recorder = recorder;
-                    SetProblem(null);
+                    Problem = null;
                     s_logger.Info($"Started {kind} From {endpoint.FriendlyName}");
                 }
                 catch (Exception exception)
@@ -251,7 +246,7 @@ public sealed class AudioMixer : IDisposable
                 {
                     // A Missing Device Records Silence, Never Another Device
                     s_logger.Warn($"Failed To Start {kind} {exception.GetType().Name}");
-                    SetProblem($"{kind} Unavailable");
+                    Problem = $"{kind} Unavailable";
                 }
             }
         }
@@ -281,19 +276,8 @@ public sealed class AudioMixer : IDisposable
             if (eventArgs.Exception is { } exception && !_disposed)
             {
                 s_logger.Warn($"Lost {kind} {exception.GetType().Name}");
-                SetProblem($"{kind} Disconnected");
+                Problem = $"{kind} Disconnected";
             }
-        }
-
-        private void SetProblem(string? problem)
-        {
-            if (Problem == problem)
-            {
-                return;
-            }
-
-            Problem = problem;
-            mixer.OnProblemChanged();
         }
 
         private void OnData(

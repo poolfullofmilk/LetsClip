@@ -187,12 +187,7 @@ public partial class Settings : IDisposable
 
         // The Cache Is Wiped Freely, So Clips Never Live There
         var full = Path.GetFullPath(folder);
-        if (
-            full.StartsWith(
-                Path.GetFullPath(AppInfo.LocalDirectory),
-                StringComparison.OrdinalIgnoreCase
-            )
-        )
+        if (FilePaths.IsInside(full, AppInfo.LocalDirectory))
         {
             _folderError = "Pick a folder outside LetsClip's own cache";
             return;
@@ -225,15 +220,28 @@ public partial class Settings : IDisposable
         Explorer.OpenFolder(Controller.Settings.ClipsDirectory);
     }
 
+    private async Task CancelCaptureAsync()
+    {
+        try
+        {
+            await JavaScript.InvokeVoidAsync("letsClip.cancelCapture");
+        }
+        catch (JSDisconnectedException)
+        {
+            // The Window Is Closing, Its Listener Goes With It
+        }
+    }
+
     public void Dispose()
     {
         Controller.Changed -= OnChanged;
         Shell.HotkeyChanged -= OnChanged;
 
-        // Leaving Mid Capture Puts The Saved Hotkey Back
+        // Leaving Mid Capture Restores The Hotkey And Stops Listening
         if (_capturingKey)
         {
             _ = Shell.ApplyHotkey(Hotkey.Parse(Controller.Settings.Hotkey) ?? Hotkey.Default);
+            _ = CancelCaptureAsync();
         }
 
         GC.SuppressFinalize(this);

@@ -18,7 +18,7 @@
                         <MudLink Typo="Typo.caption"
                                  Color="Color.Info"
                                  Href="settings">
-                            Or Record a Monitor
+                            or Record a Monitor
                         </MudLink>
                     </MudStack>
                 </SettingRow>
@@ -71,33 +71,37 @@
                                    Color="@(seconds == Controller.Settings.ReplaySeconds ? Color.Info : Color.Default)"
                                    Size="Size.Small"
                                    OnClick="() => SetReplay(seconds)">
-                            @($"{seconds}s")
+                            @Formatter.FormatDuration(seconds)
                         </MudButton>
                     }
                 </MudButtonGroup>
             </SettingRow>
-            @if (NativeLabel is { } nativeLabel)
-            {
-                <MudDivider />
-                <SettingRow Title="Resolution">
-                    @* Resolution Buttons *@
-                    <MudButtonGroup OverrideStyles="false"
-                                    Size="Size.Small">
-                        <MudButton Variant="Variant.Filled"
-                                   Color="@(Controller.Settings.FullResolution ? Color.Default : Color.Info)"
-                                   Size="Size.Small"
-                                   OnClick="() => SetFullResolution(false)">
-                            1080p
-                        </MudButton>
-                        <MudButton Variant="Variant.Filled"
-                                   Color="@(Controller.Settings.FullResolution ? Color.Info : Color.Default)"
-                                   Size="Size.Small"
-                                   OnClick="() => SetFullResolution(true)">
-                            @nativeLabel
-                        </MudButton>
-                    </MudButtonGroup>
-                </SettingRow>
-            }
+            <MudDivider />
+            <SettingRow Title="Resolution">
+                @* Resolution Select *@
+                <MudElement HtmlTag="div"
+                            Class="fixed-width narrow">
+                    <MudSelect T="int"
+                               Value="Controller.Resolution"
+                               ValueChanged="SetResolution"
+                               ToStringFunc="ResolutionLabel"
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Dense"
+                               Dense
+                               aria-label="Resolution"
+                               AnchorOrigin="Origin.BottomLeft"
+                               TransformOrigin="Origin.TopLeft"
+                               Class="my-0">
+                        @foreach (var lines in Controller.ResolutionChoices)
+                        {
+                            <MudSelectItem T="int"
+                                           Value="lines">
+                                @ResolutionLabel(lines)
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudElement>
+            </SettingRow>
             <MudDivider />
             <SettingRow Title="Quality">
                 @* Quality Buttons *@
@@ -145,22 +149,19 @@
                       Class="py-3">
                 @if (Alert is { } alert)
                 {
-                    <MudAlert Severity="@alert.Severity"
-                              Dense
-                              Elevation="4"
-                              Class="@AlertClass(alert.Severity)">
-                        @alert.Text
-                    </MudAlert>
+                    <Notice Text="@alert.Text"
+                            Severity="@alert.Severity" />
                 }
 
-                @if (!Controller.Settings.HasSeenCaptureNotice)
+                @if (!Controller.Settings.Buffering)
                 {
                     @* Start Button *@
                     <MudButton Variant="Variant.Filled"
                                Color="Color.Info"
                                StartIcon="@Icons.Material.Rounded.FiberManualRecord"
                                FullWidth
-                               OnClick="StartAsync">
+                               Class="icon-left"
+                               OnClick="StartBuffering">
                         Start Buffering
                     </MudButton>
                 }
@@ -171,7 +172,8 @@
                                Color="Color.Info"
                                StartIcon="@Icons.Material.Rounded.Refresh"
                                FullWidth
-                               OnClick="StartAsync">
+                               Class="icon-left"
+                               OnClick="TryAgainAsync">
                         Try Again
                     </MudButton>
                 }
@@ -181,10 +183,21 @@
                     <MudButton Variant="Variant.Filled"
                                Color="Color.Info"
                                StartIcon="@Icons.Material.Rounded.Save"
-                               Disabled="@(!Status.IsBuffering)"
+                               Disabled="@(!Controller.ShowsBuffering)"
                                FullWidth
+                               Class="icon-left"
                                OnClick="SaveAsync">
-                        @($"Save Last {Controller.Settings.ReplaySeconds} Seconds")
+                        <MudStack Spacing="0"
+                                  AlignItems="AlignItems.Center">
+                            @($"Save Last {Controller.Settings.ReplaySeconds} Seconds")
+                            @if (Shell.HotkeyProblem is null)
+                            {
+                                <MudText Typo="Typo.caption"
+                                         Class="button-hint">
+                                    @($"or {Controller.Settings.Hotkey}")
+                                </MudText>
+                            }
+                        </MudStack>
                     </MudButton>
                 }
             </MudStack>

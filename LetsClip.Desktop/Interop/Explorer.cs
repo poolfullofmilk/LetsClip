@@ -22,12 +22,10 @@ public static class Explorer
         }
     }
 
-    public static void OpenFile(string path)
+    public static void Open(string target)
     {
-        if (File.Exists(path))
-        {
-            Start(new ProcessStartInfo(path) { UseShellExecute = true });
-        }
+        // A File Or A Link In Its Default App
+        Start(new ProcessStartInfo(target) { UseShellExecute = true });
     }
 
     public static void OpenFolder(string folder)
@@ -54,11 +52,6 @@ public static class Explorer
             s_logger.Warn($"Failed To Delete Clip {exception.GetType().Name}");
             return false;
         }
-    }
-
-    public static void OpenLink(string url)
-    {
-        Start(new ProcessStartInfo(url) { UseShellExecute = true });
     }
 
     private static void Start(ProcessStartInfo startInfo)

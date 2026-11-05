@@ -79,8 +79,15 @@ else
                         @* Player *@
                         <MudElement HtmlTag="div"
                                     Class="player fill">
+                            @if (!_ready && !_playError)
+                            {
+                                <MudProgressCircular Color="Color.Info"
+                                                     Size="Size.Large"
+                                                     Indeterminate />
+                            }
                             <MudElement @bind-Ref="_video"
                                         HtmlTag="video"
+                                        Class="@(_ready ? null : "d-none")"
                                         src="@VideoUrl"
                                         preload="auto"
                                         muted="@_muted"
@@ -90,25 +97,16 @@ else
 
                         @if (_playError)
                         {
-                            <MudAlert Severity="Severity.Warning"
-                                      Dense
-                                      Elevation="4"
-                                      Class="rounded-panel mud-warning-text">
-                                This clip could not play, it may be in use or damaged
-                            </MudAlert>
+                            <Notice Text="This clip could not play, it may be in use or damaged" />
                         }
 
                         @* Player Controls *@
                         <MudElement HtmlTag="div"
                                     Class="player-controls">
-                            <MudText Typo="Typo.body2"
-                                     Class="selectable-text player-time">
-                                @Formatter.FormatClock(_time)
-                                <MudElement HtmlTag="span"
-                                            Class="mud-text-secondary">
-                                    @($"/ {Formatter.FormatClock(_duration)}")
-                                </MudElement>
-                            </MudText>
+                            <PlayerClock @ref="_clock"
+                                         @key="_path"
+                                         Start="_range.Start"
+                                         Duration="_duration" />
                             <MudStack Row
                                       AlignItems="AlignItems.Center"
                                       Justify="Justify.Center"
@@ -119,7 +117,7 @@ else
                                               Disabled="@(!_ready)"
                                               OnClick="SetStartAtPlayhead" />
                                 @* Back Button *@
-                                <PlayerButton Icon="@Icons.Material.Rounded.Replay5"
+                                <PlayerButton Icon="@Icons.Material.Rounded.Replay"
                                               Text="Back 5 Seconds"
                                               Disabled="@(!_ready)"
                                               OnClick="() => NudgeAsync(-SeekStep)" />
@@ -130,8 +128,9 @@ else
                                               Disabled="@(!_ready)"
                                               OnClick="TogglePlayAsync" />
                                 @* Forward Button *@
-                                <PlayerButton Icon="@Icons.Material.Rounded.Forward5"
+                                <PlayerButton Icon="@Icons.Material.Rounded.Replay"
                                               Text="Forward 5 Seconds"
+                                              Class="mirror"
                                               Disabled="@(!_ready)"
                                               OnClick="() => NudgeAsync(SeekStep)" />
                                 @* Set End Button *@
@@ -144,10 +143,41 @@ else
                                       AlignItems="AlignItems.Center"
                                       Justify="Justify.FlexEnd"
                                       Spacing="1">
-                                @* Mute Button *@
-                                <PlayerButton Icon="@(_muted ? Icons.Material.Rounded.VolumeOff : Icons.Material.Rounded.VolumeUp)"
-                                              Text="@MuteTip"
-                                              OnClick="ToggleMuteAsync" />
+                                @* Reset Button *@
+                                <PlayerButton Icon="@Icons.Material.Rounded.RestartAlt"
+                                              Text="Reset Trim"
+                                              Disabled="@(!_ready || _range == DefaultRange)"
+                                              OnClick="ResetTrim" />
+                                <MudElement HtmlTag="div"
+                                            Class="volume">
+                                    @* Mute Button *@
+                                    <PlayerButton Icon="@(_muted ? Icons.Material.Rounded.VolumeOff : Icons.Material.Rounded.VolumeUp)"
+                                                  Text="@MuteTip"
+                                                  Disabled="@(!_ready)"
+                                                  OnClick="ToggleMuteAsync" />
+                                    @if (_ready)
+                                    {
+                                        <MudElement HtmlTag="div"
+                                                    Class="volume-pop">
+                                            <MudPaper Elevation="4"
+                                                      Class="volume-paper rounded-inner">
+                                                @* Volume Slider *@
+                                                <MudSlider T="double"
+                                                           Value="@(_muted ? 0 : _volume)"
+                                                           ValueChanged="SetVolumeAsync"
+                                                           Min="0"
+                                                           Max="1"
+                                                           Step="0.05"
+                                                           Vertical
+                                                           Color="Color.Info"
+                                                           Size="Size.Medium"
+                                                           Variant="Variant.Filled"
+                                                           Immediate
+                                                           aria-label="Volume" />
+                                            </MudPaper>
+                                        </MudElement>
+                                    }
+                                </MudElement>
                                 @* Full Screen Button *@
                                 <PlayerButton Icon="@Icons.Material.Rounded.Fullscreen"
                                               Text="Full Screen"
@@ -194,7 +224,7 @@ else
                                             aria-valuemin="0"
                                             aria-valuemax="@Number(_range.End)"
                                             aria-valuenow="@Number(_range.Start)"
-                                            aria-valuetext="@Formatter.FormatClock(_range.Start)" />
+                                            aria-valuetext="@Formatter.FormatDuration(_range.Start)" />
                                 @* End Handle *@
                                 <MudElement HtmlTag="div"
                                             Class="timeline-handle"
@@ -207,7 +237,7 @@ else
                                             aria-valuemin="@Number(_range.Start)"
                                             aria-valuemax="@Number(_duration)"
                                             aria-valuenow="@Number(_range.End)"
-                                            aria-valuetext="@Formatter.FormatClock(_range.End)" />
+                                            aria-valuetext="@Formatter.FormatDuration(_range.End)" />
                             </MudElement>
                         </MudElement>
 
@@ -215,20 +245,11 @@ else
                                   AlignItems="AlignItems.Center"
                                   Spacing="5">
                             <TrimValue Label="Start"
-                                       Value="@Formatter.FormatClock(_range.Start)" />
+                                       Value="@Formatter.FormatDuration(_range.Start)" />
                             <TrimValue Label="End"
-                                       Value="@Formatter.FormatClock(_range.End)" />
+                                       Value="@Formatter.FormatDuration(_range.End)" />
                             <TrimValue Label="Length"
-                                       Value="@Formatter.FormatSeconds(_range.Length)" />
-                            <MudSpacer />
-                            @* Reset Button *@
-                            <MudButton Variant="Variant.Text"
-                                       Size="Size.Small"
-                                       StartIcon="@Icons.Material.Rounded.RestartAlt"
-                                       Disabled="@(_range == DefaultRange)"
-                                       OnClick="ResetTrim">
-                                Reset Trim
-                            </MudButton>
+                                       Value="@Formatter.FormatDuration(_range.Length)" />
                         </MudStack>
                     </MudStack>
                 </MudPaper>
@@ -236,9 +257,10 @@ else
 
             <MudElement HtmlTag="div"
                         Class="side-panel">
-                @if (_media is { } media && _path is { } path)
+                @if (_media is { } media && _clip is { } clip)
                 {
-                    <ExportPanel SourcePath="@path"
+                    <ExportPanel @key="clip.Path"
+                                 Clip="clip"
                                  Range="_range"
                                  Media="media" />
                 }

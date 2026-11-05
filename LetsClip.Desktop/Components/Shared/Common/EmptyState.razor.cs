@@ -7,13 +7,13 @@ public partial class EmptyState
 {
     // Parameters
     [Parameter]
-    public string? Icon { get; set; }
+    public required string Icon { get; set; }
 
     [Parameter]
     public Color Color { get; set; } = Color.Secondary;
 
     [Parameter]
-    public string? Text { get; set; }
+    public required string Text { get; set; }
 
     // Actions Or Prompts Below The Text
     [Parameter]

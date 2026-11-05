@@ -11,37 +11,24 @@ public partial class CaptureChip : IDisposable
     [Inject]
     public required CaptureController Controller { get; set; }
 
-    private CaptureStatus Status => Controller.Recorder.Status;
-
-    private string Label =>
-        Status switch
-        {
-            { IsSaving: true } => "Saving Clip",
-            { State: CaptureState.Buffering } => Controller.BufferingText,
-            { State: CaptureState.Starting } => "Starting",
-            { State: CaptureState.Stopping } => "Stopping",
-            { State: CaptureState.Error } => "Capture Error",
-            _ => Controller.IdleText,
-        };
+    private bool IsError => Controller.Recorder.Status.State == CaptureState.Error;
 
     private string Icon =>
-        Status.State switch
-        {
-            CaptureState.Buffering or CaptureState.Starting => Icons
-                .Material
-                .Rounded
-                .FiberManualRecord,
-            CaptureState.Error => Icons.Material.Rounded.Error,
-            _ => Icons.Material.Rounded.RadioButtonUnchecked,
-        };
+        IsError ? Icons.Material.Rounded.Error
+        : Controller.ShowsBuffering ? Icons.Material.Rounded.FiberManualRecord
+        : Controller.ShowsOff ? Icons.Material.Rounded.PauseCircle
+        : Icons.Material.Rounded.RadioButtonUnchecked;
 
-    // The Record Dot Is Red, Errors Say So In Text
+    // Red Dot While Buffering, Amber When Turned Off
     private Color IconColor =>
-        Status.State is CaptureState.Buffering or CaptureState.Starting or CaptureState.Error
-            ? Color.Error
-            : Color.Default;
+        IsError || Controller.ShowsBuffering ? Color.Error
+        : Controller.ShowsOff ? Color.Warning
+        : Color.Default;
 
-    private Color ChipColor => Status.State == CaptureState.Error ? Color.Error : Color.Default;
+    private Color ChipColor =>
+        IsError ? Color.Error
+        : Controller.ShowsOff ? Color.Warning
+        : Color.Default;
 
     protected override void OnInitialized()
     {

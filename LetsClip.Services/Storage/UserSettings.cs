@@ -13,8 +13,9 @@ public sealed record UserSettings(
     string? MonitorDevicePath = null,
     int ReplaySeconds = 30,
     int FrameRate = 30,
-    bool FullResolution = false,
+    int Resolution = 1080,
     CaptureQuality Quality = CaptureQuality.Normal,
+    bool Buffering = true,
     bool GamesOnly = false,
     string[]? RemovedGames = null,
     AddedGame[]? AddedGames = null,
@@ -26,15 +27,16 @@ public sealed record UserSettings(
     string? MicrophoneDeviceId = null,
     string Hotkey = "Ctrl+Shift+F8",
     string? ClipsFolder = null,
-    double ExportMegabytes = 10,
-    bool Export720p = false,
+    double ExportMegabytes = 20,
     bool ExportFullFrameRate = false,
-    bool HasSeenTrayHint = false,
-    bool HasSeenCaptureNotice = false
+    bool HasSeenTrayHint = false
 )
 {
     public static readonly int[] ReplayChoices = [30, 60, 120];
     public static readonly int[] FrameRateChoices = [30, 60, 120, 144, 165, 240];
+
+    // Lines Of A 16 By 9 Box
+    public static readonly int[] ResolutionChoices = [480, 720, 1080, 1440, 2160];
 
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
     private static readonly string s_filePath = Path.Combine(
@@ -58,9 +60,24 @@ public sealed record UserSettings(
     {
         try
         {
-            var settings =
-                JsonSerializer.Deserialize<UserSettings>(File.ReadAllText(s_filePath))
-                ?? new UserSettings();
+            var json = File.ReadAllText(s_filePath);
+            var settings = JsonSerializer.Deserialize<UserSettings>(json) ?? new UserSettings();
+
+            // Older Files Carry Two Retired Switches
+            if (JsonSerializer.Deserialize<LegacySettings>(json) is { } legacy)
+            {
+                settings = settings with
+                {
+                    // Ponytail: Full Size Becomes 2160, An 8K Monitor Gets 4K
+                    Resolution = legacy.FullResolution
+                        ? ResolutionChoices[^1]
+                        : settings.Resolution,
+
+                    // A Notice Answered No Keeps Buffering Off
+                    Buffering = settings.Buffering && legacy.HasSeenCaptureNotice,
+                };
+            }
+
             return settings.Normalized();
         }
         catch (Exception exception)
@@ -78,7 +95,13 @@ public sealed record UserSettings(
             // A Rename Replaces The Old File Whole, Never Half Written
             Directory.CreateDirectory(AppInfo.DataDirectory);
             var temporary = s_filePath + ".tmp";
-            File.WriteAllText(temporary, JsonSerializer.Serialize(this, s_json));
+            using (var stream = File.Create(temporary))
+            {
+                // On Disk Before The Rename, Power Cuts Never Empty It
+                JsonSerializer.Serialize(stream, this, s_json);
+                stream.Flush(flushToDisk: true);
+            }
+
             File.Move(temporary, s_filePath, overwrite: true);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -95,13 +118,14 @@ public sealed record UserSettings(
         {
             ReplaySeconds = ReplayChoices.Contains(ReplaySeconds) ? ReplaySeconds : 30,
             FrameRate = FrameRateChoices.Contains(FrameRate) ? FrameRate : 30,
+            Resolution = Resolution >= ResolutionChoices[0] ? Resolution : 1080,
             Quality = Enum.IsDefined(Quality) ? Quality : CaptureQuality.Normal,
             RemovedGames = RemovedGames?.OfType<string>().ToArray() ?? [],
             AddedGames = AddedGames?.OfType<AddedGame>().ToArray() ?? [],
             SystemAudioDeviceId = SystemAudioDeviceId ?? "",
             Hotkey = HotkeyGesture.Parse(Hotkey)?.ToString() ?? HotkeyGesture.Default.ToString(),
             ClipsFolder = IsUsableFolder(ClipsFolder) ? ClipsFolder : null,
-            ExportMegabytes = SizeBudget.IsValidTarget(ExportMegabytes) ? ExportMegabytes : 10,
+            ExportMegabytes = SizeBudget.IsValidTarget(ExportMegabytes) ? ExportMegabytes : 20,
         };
     }
 
@@ -109,4 +133,6 @@ public sealed record UserSettings(
     {
         return !string.IsNullOrWhiteSpace(folder) && Path.IsPathFullyQualified(folder);
     }
+
+    private sealed record LegacySettings(bool FullResolution, bool HasSeenCaptureNotice = true);
 }

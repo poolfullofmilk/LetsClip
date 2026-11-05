@@ -13,6 +13,15 @@ public readonly record struct Hotkey(HotkeyModifiers Modifiers, int VirtualKey)
     // Virtual Key Codes By The Name Shown For Them
     private static readonly Dictionary<string, int> s_keys = BuildKeys();
 
+    // Modifiers In Windows' Own Order, Ctrl+Alt+Shift+Win
+    private static readonly (HotkeyModifiers Flag, string Name)[] s_modifierNames =
+    [
+        (HotkeyModifiers.Control, "Ctrl"),
+        (HotkeyModifiers.Alt, "Alt"),
+        (HotkeyModifiers.Shift, "Shift"),
+        (HotkeyModifiers.Windows, "Win"),
+    ];
+
     // Keys That Never Type Text, Safe Without Modifiers
     private static readonly HashSet<int> s_quietKeys = [.. Enumerable.Range(0x70, 24), 0x13, 0x91];
 
@@ -33,30 +42,15 @@ public readonly record struct Hotkey(HotkeyModifiers Modifiers, int VirtualKey)
 
     public override string ToString()
     {
-        var parts = new List<string>();
-        if (Modifiers.HasFlag(HotkeyModifiers.Control))
-        {
-            parts.Add("Ctrl");
-        }
-
-        if (Modifiers.HasFlag(HotkeyModifiers.Alt))
-        {
-            parts.Add("Alt");
-        }
-
-        if (Modifiers.HasFlag(HotkeyModifiers.Shift))
-        {
-            parts.Add("Shift");
-        }
-
-        if (Modifiers.HasFlag(HotkeyModifiers.Windows))
-        {
-            parts.Add("Win");
-        }
-
+        var modifiers = Modifiers;
         var key = VirtualKey;
-        parts.Add(s_keys.FirstOrDefault(entry => entry.Value == key).Key ?? $"Key {key}");
-        return string.Join("+", parts);
+        return string.Join(
+            "+",
+            s_modifierNames
+                .Where(modifier => modifiers.HasFlag(modifier.Flag))
+                .Select(modifier => modifier.Name)
+                .Append(s_keys.FirstOrDefault(entry => entry.Value == key).Key ?? $"Key {key}")
+        );
     }
 
     public static Hotkey? Parse(string? text)

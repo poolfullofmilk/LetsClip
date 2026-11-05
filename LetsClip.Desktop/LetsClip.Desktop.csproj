@@ -13,9 +13,9 @@
         <NoWarn>$(NoWarn);WFO0003</NoWarn>
         <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
         <DebugType>embedded</DebugType>
-        <Description>Saves What Just Happened On Screen As A Clip Ready For Discord</Description>
+        <Description>Saves What Just Happened On Screen As A Clip Ready to Share</Description>
         <Copyright>Copyright (c) 2026 poolfullofmilk</Copyright>
-        <Version>1.1.1</Version>
+        <Version>1.2.1</Version>
         <AssemblyTitle>LetsClip</AssemblyTitle>
         <Product>LetsClip</Product>
         <Company>poolfullofmilk</Company>
@@ -31,7 +31,7 @@
         <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
         <PublishReadyToRun>true</PublishReadyToRun>
     </PropertyGroup>
-    <Target Name="RequireFFmpeg" BeforeTargets="Build">
+    <Target Name="RequireFFmpeg" BeforeTargets="BeforeBuild">
         <Error
             Condition="!Exists('FFmpeg\ffmpeg.exe') Or !Exists('FFmpeg\ffprobe.exe')"
             Text="FFmpeg is missing. Run FFmpeg\Get-FFmpeg.ps1 to fetch the pinned build first."

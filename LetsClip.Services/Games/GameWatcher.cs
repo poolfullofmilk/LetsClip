@@ -27,10 +27,14 @@ public sealed partial class GameWatcher : IDisposable
     };
 
     private readonly Timer _timer;
+
+    // The Found Game's Handle, One Thread At A Time
+    private readonly Lock _gate = new();
     private volatile bool _enabled;
     private int _checking;
     private bool _failing;
     private int _gameProcessId;
+    private Process? _game;
     private volatile IReadOnlyDictionary<string, string> _games = new Dictionary<string, string>();
 
     public GameWatcher()
@@ -55,8 +59,7 @@ public sealed partial class GameWatcher : IDisposable
         }
 
         _enabled = enabled;
-        GameName = null;
-        _gameProcessId = 0;
+        ForgetGame();
         _timer.Change(enabled ? TimeSpan.Zero : Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
     }
 
@@ -143,7 +146,7 @@ public sealed partial class GameWatcher : IDisposable
             return;
         }
 
-        var processes = Process.GetProcesses();
+        Process[] processes = [];
         try
         {
             if (!_enabled)
@@ -151,21 +154,21 @@ public sealed partial class GameWatcher : IDisposable
                 return;
             }
 
-            // A Found Game Counts Until Its Process Exits
+            // A Found Game Counts Until Its Own Process Exits
             if (GameName is { } running)
             {
-                if (processes.Any(process => process.Id == _gameProcessId))
+                if (!GameClosed())
                 {
                     return;
                 }
 
                 s_logger.Info($"Found {running} Closed");
-                GameName = null;
-                _gameProcessId = 0;
+                ForgetGame();
                 GameChanged?.Invoke(null);
             }
 
             // A New Game Needs A Window On Screen To Record
+            processes = Process.GetProcesses();
             foreach (var process in processes)
             {
                 if (
@@ -178,8 +181,19 @@ public sealed partial class GameWatcher : IDisposable
                     && !IsIconic(window)
                 )
                 {
-                    _gameProcessId = process.Id;
-                    GameName = name;
+                    // Turned Off Meanwhile, The Game Waits For The Next Start
+                    lock (_gate)
+                    {
+                        if (!_enabled)
+                        {
+                            return;
+                        }
+
+                        _game = process;
+                        _gameProcessId = process.Id;
+                        GameName = name;
+                    }
+
                     s_logger.Info($"Found {name} Running");
                     GameChanged?.Invoke(name);
                     return;
@@ -199,7 +213,7 @@ public sealed partial class GameWatcher : IDisposable
         }
         finally
         {
-            foreach (var process in processes)
+            foreach (var process in processes.Where(process => process != _game))
             {
                 process.Dispose();
             }
@@ -212,10 +226,58 @@ public sealed partial class GameWatcher : IDisposable
         }
     }
 
+    private bool GameClosed()
+    {
+        lock (_gate)
+        {
+            // Already Let Go Means Turned Off, Not Closed
+            if (_game is not { } game)
+            {
+                return false;
+            }
+
+            try
+            {
+                return game.HasExited;
+            }
+            catch (Exception exception)
+                when (exception is InvalidOperationException or Win32Exception)
+            {
+                // A Protected Game Hides Its Handle, Its Id Still Shows
+                return !IsRunning(_gameProcessId);
+            }
+        }
+    }
+
+    private static bool IsRunning(int id)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(id);
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    private void ForgetGame()
+    {
+        lock (_gate)
+        {
+            _game?.Dispose();
+            _game = null;
+            GameName = null;
+            _gameProcessId = 0;
+        }
+    }
+
     public void Dispose()
     {
         _enabled = false;
         _timer.Dispose();
+        ForgetGame();
         GC.SuppressFinalize(this);
     }
 

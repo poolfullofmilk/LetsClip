@@ -28,7 +28,9 @@ public static class Updater
     {
         Timeout = TimeSpan.FromMinutes(5),
     };
-    private static readonly TimeSpan s_previousExitWait = TimeSpan.FromSeconds(15);
+
+    // The Old Version May Finish A Save First
+    private static readonly TimeSpan s_previousExitWait = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan s_stallTimeout = TimeSpan.FromMinutes(1);
 
     public static async Task<ReleaseInfo?> CheckAsync()
@@ -231,9 +233,7 @@ public static class Updater
                 Path.GetDirectoryName(Environment.ProcessPath)!,
                 $"{ExecutablePrefix}*.exe"
             )
-            .Where(path =>
-                !string.Equals(path, Environment.ProcessPath, StringComparison.OrdinalIgnoreCase)
-            );
+            .Where(path => !FilePaths.AreSame(path, Environment.ProcessPath));
         foreach (var oldPath in oldPaths)
         {
             try

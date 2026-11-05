@@ -12,6 +12,17 @@
                          Class="pt-2">
                     Buffering
                 </MudText>
+                <SettingRow Title="Buffer in Background"
+                            Info="LetsClip records everything visible on the chosen monitor, other apps and notifications included, into a short rolling buffer on this PC. Nothing is kept until you save a clip and nothing leaves your PC">
+                    @* Buffering Switch *@
+                    <MudSwitch T="bool"
+                               Value="Controller.Settings.Buffering"
+                               ValueChanged="Controller.SetBuffering"
+                               Color="Color.Info"
+                               aria-label="Buffer in Background"
+                               Class="ma-0" />
+                </SettingRow>
+                <MudDivider />
                 <SettingRow Title="Games Only">
                     @* Games Link *@
                     <MudLink Typo="Typo.body2"
@@ -72,12 +83,8 @@
                 </SettingRow>
                 @if (HotkeyMessage() is { } hotkeyProblem)
                 {
-                    <MudAlert Severity="Severity.Warning"
-                              Dense
-                              Elevation="4"
-                              Class="rounded-panel mud-warning-text mb-3">
-                        @hotkeyProblem
-                    </MudAlert>
+                    <Notice Text="@hotkeyProblem"
+                            Class="mb-3" />
                 }
                 <MudDivider />
                 <SettingRow Title="Save Sound">
@@ -223,12 +230,8 @@
                 </SettingRow>
                 @if (_folderError is { } folderError)
                 {
-                    <MudAlert Severity="Severity.Warning"
-                              Dense
-                              Elevation="4"
-                              Class="rounded-panel mud-warning-text mb-3">
-                        @folderError
-                    </MudAlert>
+                    <Notice Text="@folderError"
+                            Class="mb-3" />
                 }
             </MudPaper>
         </MudStack>

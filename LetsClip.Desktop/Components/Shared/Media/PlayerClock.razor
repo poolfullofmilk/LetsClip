@@ -1,0 +1,9 @@
+@* Player Clock *@
+<MudText Typo="Typo.body2"
+         Class="selectable-text player-time">
+    @Formatter.FormatDuration(_time)
+    <MudElement HtmlTag="span"
+                Class="mud-text-secondary">
+        @($"/ {Formatter.FormatDuration(Duration)}")
+    </MudElement>
+</MudText>

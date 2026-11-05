@@ -12,14 +12,19 @@ public static class ClipSaver
     public static async Task<ClipInfo> SaveAsync(
         IReadOnlyList<Segment> video,
         IReadOnlyList<Segment> audio,
+        double from,
         double to,
+        double videoOffset,
         string sessionFolder,
-        string clipsFolder,
         DateTimeOffset recordedAt,
-        ClipLibrary library,
-        CancellationToken token
+        int frameRate,
+        ClipLibrary library
     )
     {
+        // A Clips Drive That Is Gone Saves To Videos Instead
+        var clipsFolder = Directory.Exists(Path.GetPathRoot(library.Folder))
+            ? library.Folder
+            : AppInfo.DefaultClipsDirectory;
         Directory.CreateDirectory(clipsFolder);
         var temporary = Path.Combine(
             clipsFolder,
@@ -27,7 +32,7 @@ public static class ClipSaver
         );
         try
         {
-            // Stream Copy Up To The Press, Joined Segments Keep Time
+            // Stream Copy To The Press, The Replay Start Becomes Zero
             List<string> arguments =
             [
                 "-hide_banner",
@@ -36,12 +41,23 @@ public static class ClipSaver
                 "error",
                 "-y",
                 "-copyts",
+                "-itsoffset",
+                Seconds(videoOffset - from),
                 "-i",
                 ConcatOf(video),
             ];
             if (audio.Count > 0)
             {
-                arguments.AddRange(["-i", ConcatOf(audio), "-map", "0:v", "-map", "1:a"]);
+                arguments.AddRange([
+                    "-itsoffset",
+                    Seconds(-from),
+                    "-i",
+                    ConcatOf(audio),
+                    "-map",
+                    "0:v",
+                    "-map",
+                    "1:a",
+                ]);
             }
             else
             {
@@ -52,9 +68,7 @@ public static class ClipSaver
                 "-c",
                 "copy",
                 "-to",
-                Seconds(to),
-                "-avoid_negative_ts",
-                "make_zero",
+                Seconds(to - from),
                 "-movflags",
                 "+faststart",
                 "-f",
@@ -65,7 +79,7 @@ public static class ClipSaver
                 FFmpeg.FFmpegPath,
                 arguments,
                 s_timeout,
-                token,
+                CancellationToken.None,
                 workingDirectory: sessionFolder
             );
             if (!result.Succeeded)
@@ -73,7 +87,7 @@ public static class ClipSaver
                 throw new IOException($"Failed To Write The Clip, {result.LastError}");
             }
 
-            var media = await MediaProbe.ProbeAsync(temporary, token);
+            var media = await MediaProbe.ProbeAsync(temporary, CancellationToken.None);
             if (media is not { HasVideo: true, Duration: > 0.2 })
             {
                 throw new InvalidDataException("The saved clip did not read back");
@@ -81,25 +95,18 @@ public static class ClipSaver
 
             var finalPath = UniquePath(clipsFolder, ClipNames.For(recordedAt));
             File.Move(temporary, finalPath);
-            ClipLibrary.Register(
+            // The Capture Rate Is Kept, The Thumbnail Comes Later
+            ClipLibrary.WriteMetadata(
                 finalPath,
-                new ClipMetadata(recordedAt, media.Duration, null, null, 0, default)
+                new ClipMetadata(recordedAt, media.Duration, null, null, 0, default, frameRate)
             );
-            await ClipLibrary.EnsureThumbnailAsync(
-                finalPath,
-                Math.Min(1, media.Duration / 2),
-                token
-            );
-            return await library.GetAsync(finalPath, token)
+            return await library.GetAsync(finalPath, CancellationToken.None)
                 ?? throw new InvalidDataException("The saved clip did not read back");
         }
         finally
         {
             // Only This Save's Own Unfinished File, Never Anything Else
-            if (File.Exists(temporary))
-            {
-                File.Delete(temporary);
-            }
+            await FFmpeg.DeleteOutputAsync(temporary);
         }
     }
 

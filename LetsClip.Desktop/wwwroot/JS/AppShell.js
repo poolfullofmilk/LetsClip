@@ -6,7 +6,7 @@ document.addEventListener("keydown", (event) => {
     }
 });
 
-// Escape Closes An Open Menu First, Focus Goes Back To Its Button
+// Escape Closes An Open Menu, Focus Returns To Its Button
 window.addEventListener(
     "keydown",
     (event) => {
@@ -21,13 +21,6 @@ window.addEventListener(
     true
 );
 
-// An Info Icon Inside A Switch Label Never Toggles The Switch
-document.addEventListener("click", (event) => {
-    if (event.target instanceof Element && event.target.closest(".info-icon")) {
-        event.preventDefault();
-    }
-});
-
 window.letsClip = (() => {
     // The Shortest Selection, Matching TrimRange.Step
     const step = 0.1;
@@ -36,37 +29,53 @@ window.letsClip = (() => {
     const duration = () => state.duration || state.video.duration || 0;
     const clamp = (time) => Math.min(duration(), Math.max(0, time));
 
-    // The Playhead Follows The Video Each Frame, Blazor Hears The Time Ten Times A Second
+    // The Playhead Follows Each Frame, Blazor Hears Ten A Second
     const loop = () => {
         if (!state) return;
+        state.frame = 0;
         const { video, playhead, dotnet } = state;
         if (state.stopAt !== null && !video.paused && video.currentTime >= state.stopAt) {
             video.pause();
             video.currentTime = state.stopAt;
         }
+        const time = video.currentTime;
         if (playhead && duration() > 0) {
-            playhead.style.left = `${Math.min(100, Math.max(0, (video.currentTime / duration()) * 100))}%`;
+            playhead.style.left = `${Math.min(100, Math.max(0, (time / duration()) * 100))}%`;
         }
         const now = performance.now();
-        if (now - state.reported > 100 || video.paused !== state.paused) {
+        if (video.paused !== state.paused || (time !== state.sent && now - state.reported > 100)) {
             state.reported = now;
+            state.sent = time;
             state.paused = video.paused;
-            dotnet.invokeMethodAsync("OnPlayerTime", video.currentTime, video.paused).catch(() => {});
+            dotnet.invokeMethodAsync("OnPlayerTime", time, video.paused).catch(() => {});
         }
-        state.frame = requestAnimationFrame(loop);
+        // A Paused, Drawn Video Stops The Loop, Saving CPU
+        if (!video.paused || time !== state.sent) state.frame = requestAnimationFrame(loop);
     };
 
-    const attach = (video, playhead, timeline, dotnet, length) => {
+    // Play, Pause And Every Seek Start The Loop Again
+    const wakers = ["play", "pause", "seeking", "seeked"];
+    const kick = () => {
+        if (state && !state.frame) state.frame = requestAnimationFrame(loop);
+    };
+
+    // Each Clip Attaches Fresh And Opens At Its Trim Start
+    const attach = (video, playhead, timeline, dotnet, length, start) => {
         detach();
-        state = { video, playhead, timeline, dotnet, duration: length, reported: 0, paused: true, stopAt: null, frame: 0, drag: null };
+        state = { video, playhead, timeline, dotnet, duration: length, reported: 0, sent: -1, paused: true, stopAt: null, frame: 0, drag: null };
+        video.currentTime = start;
         video.addEventListener("error", state.onError = () => dotnet.invokeMethodAsync("OnPlayerError").catch(() => {}));
+        video.addEventListener("loadeddata", state.onLoaded = () => dotnet.invokeMethodAsync("OnPlayerReady").catch(() => {}));
+        if (video.readyState >= 2) state.onLoaded();
+        if (video.error) state.onError();
         video.addEventListener("dblclick", state.onDouble = () => fullScreen());
         timeline.addEventListener("pointerdown", state.onDown = (event) => down(event));
         timeline.addEventListener("pointermove", state.onMove = (event) => move(event));
         timeline.addEventListener("pointerup", state.onUp = (event) => up(event));
         timeline.addEventListener("pointercancel", state.onUp);
         timeline.addEventListener("keydown", state.onKey = (event) => key(event));
-        state.frame = requestAnimationFrame(loop);
+        for (const name of wakers) video.addEventListener(name, kick);
+        kick();
     };
 
     // Playback Stops And Releases The File When The Editor Closes
@@ -75,7 +84,9 @@ window.letsClip = (() => {
         cancelAnimationFrame(state.frame);
         const { video, timeline } = state;
         video.removeEventListener("error", state.onError);
+        video.removeEventListener("loadeddata", state.onLoaded);
         video.removeEventListener("dblclick", state.onDouble);
+        for (const name of wakers) video.removeEventListener(name, kick);
         if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
         timeline.removeEventListener("pointerdown", state.onDown);
         timeline.removeEventListener("pointermove", state.onMove);
@@ -88,7 +99,7 @@ window.letsClip = (() => {
         state = null;
     };
 
-    // The Kept Range Lives In The Handles, Exact To The Millisecond
+    // The Kept Range Lives In The Handles, Millisecond Exact
     const handleOf = (edge) => state.timeline.querySelector(`[data-handle="${edge}"]`);
     const readRange = () => ({ start: parseFloat(handleOf("start").dataset.time), end: parseFloat(handleOf("end").dataset.time) });
 
@@ -98,7 +109,7 @@ window.letsClip = (() => {
         else range.end = Math.max(Math.min(duration(), value), range.start + step);
     };
 
-    // A Drag Paints The Handles Here, Blazor Hears The Range Once It Settles
+    // A Drag Paints The Handles, Blazor Hears Once It Settles
     const paint = ({ start, end }) => {
         const percent = (time) => `${Math.min(100, Math.max(0, (time / duration()) * 100))}%`;
         const [before, after] = state.timeline.querySelectorAll(".timeline-shade");
@@ -113,7 +124,7 @@ window.letsClip = (() => {
 
     const commit = (range) => state.dotnet.invokeMethodAsync("OnRange", range.start, range.end).catch(() => {});
 
-    // A Focused Handle Steps 0.1 s With The Arrow Keys, 1 s With Shift, Held Keys Build On The Last Step
+    // Arrows Step 0.1 s, Shift 1 s, Held Keys Build
     const key = (event) => {
         const handle = event.target instanceof Element ? event.target.closest("[data-handle]") : null;
         if (!state || !handle) return;
@@ -135,7 +146,7 @@ window.letsClip = (() => {
         return Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width)) * duration();
     };
 
-    // A Handle Drags Its Edge From Where It Was Grabbed, Anywhere Else Seeks
+    // A Handle Drags From Where It Was Grabbed, Else Seeks
     const down = (event) => {
         if (!state || event.button !== 0) return;
         const handle = event.target instanceof Element ? event.target.closest("[data-handle]") : null;
@@ -182,7 +193,7 @@ window.letsClip = (() => {
         state.queued = false;
     };
 
-    // Play Runs To The End Point, Starting At The Start Point When The Playhead Sits Outside
+    // Play Runs To The End Point, From Start When Outside
     const play = (start, end) => {
         if (!state) return;
         const { video } = state;
@@ -193,7 +204,7 @@ window.letsClip = (() => {
 
     const pause = () => state?.video.pause();
 
-    // A Jump Past The End Point Lets Playback Run On From There
+    // A Jump Past The End Point Lets Playback Run On
     const nudge = (seconds) => {
         if (!state) return;
         const time = clamp(state.video.currentTime + seconds);
@@ -201,15 +212,15 @@ window.letsClip = (() => {
         if (state.stopAt !== null && time >= state.stopAt) state.stopAt = null;
     };
 
-    const seek = (time) => {
-        if (state) state.video.currentTime = time;
-    };
-
     const setMuted = (muted) => {
         if (state) state.video.muted = muted;
     };
 
-    // Full Screen Shows The Clip Alone With The Browser's Own Controls
+    const setVolume = (volume) => {
+        if (state) state.video.volume = volume;
+    };
+
+    // Full Screen Shows The Clip With The Browser's Controls
     const fullScreen = () => {
         if (!state) return;
         if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
@@ -220,23 +231,34 @@ window.letsClip = (() => {
         if (state) state.video.controls = document.fullscreenElement === state.video;
     });
 
-    // Escape Leaves Full Screen, The Browser Keys That Would Are Off
+    // Escape Leaves Full Screen, Browser Keys Are Off
     window.addEventListener("keydown", (event) => {
         if (event.key === "Escape" && document.fullscreenElement) document.exitFullscreen().catch(() => {});
     });
 
-    // The Next Key Pressed With Its Modifiers Becomes The Hotkey, Escape Cancels
+    // The Next Key Becomes The Hotkey, Escape Or Hiding Cancels
+    let cancelCapture = () => {};
     const captureKey = () =>
         new Promise((resolve) => {
+            const finish = (value) => {
+                window.removeEventListener("keydown", listener, true);
+                document.removeEventListener("visibilitychange", onHidden);
+                cancelCapture = () => {};
+                resolve(value);
+            };
             const listener = (event) => {
                 if (["Control", "Shift", "Alt", "Meta"].includes(event.key)) return;
                 event.preventDefault();
                 event.stopPropagation();
-                window.removeEventListener("keydown", listener, true);
-                resolve(event.key === "Escape" ? null : { code: event.code, control: event.ctrlKey, alt: event.altKey, shift: event.shiftKey, meta: event.metaKey });
+                finish(event.key === "Escape" ? null : { code: event.code, control: event.ctrlKey, alt: event.altKey, shift: event.shiftKey, meta: event.metaKey });
+            };
+            const onHidden = () => {
+                if (document.hidden) finish(null);
             };
             window.addEventListener("keydown", listener, true);
+            document.addEventListener("visibilitychange", onHidden);
+            cancelCapture = () => finish(null);
         });
 
-    return { attach, detach, play, pause, nudge, seek, setMuted, fullScreen, captureKey };
+    return { attach, detach, play, pause, nudge, setMuted, setVolume, fullScreen, captureKey, cancelCapture: () => cancelCapture() };
 })();

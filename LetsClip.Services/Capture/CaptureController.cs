@@ -43,37 +43,65 @@ public sealed class CaptureController : IDisposable
 
     public IReadOnlyList<MonitorInfo> Monitors { get; private set; } = [];
 
-    // Nothing Picked Yet Means The Primary Monitor
+    // Nothing Picked Or Unplugged Means The Primary Monitor
     public MonitorInfo? SelectedMonitor =>
-        Settings.MonitorDevicePath is { } path
-            ? Monitors.FirstOrDefault(monitor =>
-                string.Equals(monitor.DevicePath, path, StringComparison.OrdinalIgnoreCase)
+        Monitors.FirstOrDefault(monitor =>
+            string.Equals(
+                monitor.DevicePath,
+                Settings.MonitorDevicePath,
+                StringComparison.OrdinalIgnoreCase
             )
-            : Monitors.FirstOrDefault(monitor => monitor.IsPrimary);
+        ) ?? Monitors.FirstOrDefault(monitor => monitor.IsPrimary);
 
-    // Frame Rates Go Up To What The Picked Monitor Shows
+    // Up To The Monitor's Refresh Rate, 30 Always Offered
     public IReadOnlyList<int> FrameRateChoices =>
         [
             .. UserSettings.FrameRateChoices.Where(rate =>
-                rate <= (SelectedMonitor?.RefreshRate ?? 60) + 1
+                rate <= Math.Max(30, (SelectedMonitor?.RefreshRate ?? 60) + 1)
             ),
         ];
 
     public int FrameRate => FrameRateChoices.Where(rate => rate <= Settings.FrameRate).Max();
 
+    // Lines Below The Monitor's Short Side, Then Its Own Size
+    public IReadOnlyList<int> ResolutionChoices
+    {
+        get
+        {
+            var own = SelectedMonitor is { } monitor
+                ? Math.Min(monitor.Width, monitor.Height)
+                : 1080;
+            return [.. UserSettings.ResolutionChoices.Where(lines => lines < own), own];
+        }
+    }
+
+    public int Resolution => ResolutionChoices.Where(lines => lines <= Settings.Resolution).Max();
+
     public bool IsBuffering =>
         Recorder.Status.State is CaptureState.Starting or CaptureState.Buffering;
 
-    public bool IsPaused { get; private set; }
+    // A Restart After A Setting Change Reads As Buffering
+    public bool ShowsBuffering =>
+        Recorder.Status.State is CaptureState.Buffering or CaptureState.Starting
+        || (Recorder.Status.State == CaptureState.Stopping && Settings.Buffering);
 
-    public string IdleText =>
-        IsPaused ? "Paused"
-        : Settings.GamesOnly ? "Waiting for a Game"
-        : "Not Buffering";
+    public bool ShowsOff =>
+        !Settings.Buffering
+        && Recorder.Status.State is CaptureState.Stopped or CaptureState.Stopping;
 
     // Buffering Names The Game It Records
-    public string BufferingText =>
-        Settings.GamesOnly && Games.GameName is { } game ? $"Buffering {game}" : "Buffering";
+    public string StatusText =>
+        Recorder.Status switch
+        {
+            { IsSaving: true } => "Saving Clip",
+            { State: CaptureState.Error } => "Capture Error",
+            _ when ShowsBuffering => Settings.GamesOnly && Games.GameName is { } game
+                ? $"Buffering {game}"
+                : "Buffering",
+            _ when ShowsOff => "Buffering Off",
+            _ when Settings.GamesOnly => "Waiting for a Game",
+            _ => "Not Buffering",
+        };
 
     public int? GameCount => _installedGames is null ? null : KnownGames().Count;
 
@@ -94,26 +122,21 @@ public sealed class CaptureController : IDisposable
         UserSettings updated;
         lock (_gate)
         {
+            // Written In Turn, Quick Changes Land On Disk In Order
             before = Settings;
             updated = change(Settings);
             Settings = updated;
+            updated.Save();
         }
 
-        updated.Save();
         Library.SetFolder(updated.ClipsDirectory);
         if (before.StartWithWindows != updated.StartWithWindows)
         {
             StartupRegistration.Apply(updated.StartWithWindows);
         }
 
-        ApplyGames();
         Changed?.Invoke();
-        _ = ApplyChangeAsync();
-    }
-
-    public void SelectMonitor(MonitorInfo monitor)
-    {
-        UpdateSettings(settings => settings with { MonitorDevicePath = monitor.DevicePath });
+        _ = StepAsync(null);
     }
 
     #region Games
@@ -132,8 +155,10 @@ public sealed class CaptureController : IDisposable
             return;
         }
 
+        // No Scanning While Buffering Is Off, Locked Or Asleep
+        var settings = Settings;
         Games.SetGames(KnownGames());
-        Games.SetEnabled(Settings.GamesOnly);
+        Games.SetEnabled(settings.GamesOnly && settings.Buffering && _holds == CaptureHolds.None);
     }
 
     private Dictionary<string, string> KnownGames()
@@ -213,16 +238,10 @@ public sealed class CaptureController : IDisposable
     #endregion
 
     #region Starts And Stops
-    public Task StartAsync()
+    public void SetBuffering(bool isOn)
     {
-        // Resuming Ends A Pause, Automation Decides The Rest
-        return StepAsync(() => IsPaused = false);
-    }
-
-    public Task StopAsync()
-    {
-        // A Pause Holds Off Every Automatic Start Until Resumed
-        return StepAsync(() => IsPaused = true);
+        // One Saved Switch, Automation Decides The Rest
+        UpdateSettings(settings => settings with { Buffering = isOn });
     }
 
     public Task StartAutomaticallyAsync()
@@ -230,18 +249,26 @@ public sealed class CaptureController : IDisposable
         return StepAsync(null);
     }
 
-    public async Task InterruptAsync(string reason)
+    public Task DisplaysChangedAsync()
     {
-        // Windows Took The Monitor Away, Nothing The User Asked For
-        await _steps.WaitAsync();
-        try
-        {
-            await Recorder.StopAsync(reason);
-        }
-        finally
-        {
-            _steps.Release();
-        }
+        // The Running Monitor Unplugged Or Changed Ends Its Session
+        var running = Recorder.Options?.Monitor;
+        RefreshMonitors();
+        var now = Monitors.FirstOrDefault(monitor =>
+            string.Equals(
+                monitor.DevicePath,
+                running?.DevicePath,
+                StringComparison.OrdinalIgnoreCase
+            )
+        );
+        var reason =
+            running is null || now == running ? null
+            : now is null
+                ? $"Stopped because {running.FriendlyName} was disconnected, history was cleared"
+            : $"Stopped because the display settings of {running.FriendlyName} changed, history was cleared";
+
+        // The Step Restarts Only What Differs
+        return StepAsync(null, reason);
     }
 
     public Task HoldAsync(CaptureHolds hold, string reason)
@@ -265,11 +292,6 @@ public sealed class CaptureController : IDisposable
             : StepAsync(() => _lastGame = game);
     }
 
-    private Task ApplyChangeAsync()
-    {
-        return StepAsync(null);
-    }
-
     private async Task RestartAfterDropAsync()
     {
         // A Dropped Capture Starts Over By Itself
@@ -284,22 +306,23 @@ public sealed class CaptureController : IDisposable
         try
         {
             change?.Invoke();
+            ApplyGames();
             var settings = Settings;
-            var wanted =
-                settings.HasSeenCaptureNotice && !IsPaused && _holds == CaptureHolds.None
-                    ? WantedOptions()
-                    : null;
+            var wanted = settings.Buffering && _holds == CaptureHolds.None ? WantedOptions() : null;
 
-            // Queued Quick Changes Restart Once, Then Find Nothing To Do
+            // Nothing To Do Unless Options Differ Or An Error Clears
             var running = Recorder.Options;
-            if (running == wanted && (stopReason is null || wanted is not null))
+            var clearsError = wanted is null && Recorder.Status.State == CaptureState.Error;
+            if (running == wanted && (stopReason is null || wanted is not null) && !clearsError)
             {
                 return;
             }
 
-            if (running is not null || stopReason is not null)
+            if (running is not null || stopReason is not null || clearsError)
             {
-                await Recorder.StopAsync(wanted is null ? stopReason : null);
+                // A Running Save Gets Its Last Segments First
+                await Recorder.WaitForSavesAsync(TimeSpan.FromSeconds(5));
+                await Recorder.StopAsync(stopReason);
             }
 
             if (wanted is not null && Recorder.Status.CanStart)
@@ -330,7 +353,7 @@ public sealed class CaptureController : IDisposable
             shown,
             settings.ReplaySeconds,
             FrameRate,
-            settings.FullResolution,
+            settings.Resolution,
             settings.Quality,
             settings.SystemAudio ? settings.SystemAudioDeviceId : null,
             settings.Microphone ? settings.MicrophoneDeviceId : null,
@@ -339,11 +362,6 @@ public sealed class CaptureController : IDisposable
         );
     }
     #endregion
-
-    public Task<SaveOutcome> SaveAsync()
-    {
-        return Recorder.SaveAsync();
-    }
 
     public void Dispose()
     {

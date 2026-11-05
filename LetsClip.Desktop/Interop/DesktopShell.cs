@@ -24,7 +24,6 @@ public sealed class DesktopShell
     private MonitorOverlay? _flash;
     private DispatcherTimer? _flashTimer;
     private WindowMessages? _messages;
-    private string _clipsFolder = "";
 
     public event Action<string>? OpenClipRequested;
 
@@ -34,15 +33,9 @@ public sealed class DesktopShell
 
     public string HotkeyText { get; private set; } = Hotkey.Default.ToString();
 
-    public void Attach(WindowMessages messages, string clipsFolder)
+    public void Attach(WindowMessages messages)
     {
         _messages = messages;
-        _clipsFolder = clipsFolder;
-    }
-
-    public void SetClipsFolder(string clipsFolder)
-    {
-        _clipsFolder = clipsFolder;
     }
 
     public void RequestOpenClip(string path)
@@ -125,17 +118,10 @@ public sealed class DesktopShell
     #endregion
 
     #region Files
-    public string ClipUrl(string path)
+    public static string ClipUrl(string fileName)
     {
-        // Paths Under The Clips Folder Map Onto The Clips Host
-        var relative = Path.GetRelativePath(_clipsFolder, path);
-        if (relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative))
-        {
-            return "";
-        }
-
-        var segments = relative.Split(Path.DirectorySeparatorChar).Select(Uri.EscapeDataString);
-        return $"https://{ClipsHost}/{string.Join("/", segments)}";
+        // A Checked File Name The Clips Host Serves
+        return $"https://{ClipsHost}/{Uri.EscapeDataString(fileName)}";
     }
 
     public static string ThumbnailUrl(string? path)

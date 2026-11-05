@@ -1,10 +1,15 @@
-using System.Media;
+using System.Runtime.InteropServices;
 using LetsClip.Services.Capture;
 
 namespace LetsClip.Desktop.Interop;
 
-public static class SaveChime
+public static partial class SaveChime
 {
+    // Played Straight From Memory, Without Waiting Or A Fallback Beep
+    private const uint PlayAsync = 0x1;
+    private const uint NoDefault = 0x2;
+    private const uint FromMemory = 0x4;
+
     // Two Soft Bell Notes, A Fifth Apart
     private const int SampleRate = 48000;
     private const double Length = 0.34;
@@ -18,20 +23,20 @@ public static class SaveChime
     // The Chime Starts A Moment Late, Its Mute Covers That
     private static readonly TimeSpan s_muted = TimeSpan.FromSeconds(Length + 0.4);
 
-    private static readonly SoundPlayer s_player = new(new MemoryStream(Render()));
+    // Pinned, Windows Reads It While The Chime Plays
+    private static readonly byte[] s_wave = Render();
 
     public static void Play(ReplayRecorder recorder)
     {
         // The Loopback Hears Silence, So No Clip Holds The Chime
         recorder.MuteSystemAudio(s_muted);
-        try
-        {
-            s_player.Play();
-        }
-        catch (InvalidOperationException)
-        {
-            // No Output Device, The Clip Is Saved All The Same
-        }
+
+        // Safe From Any Thread, No Output Device Plays Nothing
+        _ = PlaySoundW(
+            Marshal.UnsafeAddrOfPinnedArrayElement(s_wave, 0),
+            0,
+            FromMemory | PlayAsync | NoDefault
+        );
     }
 
     private static byte[] Render()
@@ -79,6 +84,12 @@ public static class SaveChime
         }
 
         writer.Flush();
-        return stream.ToArray();
+        var wave = GC.AllocateArray<byte>((int)stream.Length, pinned: true);
+        stream.GetBuffer().AsSpan(0, wave.Length).CopyTo(wave);
+        return wave;
     }
+
+    [LibraryImport("winmm.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool PlaySoundW(nint sound, nint module, uint flags);
 }

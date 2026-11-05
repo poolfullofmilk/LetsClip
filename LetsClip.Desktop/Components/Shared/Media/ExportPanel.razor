@@ -5,59 +5,39 @@
              Class="pt-2">
         Export
     </MudText>
-    <MudStack Spacing="1"
-              Class="py-3">
-        <MudStack Row
-                  AlignItems="AlignItems.Center"
-                  Spacing="1">
-            <MudText Typo="Typo.subtitle2">Size Limit</MudText>
-            <InfoIcon Text="Free Discord accounts upload up to 10 MB and Nitro raises it. Discord can change this, LetsClip cannot check yours" />
-            <MudSpacer />
-            <MudText Typo="Typo.body2"
-                     Class="mud-text-secondary">
-                @Formatter.FormatMegabytes(Megabytes)
-            </MudText>
-        </MudStack>
-        @* Size Slider *@
-        <MudSlider T="double"
-                   @bind-Value="Megabytes"
-                   Min="SizeBudget.MinimumMegabytes"
-                   Max="MaximumMegabytes"
-                   Step="1"
-                   Color="Color.Info"
-                   Size="Size.Medium"
-                   Variant="Variant.Filled"
-                   Immediate
-                   Disabled="@IsExporting"
-                   aria-label="Size Limit" />
-    </MudStack>
-    @if (CanShrink)
+    @if (Limits is { Count: > 1 } limits)
     {
-        <MudDivider />
-        <SettingRow Title="Resolution">
-            @* Resolution Buttons *@
-            <MudButtonGroup OverrideStyles="false"
-                            Size="Size.Small">
-                <MudButton Variant="Variant.Filled"
-                           Color="@(Use720p ? Color.Default : Color.Info)"
-                           Size="Size.Small"
+        <SettingRow Title="Size Limit"
+                    Info="The exported file stays under this size. Unlimited keeps all the quality the clip has">
+            @* Size Limit Select *@
+            <MudElement HtmlTag="div"
+                        Class="fixed-width narrow">
+                <MudSelect T="double"
+                           Value="Limit"
+                           ValueChanged="SetLimit"
+                           ToStringFunc="LimitLabel"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Dense
                            Disabled="@IsExporting"
-                           OnClick="() => SetResolution(false)">
-                    @OriginalLabel
-                </MudButton>
-                <MudButton Variant="Variant.Filled"
-                           Color="@(Use720p ? Color.Info : Color.Default)"
-                           Size="Size.Small"
-                           Disabled="@IsExporting"
-                           OnClick="() => SetResolution(true)">
-                    720p
-                </MudButton>
-            </MudButtonGroup>
+                           aria-label="Size Limit"
+                           AnchorOrigin="Origin.BottomLeft"
+                           TransformOrigin="Origin.TopLeft"
+                           Class="my-0">
+                    @foreach (var limit in limits)
+                    {
+                        <MudSelectItem T="double"
+                                       Value="limit">
+                            @LimitLabel(limit)
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+            </MudElement>
         </SettingRow>
+        <MudDivider />
     }
     @if (SourceFrameRate > 60)
     {
-        <MudDivider />
         <SettingRow Title="Frame Rate">
             @* Frame Rate Buttons *@
             <MudButtonGroup OverrideStyles="false"
@@ -78,22 +58,21 @@
                 </MudButton>
             </MudButtonGroup>
         </SettingRow>
+        <MudDivider />
     }
     @if (Media.HasAudio)
     {
-        <MudDivider />
         <SettingRow Title="Audio">
             @* Audio Switch *@
             <MudSwitch T="bool"
-                       Value="_includeAudio"
-                       ValueChanged="SetAudio"
+                       @bind-Value="IncludeAudio"
                        Color="Color.Info"
                        Disabled="@IsExporting"
                        aria-label="Include Audio"
                        Class="ma-0" />
         </SettingRow>
+        <MudDivider />
     }
-    <MudDivider />
 
     <MudStack Spacing="3"
               Class="py-3">
@@ -160,12 +139,7 @@
 
         @if (_error is { } error)
         {
-            <MudAlert Severity="Severity.Warning"
-                      Dense
-                      Elevation="4"
-                      Class="rounded-panel mud-warning-text">
-                @error
-            </MudAlert>
+            <Notice Text="@error" />
         }
 
         @if (_result is { } result && File.Exists(result.Path))
@@ -211,11 +185,11 @@
                                            OnClick="() => Explorer.ShowFile(result.Path)" />
                         </Tooltip>
                         @* Drag Handle *@
-                        <Tooltip Text="Drag Into Discord"
+                        <Tooltip Text="Drag to Another App"
                                  RootClass="d-flex">
                             <MudElement HtmlTag="span"
                                         Class="drag-handle d-flex align-center pa-1"
-                                        aria-label="Drag Into Discord"
+                                        aria-label="Drag to Another App"
                                         @onmousedown="() => DesktopShell.DragFile(result.Path)">
                                 <MudIcon Icon="@Icons.Material.Rounded.DragIndicator"
                                          Size="Size.Small" />

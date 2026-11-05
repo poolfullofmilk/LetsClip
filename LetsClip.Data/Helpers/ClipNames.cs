@@ -6,6 +6,9 @@ namespace LetsClip.Data.Helpers;
 
 public static partial class ClipNames
 {
+    // Saved Names Keep The Sortable Date
+    private const string DateFormat = "yyyy-MM-dd HH-mm-ss";
+
     static ClipNames()
     {
         Debug.Assert(SelfTestPasses());
@@ -13,7 +16,7 @@ public static partial class ClipNames
 
     public static string For(DateTimeOffset recordedAt)
     {
-        return $"{AppInfo.DisplayName} {Formatter.FormatFileDateTime(recordedAt)}";
+        return $"{AppInfo.DisplayName} {recordedAt.ToLocalTime().ToString(DateFormat, CultureInfo.InvariantCulture)}";
     }
 
     public static bool IsGenerated(string name)
@@ -29,7 +32,7 @@ public static partial class ClipNames
             match.Success
             && DateTime.TryParseExact(
                 match.Groups["stamp"].Value,
-                "yyyy-MM-dd HH-mm-ss",
+                DateFormat,
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.AssumeLocal,
                 out var stamp

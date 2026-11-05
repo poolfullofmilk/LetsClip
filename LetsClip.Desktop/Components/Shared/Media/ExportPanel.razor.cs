@@ -16,7 +16,7 @@ public partial class ExportPanel : IDisposable
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
 
     [Parameter]
-    public required string SourcePath { get; set; }
+    public required ClipInfo Clip { get; set; }
 
     [Parameter]
     public required TrimRange Range { get; set; }
@@ -34,17 +34,40 @@ public partial class ExportPanel : IDisposable
     private ExportProgress? _progress;
     private ExportResult? _result;
     private string? _error;
-    private bool _includeAudio = true;
+    private bool IncludeAudio { get; set; } = true;
 
-    // The Picked Size, Shown Within What The Selection Allows
-    private double Megabytes
+    // Limits This Selection Would Feel, Then Unlimited
+    private IReadOnlyList<double> Limits
     {
-        get => Math.Clamp(field, SizeBudget.MinimumMegabytes, MaximumMegabytes);
-        set;
+        get
+        {
+            var (width, height) = OutputSize;
+            return SizeBudget.LimitsFor(
+                Range.Length,
+                width,
+                height,
+                FrameRate,
+                WithAudio,
+                SourceBytesPerSecond
+            );
+        }
     }
 
-    // The Largest Size Worth Picking At These Settings
-    private double MaximumMegabytes
+    // The Saved Limit, Or The Nearest Offered Below It
+    private double Limit
+    {
+        get
+        {
+            var saved = Controller.Settings.ExportMegabytes;
+            var limits = Limits;
+            return saved >= Ceiling
+                ? SizeBudget.MaximumMegabytes
+                : limits.Where(limit => limit <= saved).DefaultIfEmpty(limits[0]).Max();
+        }
+    }
+
+    // Past This More Size Adds Nothing, So Unlimited Aims Here
+    private double Ceiling
     {
         get
         {
@@ -54,15 +77,17 @@ public partial class ExportPanel : IDisposable
                 width,
                 height,
                 FrameRate,
-                _includeAudio && Media.HasAudio
+                WithAudio,
+                SourceBytesPerSecond
             );
         }
     }
 
-    private bool Use720p => Controller.Settings.Export720p && CanShrink;
+    private double Megabytes => Math.Min(Limit, Ceiling);
 
-    // A Clip At 720p Or Below Has Nothing Smaller
-    private bool CanShrink => Math.Min(Media.Width, Media.Height) > 720;
+    private bool WithAudio => IncludeAudio && Media.HasAudio;
+
+    private double SourceBytesPerSecond => Clip.SizeBytes / Media.Duration;
 
     private bool IsExporting => _progress is not null;
 
@@ -72,16 +97,7 @@ public partial class ExportPanel : IDisposable
         && Budget.Verdict != BudgetVerdict.TooSmall;
 
     private (int Width, int Height) OutputSize =>
-        ClipExporter.OutputSize(Media.Width, Media.Height, Use720p);
-
-    private string OriginalLabel
-    {
-        get
-        {
-            var (width, height) = ClipExporter.OutputSize(Media.Width, Media.Height, false);
-            return $"{Math.Min(width, height)}p";
-        }
-    }
+        ClipExporter.OutputSize(Media.Width, Media.Height);
 
     private double SourceFrameRate => ClipExporter.FrameRateOf(Media.FrameRate, true);
 
@@ -96,19 +112,21 @@ public partial class ExportPanel : IDisposable
             return SizeBudget.Plan(
                 Megabytes,
                 Range.Length,
-                _includeAudio && Media.HasAudio,
+                WithAudio,
                 width,
                 height,
-                FrameRate
+                FrameRate,
+                SourceBytesPerSecond
             );
         }
     }
 
+    // A Ceiling, Not A Promise, Still Scenes Come Out Smaller
     private string BudgetText =>
         Budget.VideoBitsPerSecond > 0
             ? string.Create(
                 CultureInfo.CurrentCulture,
-                $"About {Budget.VideoBitsPerSecond / 1e6:0.0} Mbps for Video"
+                $"Up to {Budget.VideoBitsPerSecond / 1e6:0.0} Mbps for Video"
             )
             : "No room left for video";
 
@@ -133,11 +151,9 @@ public partial class ExportPanel : IDisposable
     private string? VerdictHint =>
         Budget.Verdict switch
         {
-            BudgetVerdict.Low when !Use720p && CanShrink =>
-                "Fast motion will look soft at this size, 720p or a shorter selection keeps it sharper",
             BudgetVerdict.Low =>
                 "Fast motion will look soft at this size, a shorter selection keeps it sharper",
-            BudgetVerdict.TooSmall => ClipExporter.TooSmallMessage(Request),
+            BudgetVerdict.TooSmall => ClipExporter.TooSmallMessage,
             _ => null,
         };
 
@@ -145,22 +161,31 @@ public partial class ExportPanel : IDisposable
         Budget.Verdict == BudgetVerdict.TooSmall ? "mud-error-text" : "mud-text-secondary";
 
     private string ExportLabel =>
-        $"Export {Formatter.FormatSeconds(Range.Length)} Under {Formatter.FormatMegabytes(Megabytes)}";
+        Limit < SizeBudget.MaximumMegabytes
+            ? $"Export {Formatter.FormatDuration(Range.Length)} Under {LimitLabel(Limit)}"
+            : $"Export {Formatter.FormatDuration(Range.Length)}";
 
     private ExportRequest Request =>
         new(
-            SourcePath,
+            Clip.Path,
             Range,
             Megabytes,
-            Use720p,
-            Controller.Settings.ExportFullFrameRate,
-            _includeAudio && Media.HasAudio,
+            FrameRate,
+            WithAudio,
             Controller.Settings.ExportsDirectory
         );
 
-    protected override void OnInitialized()
+    private static string LimitLabel(double megabytes)
     {
-        Megabytes = Controller.Settings.ExportMegabytes;
+        return megabytes >= SizeBudget.MaximumMegabytes
+            ? "Unlimited"
+            : Formatter.FormatMegabytes(megabytes);
+    }
+
+    private void SetLimit(double megabytes)
+    {
+        // Saved As Picked, A Short Selection Never Lowers It
+        Controller.UpdateSettings(settings => settings with { ExportMegabytes = megabytes });
     }
 
     private void SetFullFrameRate(bool full)
@@ -168,25 +193,8 @@ public partial class ExportPanel : IDisposable
         Controller.UpdateSettings(settings => settings with { ExportFullFrameRate = full });
     }
 
-    private void SetResolution(bool use720p)
-    {
-        Controller.UpdateSettings(settings => settings with { Export720p = use720p });
-    }
-
-    private void SetAudio(bool include)
-    {
-        _includeAudio = include;
-    }
-
     private async Task ExportAsync()
     {
-        // The Size Is Saved On Export, Not Per Slider Step
-        var megabytes = Megabytes;
-        if (megabytes != Controller.Settings.ExportMegabytes)
-        {
-            Controller.UpdateSettings(settings => settings with { ExportMegabytes = megabytes });
-        }
-
         _error = null;
         _result = null;
         _cancel = new CancellationTokenSource();
@@ -239,7 +247,7 @@ public partial class ExportPanel : IDisposable
             var copied = DesktopShell.CopyFile(result.Path);
             Snackbar.Add(
                 copied
-                    ? "Copied, paste it into Discord with Ctrl+V"
+                    ? "Copied, paste it anywhere with Ctrl+V"
                     : "The clipboard is busy, try again",
                 copied ? Severity.Success : Severity.Warning
             );
@@ -250,7 +258,7 @@ public partial class ExportPanel : IDisposable
     {
         return string.Create(
             CultureInfo.CurrentCulture,
-            $"{Formatter.FormatSize(result.SizeBytes)} · {Formatter.FormatSeconds(result.Duration)} · {result.Width} × {result.Height} at {result.FrameRate:0} FPS{(result.HasAudio ? "" : " · No Audio")}"
+            $"{Formatter.FormatSize(result.SizeBytes)} · {Formatter.FormatDuration(result.Duration)} · {result.Width} × {result.Height} at {result.FrameRate:0} FPS{(result.HasAudio ? "" : " · No Audio")}"
         );
     }
 

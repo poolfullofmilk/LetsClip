@@ -33,9 +33,6 @@ public partial class Clips : IDisposable
             ? clips.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)
             : "";
 
-    private string EmptyText =>
-        $"No clips yet, press {Controller.Settings.Hotkey} to save the last moments";
-
     protected override async Task OnInitializedAsync()
     {
         Controller.Library.Changed += OnLibraryChanged;

@@ -7,4 +7,5 @@ public enum CaptureHolds
     Locked = 1,
     Asleep = 2,
     DisplayOff = 4,
+    Exiting = 8,
 }

@@ -1,6 +1,5 @@
 using LetsClip.Data.Enums;
 using LetsClip.Data.ViewModels;
-using LetsClip.Desktop.Components.Shared.Dialogs;
 using LetsClip.Desktop.Interop;
 using LetsClip.Services.Capture;
 using Microsoft.AspNetCore.Components;
@@ -10,19 +9,11 @@ namespace LetsClip.Desktop.Components.Shared.Media;
 
 public partial class CapturePanel : IDisposable
 {
-    // Said Once Before The First Start, Honest About What Records
-    internal const string NoticeTitle = "Before Buffering Starts";
-    internal const string NoticeText =
-        "LetsClip records everything visible on the chosen monitor, including other apps, chat windows and notifications, into a short rolling buffer on this PC. Games Only records just the game's window.\n\nNothing is kept until you save a clip, and nothing leaves your PC. Buffering then runs by itself whenever LetsClip runs, and the tray icon pauses it any time.\n\nStart buffering now";
-
     [Inject]
     public required CaptureController Controller { get; set; }
 
     [Inject]
     public required DesktopShell Shell { get; set; }
-
-    [Inject]
-    public required IDialogService DialogService { get; set; }
 
     private string? _saveError;
 
@@ -37,12 +28,6 @@ public partial class CapturePanel : IDisposable
         : Status.Message is { } message ? (Severity.Info, message)
         : null;
 
-    // Full Size Is Only Offered Above 1080p
-    private string? NativeLabel =>
-        Controller.SelectedMonitor is { } monitor && Math.Min(monitor.Width, monitor.Height) > 1080
-            ? $"{Math.Min(monitor.Width, monitor.Height)}p"
-            : null;
-
     protected override void OnInitialized()
     {
         Controller.Recorder.StatusChanged += OnChanged;
@@ -55,11 +40,6 @@ public partial class CapturePanel : IDisposable
         _ = InvokeAsync(StateHasChanged);
     }
 
-    private static string AlertClass(Severity severity)
-    {
-        return severity == Severity.Warning ? "rounded-panel mud-warning-text" : "rounded-panel";
-    }
-
     private static string MonitorLabel(MonitorInfo? monitor)
     {
         return monitor?.FriendlyName ?? "";
@@ -68,6 +48,11 @@ public partial class CapturePanel : IDisposable
     private static string FrameRateLabel(int rate)
     {
         return $"{rate} FPS";
+    }
+
+    private static string ResolutionLabel(int lines)
+    {
+        return $"{lines}p";
     }
 
     private static string MonitorDetails(MonitorInfo monitor)
@@ -90,7 +75,12 @@ public partial class CapturePanel : IDisposable
     private void SelectMonitor(MonitorInfo monitor)
     {
         Shell.FlashMonitor(monitor);
-        Controller.SelectMonitor(monitor);
+        Controller.UpdateSettings(settings =>
+            settings with
+            {
+                MonitorDevicePath = monitor.DevicePath,
+            }
+        );
     }
 
     private void SetReplay(int seconds)
@@ -98,9 +88,9 @@ public partial class CapturePanel : IDisposable
         Controller.UpdateSettings(settings => settings with { ReplaySeconds = seconds });
     }
 
-    private void SetFullResolution(bool full)
+    private void SetResolution(int lines)
     {
-        Controller.UpdateSettings(settings => settings with { FullResolution = full });
+        Controller.UpdateSettings(settings => settings with { Resolution = lines });
     }
 
     private void SetQuality(CaptureQuality quality)
@@ -113,32 +103,23 @@ public partial class CapturePanel : IDisposable
         Controller.UpdateSettings(settings => settings with { FrameRate = rate });
     }
 
-    private async Task StartAsync()
+    private void StartBuffering()
     {
-        // Only Before The Notice Was Answered, Or After An Error
+        // The Same Saved Switch As Settings And The Tray
         _saveError = null;
-        if (!Controller.Settings.HasSeenCaptureNotice)
-        {
-            if (await DialogService.ConfirmAsync(NoticeTitle, NoticeText))
-            {
-                Controller.UpdateSettings(settings =>
-                    settings with
-                    {
-                        HasSeenCaptureNotice = true,
-                    }
-                );
-            }
+        Controller.SetBuffering(true);
+    }
 
-            return;
-        }
-
-        await Controller.StartAsync();
+    private async Task TryAgainAsync()
+    {
+        _saveError = null;
+        await Controller.StartAutomaticallyAsync();
     }
 
     private async Task SaveAsync()
     {
-        // The Button And The Hotkey Run The Same Save
-        var outcome = await Controller.SaveAsync();
+        // The Same Save As The Hotkey, Off The Page's Thread
+        var outcome = await Task.Run(Controller.Recorder.SaveAsync);
         _saveError = outcome.Error;
     }
 

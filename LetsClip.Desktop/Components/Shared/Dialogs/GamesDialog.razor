@@ -58,22 +58,26 @@
                             @if (context.IsRemoved)
                             {
                                 @* Add Back Button *@
-                                <MudIconButton Icon="@Icons.Material.Rounded.Add"
-                                               aria-label="Add Back"
-                                               title="Add Back"
-                                               Color="Color.Info"
-                                               Size="Size.Small"
-                                               OnClick="() => Controller.RestoreGame(context.Key)" />
+                                <Tooltip Text="Add Back"
+                                         RootClass="d-flex justify-center">
+                                    <MudIconButton Icon="@Icons.Material.Rounded.Add"
+                                                   aria-label="Add Back"
+                                                   Color="Color.Info"
+                                                   Size="Size.Small"
+                                                   OnClick="() => Controller.RestoreGame(context.Key)" />
+                                </Tooltip>
                             }
                             else
                             {
                                 @* Remove Button *@
-                                <MudIconButton Icon="@Icons.Material.Rounded.Close"
-                                               aria-label="Remove"
-                                               title="Remove"
-                                               Color="Color.Error"
-                                               Size="Size.Small"
-                                               OnClick="() => Controller.RemoveGame(context.Key)" />
+                                <Tooltip Text="Remove"
+                                         RootClass="d-flex justify-center">
+                                    <MudIconButton Icon="@Icons.Material.Rounded.Close"
+                                                   aria-label="Remove"
+                                                   Color="Color.Error"
+                                                   Size="Size.Small"
+                                                   OnClick="() => Controller.RemoveGame(context.Key)" />
+                                </Tooltip>
                             }
                         </MudTd>
                     </RowTemplate>

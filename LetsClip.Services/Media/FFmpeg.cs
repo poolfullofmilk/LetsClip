@@ -2,16 +2,15 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using NLog;
 
 namespace LetsClip.Services.Media;
 
-public sealed record ProcessResult(int ExitCode, string Output, IReadOnlyList<string> ErrorLines)
+public sealed record ProcessResult(int ExitCode, string Output, string? LastErrorLine)
 {
     public bool Succeeded => ExitCode == 0;
 
-    public string LastError =>
-        ErrorLines.LastOrDefault(line => !string.IsNullOrWhiteSpace(line))?.Trim()
-        ?? $"Exit code {ExitCode}";
+    public string LastError => LastErrorLine ?? $"Exit code {ExitCode}";
 }
 
 public static partial class FFmpeg
@@ -21,10 +20,11 @@ public static partial class FFmpeg
     public static readonly string FFmpegPath = Path.Combine(Folder, "ffmpeg.exe");
     public static readonly string FFprobePath = Path.Combine(Folder, "ffprobe.exe");
 
+    private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
+
     // Children Die With The App, Even After A Crash
     private const uint KillOnJobClose = 0x2000;
     private const int ExtendedLimitInformation = 9;
-    private const int ErrorTailLength = 40;
     private static readonly nint s_job = CreateKillOnCloseJob();
 
     // Windows Throttles A Shown App's Children, Capture Then Drops Frames
@@ -95,20 +95,16 @@ public static partial class FFmpeg
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(token);
         limit.CancelAfter(timeout);
 
-        // Both Pipes Drain Together, A Full One Stalls The Child
-        var errors = new Queue<string>();
+        // Both Pipes Drain Together, Only The Last Error Line Kept
+        string? lastError = null;
         var outputTask = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
         var errorTask = ReadLinesAsync(
             process.StandardError,
             line =>
             {
-                lock (errors)
+                if (!string.IsNullOrWhiteSpace(line))
                 {
-                    errors.Enqueue(line);
-                    if (errors.Count > ErrorTailLength)
-                    {
-                        errors.Dequeue();
-                    }
+                    lastError = line.Trim();
                 }
 
                 errorLine?.Invoke(line);
@@ -128,10 +124,7 @@ public static partial class FFmpeg
 
         var output = await outputTask;
         await errorTask;
-        lock (errors)
-        {
-            return new ProcessResult(process.ExitCode, output, [.. errors]);
-        }
+        return new ProcessResult(process.ExitCode, output, lastError);
     }
 
     public static async Task ReadLinesAsync(StreamReader reader, Action<string> onLine)
@@ -143,13 +136,38 @@ public static partial class FFmpeg
         }
     }
 
+    public static async Task DeleteOutputAsync(string path)
+    {
+        // A Killed Child's File Stays Locked A Moment
+        for (var attempt = 1; File.Exists(path); attempt++)
+        {
+            try
+            {
+                File.Delete(path);
+            }
+            catch (Exception exception)
+                when (exception is IOException or UnauthorizedAccessException && attempt < 20)
+            {
+                await Task.Delay(100);
+            }
+            catch (Exception exception)
+                when (exception is IOException or UnauthorizedAccessException)
+            {
+                // Its Temporary Name Keeps It Out Of The Library
+                s_logger.Warn($"Failed To Delete An Unfinished File {exception.GetType().Name}");
+                return;
+            }
+        }
+    }
+
     public static void Kill(Process process)
     {
         try
         {
+            // FFmpeg Starts No Children, The Job Covers A Crash
             if (!process.HasExited)
             {
-                process.Kill(entireProcessTree: true);
+                process.Kill();
             }
         }
         catch (Exception exception) when (exception is InvalidOperationException or Win32Exception)

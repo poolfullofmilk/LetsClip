@@ -47,15 +47,6 @@ public partial class MainLayout : IDisposable
             return;
         }
 
-        // Buffering Waits For The First Run Notice
-        if (
-            !Controller.Settings.HasSeenCaptureNotice
-            && await DialogService.ConfirmAsync(CapturePanel.NoticeTitle, CapturePanel.NoticeText)
-        )
-        {
-            Controller.UpdateSettings(settings => settings with { HasSeenCaptureNotice = true });
-        }
-
         await CheckForUpdatesAsync(false);
     }
 

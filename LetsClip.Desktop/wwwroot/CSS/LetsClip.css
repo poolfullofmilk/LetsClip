@@ -37,16 +37,13 @@
     --tonal-info: color-mix(in srgb, var(--mud-palette-info) 20%, transparent);
     --tonal-info-hover: color-mix(in srgb, var(--mud-palette-info) 30%, transparent);
     --tonal-info-text: color-mix(in srgb, var(--mud-palette-info) 40%, var(--mud-palette-white));
-    --tonal-error: color-mix(in srgb, var(--mud-palette-error) 20%, transparent);
-    --tonal-error-hover: color-mix(in srgb, var(--mud-palette-error) 30%, transparent);
-    --tonal-error-text: color-mix(in srgb, var(--mud-palette-error) 40%, var(--mud-palette-white));
     --tooltip-surface: color-mix(in srgb, var(--mud-palette-white) 9%, var(--mud-palette-surface));
     --scrollbar-thumb: color-mix(in srgb, var(--mud-palette-white) 18%, transparent);
     --scrollbar-thumb-hover: color-mix(in srgb, var(--mud-palette-white) 32%, transparent);
     --quick: 120ms ease-out;
 }
 
-/* A 1080p Screen At 125 Or 150 Percent Gets A Slimmer Frame */
+/* Scaled 1080p Screens Get A Slimmer Frame */
 @media (max-width: 1440px) {
     :root {
         --nav-width: 200px;
@@ -55,7 +52,7 @@
     }
 }
 
-/* Menus, Selects And Dropdowns Frost Nearly Opaque, Text Behind Never Shows */
+/* Menus And Selects Frost Nearly Opaque */
 .mud-popover.mud-paper {
     background-color: color-mix(in srgb, var(--mud-palette-surface) var(--popover-opacity), transparent);
     backdrop-filter: var(--glass-blur);
@@ -112,7 +109,7 @@
     padding: var(--page-top) var(--page-gutter) var(--page-bottom) !important;
 }
 
-/* Fill Pages End On The Bottom Gutter, What Is Left Goes To One Part */
+/* Fill Pages End On The Bottom Gutter */
 .page-fill {
     height: calc(100vh - var(--page-top) - var(--page-bottom));
     min-height: 0;
@@ -129,7 +126,7 @@
     min-height: 0;
 }
 
-/* A Dialog Table Scrolls Its Rows Under A Fixed Header, Clipped To Its Corners */
+/* Dialog Tables Scroll Under A Fixed Header */
 .mud-table.fit {
     display: flex;
     flex-direction: column;
@@ -172,8 +169,6 @@
     padding-block: 8px;
 }
 
-
-
 /* Two Columns Side By Side, Stacked Once The Window Narrows */
 .split {
     display: flex;
@@ -201,7 +196,7 @@
         width: auto;
     }
 
-    /* Stacked, The Page Scrolls And The Player Keeps 16 By 9 */
+    /* Stacked, The Page Scrolls, The Player Keeps 16 By 9 */
     .page-fill {
         height: auto;
     }
@@ -219,7 +214,7 @@
     flex-shrink: 0;
 }
 
-/* A Narrow Window Keeps Only The Icons, Names Stay For Screen Readers */
+/* Narrow Windows Keep Only Icons, Names Stay For Readers */
 @media (max-width: 900px) {
     .nav-panel {
         width: auto;
@@ -257,7 +252,7 @@
     vertical-align: top;
 }
 
-/* A Real Size Thumb, A Scaled 4 Px One Rasterizes Lopsided At 125% */
+/* A Real Size Thumb, A Scaled One Rasterizes Lopsided */
 .mud-slider.mud-slider-medium .mud-slider-input::-webkit-slider-thumb {
     width: 16px;
     height: 16px;
@@ -319,7 +314,7 @@ html, body {
     user-select: text;
 }
 
-/* Tooltips Rise On A Lighter Surface, Long Ones Wrap, Each Line Centred */
+/* Tooltips Rise On A Lighter Surface, Long Ones Wrap */
 .mud-tooltip.mud-tooltip-default {
     max-width: 320px !important;
     padding: 6px 10px;
@@ -392,7 +387,7 @@ html, body {
     white-space: pre-line;
 }
 
-/* Chips Carry The Slightest Theme Shadow, Their Icon Clear Of The Text */
+/* Chips Carry The Slightest Shadow, Icon Clear Of Text */
 .mud-chip {
     box-shadow: var(--mud-elevation-1);
 }
@@ -418,7 +413,7 @@ html, body {
     box-shadow: var(--mud-elevation-1);
 }
 
-/* Every Blue Button, Pick And Info Alert Is Tonal Like The Open Page */
+/* Blue Buttons, Picks And Info Alerts Are Tonal */
 .mud-button-filled.mud-button-filled-info:not(:disabled, .mud-disabled) {
     background-color: var(--tonal-info);
     color: var(--tonal-info-text);
@@ -427,17 +422,6 @@ html, body {
 
     .mud-button-filled.mud-button-filled-info:not(:disabled, .mud-disabled):is(:hover, :focus-visible, :active) {
         background-color: var(--tonal-info-hover);
-    }
-
-/* A Stop Is Tonal Too, In Red */
-.mud-button-filled.mud-button-filled-error:not(:disabled, .mud-disabled) {
-    background-color: var(--tonal-error);
-    color: var(--tonal-error-text);
-    box-shadow: none;
-}
-
-    .mud-button-filled.mud-button-filled-error:not(:disabled, .mud-disabled):is(:hover, :focus-visible, :active) {
-        background-color: var(--tonal-error-hover);
     }
 
 .mud-alert-text-info {
@@ -449,14 +433,13 @@ html, body {
         color: var(--tonal-info-text);
     }
 
-/* A Picked Chip Is Tonal Like A Picked Button */
-.mud-chip.mud-chip-selected.mud-chip-color-info {
-    background-color: var(--tonal-info);
-    color: var(--tonal-info-text);
-    box-shadow: none;
+/* Alerts Read At The Size Of Body Text */
+.mud-alert .mud-alert-message {
+    font-size: var(--mud-typography-body2-size);
+    line-height: var(--mud-typography-body2-lineheight);
 }
 
-/* Fields Sit Inset, Their Edge Shows On Hover And Turns Blue On Focus */
+/* Fields Sit Inset, Blue Edge On Focus */
 .mud-input.mud-input-outlined {
     border-radius: var(--mud-default-borderradius);
     background-color: var(--inset-fill);
@@ -497,10 +480,18 @@ html, body {
     font-weight: 500;
 }
 
-/* Icon Text Buttons Take Filled Padding, Clear Of The Edge */
-.mud-button-text-size-small:has(.mud-button-icon-start) {
-    padding-inline: 10px;
+/* The Capture Button Keeps Its Icon Left, Text Centred */
+.mud-button-root.icon-left .mud-button-label:has(> .mud-button-icon-start) {
+    padding-inline: 28px;
 }
+
+    .mud-button-root.icon-left .mud-button-label > .mud-button-icon-start {
+        position: absolute;
+        top: 50%;
+        left: 16px;
+        margin: 0;
+        transform: translateY(-50%);
+    }
 
 /* Progress Bars Run Rounded */
 .mud-progress-linear,
@@ -510,8 +501,7 @@ html, body {
 /* #endregion */
 
 /* #region Clips */
-/* Clip Cards Fill The Row At A Readable Size */
-/* Cards Darken As One Surface In A Faint Blue Ring And Never Move */
+/* Cards Darken In A Faint Blue Ring And Never Move */
 .hover-card {
     cursor: pointer;
     transition: background-color var(--quick), box-shadow var(--quick);
@@ -541,12 +531,10 @@ html, body {
         right: 8px;
         bottom: 8px;
     }
-
-
 /* #endregion */
 
 /* #region Editor */
-/* The Player Takes The Height Left, The Clip Sits Centred At Its Own Shape */
+/* The Player Takes The Height Left, The Clip Centred */
 .player {
     display: flex;
     align-items: center;
@@ -555,7 +543,7 @@ html, body {
     min-height: 220px;
 }
 
-    /* The Clip Lifts Off The Panel On The Theme Shadow, No Frame */
+    /* The Clip Lifts On The Theme Shadow, No Frame */
     .player video {
         display: block;
         max-width: 100%;
@@ -565,7 +553,7 @@ html, body {
         background-color: var(--mud-palette-black);
     }
 
-/* The Timeline: Thumbnails In A Track, Each Handle Outside The Part Kept */
+/* Thumbnails In A Track, Handles Outside The Kept Part */
 .timeline {
     --handle-width: 14px;
     height: 64px;
@@ -609,7 +597,7 @@ html, body {
     pointer-events: none;
 }
 
-/* The Inner Edge Of Each Handle Is The Time, So Handles Never Meet */
+/* Each Handle's Inner Edge Is The Time */
 .timeline-handle {
     position: absolute;
     top: 0;
@@ -628,21 +616,23 @@ html, body {
         border-radius: 0 var(--radius-thumb) var(--radius-thumb) 0;
     }
 
+    /* Centred By Layout, So The Line Snaps To Pixels */
     .timeline-handle::after {
         content: "";
         position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 2px;
+        inset: 0;
+        width: 3px;
         height: 18px;
-        transform: translate(-50%, -50%);
-        border-radius: 1px;
+        margin: auto;
+        border-radius: 1.5px;
         background-color: var(--mud-palette-white);
         opacity: 0.8;
     }
 
+/* The Playhead Draws Over The Handles */
 .timeline-playhead {
     position: absolute;
+    z-index: 1;
     top: 0;
     bottom: 0;
     width: 2px;
@@ -664,8 +654,56 @@ html, body {
     font-variant-numeric: tabular-nums;
 }
 
+/* A Quieter Second Line Inside A Button */
+.button-hint {
+    line-height: 1.2;
+    opacity: 0.7;
+}
 
-/* The Exported File Drags From Here Into Discord */
+/* Forward Is The Replay Arrow Turned Round */
+.mirror svg {
+    transform: scaleX(-1);
+}
+
+/* The Volume Slider Rises Above Its Button While Hovered */
+.volume {
+    position: relative;
+    display: flex;
+}
+
+/* Its Padding Bridges The Gap, Hover Stays */
+.volume-pop {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    z-index: 10;
+    display: none;
+    padding-bottom: 8px;
+    transform: translateX(-50%);
+}
+
+    .volume:is(:hover, :focus-within) .volume-pop {
+        display: block;
+    }
+
+/* The 16 Px Thumb Keeps 10 Px Clear */
+.volume-paper {
+    position: relative;
+    width: 36px;
+    height: 120px;
+}
+
+    /* MudBlazor Only Rotates The Slider, So Centre It Here */
+    .volume-paper .mud-slider {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 100px;
+        height: auto;
+        translate: -50% -50%;
+    }
+
+/* The Exported File Drags From Here Into Another App */
 .drag-handle {
     cursor: grab;
 }

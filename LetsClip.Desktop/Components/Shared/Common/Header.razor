@@ -1,29 +1,15 @@
-<MudStack Spacing="2"
-          Class="@Class">
-    @if (!string.IsNullOrWhiteSpace(Title))
-    {
-        @* Header *@
-        <MudStack Row
-                  AlignItems="AlignItems.Center"
-                  Spacing="1"
-                  Class="header-row">
-            @if (Icon is not null)
-            {
-                <MudIcon Icon="@Icon"
-                         Color="Color.Tertiary"
-                         Class="ml-2 mr-1" />
-            }
-            <MudText Typo="Typo.h5"
-                     Class="@(Icon is null ? "header-title mx-2" : "header-title mr-2")">
-                @Title
-            </MudText>
-            @if (Info is not null)
-            {
-                <InfoIcon Text="@Info" />
-            }
-            @TitleContent
-        </MudStack>
-    }
+<MudStack Spacing="2">
+    @* Header *@
+    <MudStack Row
+              AlignItems="AlignItems.Center"
+              Spacing="1"
+              Class="header-row">
+        <MudText Typo="Typo.h5"
+                 Class="header-title mx-2">
+            @Title
+        </MudText>
+        @TitleContent
+    </MudStack>
 
     @ChildContent
 </MudStack>

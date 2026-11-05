@@ -135,7 +135,7 @@ public partial class UpdateDialog
 
     private void OpenReleasePage()
     {
-        Explorer.OpenLink(AppInfo.LatestReleaseUrl);
+        Explorer.Open(AppInfo.LatestReleaseUrl);
         MudDialog.Close();
     }
 }

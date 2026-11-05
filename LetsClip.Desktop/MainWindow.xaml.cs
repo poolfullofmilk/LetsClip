@@ -74,8 +74,15 @@ public partial class MainWindow : Window
         _trayIcon.BalloonTipClicked += (_, _) => OpenLastClip();
 
         controller.Recorder.StatusChanged += () => Dispatcher.InvokeAsync(UpdateTray);
+        controller.Recorder.SaveStarted += PlaySaveChime;
         controller.Recorder.ClipSaved += clip => Dispatcher.InvokeAsync(() => NotifySaved(clip));
-        controller.Changed += () => Dispatcher.InvokeAsync(MapClipsFolder);
+        controller.Changed += () =>
+            Dispatcher.InvokeAsync(() =>
+            {
+                // Turning Buffering Off While Stopped Changes Only The Tray's Words
+                MapClipsFolder();
+                UpdateTray();
+            });
         UpdateTray();
     }
 
@@ -92,8 +99,21 @@ public partial class MainWindow : Window
                     CaptureHolds.DisplayOff,
                     "Stopped because the display turned off, history was cleared"
                 );
-        _shell.Attach(_messages, _controller.Settings.ClipsDirectory);
-        _shell.ApplyHotkey(Hotkey.Parse(_controller.Settings.Hotkey) ?? Hotkey.Default);
+        _shell.Attach(_messages);
+
+        // A Tray Start Shows No Panel, So Say It Here
+        if (
+            !_shell.ApplyHotkey(Hotkey.Parse(_controller.Settings.Hotkey) ?? Hotkey.Default)
+            && _shell.HotkeyProblem is { } problem
+        )
+        {
+            _trayIcon.ShowBalloonTip(
+                BalloonMilliseconds,
+                "Save Hotkey Taken",
+                problem,
+                Forms.ToolTipIcon.Warning
+            );
+        }
     }
 
     public void ShowFromTray()
@@ -114,10 +134,10 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Capture Really Stops, A Running Save Finishes, Saved Clips Stay
+        // Capture Stops, A Running Save Finishes, The Switch Stays
         _isExiting = true;
         Hide();
-        await _controller.StopAsync();
+        await _controller.HoldAsync(CaptureHolds.Exiting, "Stopped because LetsClip is closing");
         await _controller.Recorder.WaitForSavesAsync(TimeSpan.FromSeconds(15));
         ExitNow();
     }
@@ -135,7 +155,7 @@ public partial class MainWindow : Window
     private async Task SaveFromHotkeyAsync()
     {
         // The Hotkey Never Steals Focus, Only Failures Speak Here
-        var outcome = await _controller.SaveAsync();
+        var outcome = await Task.Run(_controller.Recorder.SaveAsync);
         if (outcome.Error is { } error)
         {
             await Dispatcher.InvokeAsync(() =>
@@ -152,13 +172,6 @@ public partial class MainWindow : Window
     private void NotifySaved(ClipInfo clip)
     {
         _lastSavedClip = clip.Path;
-
-        // A Soft Chime, Muted Out Of The Next Clip
-        if (_controller.Settings.SaveSound)
-        {
-            SaveChime.Play(_controller.Recorder);
-        }
-
         TrayBalloon.ShowQuiet(
             _trayIcon,
             BalloonMilliseconds,
@@ -167,12 +180,31 @@ public partial class MainWindow : Window
         );
     }
 
+    private void PlaySaveChime()
+    {
+        // A Soft Chime At The Press, Muted Out Of Clips
+        if (_controller.Settings.SaveSound)
+        {
+            SaveChime.Play(_controller.Recorder);
+        }
+    }
+
     private void OpenLastClip()
     {
         ShowFromTray();
-        if (_lastSavedClip is { } path)
+        if (_lastSavedClip is not { } path)
+        {
+            return;
+        }
+
+        // A Clip Saved Elsewhere Shows In Explorer Instead
+        if (FilePaths.AreSame(Path.GetDirectoryName(path), _controller.Library.Folder))
         {
             _shell.RequestOpenClip(path);
+        }
+        else
+        {
+            Explorer.ShowFile(path);
         }
     }
 
@@ -183,8 +215,7 @@ public partial class MainWindow : Window
         var open = new TrayMenuItem("Open LetsClip");
         var save = new TrayMenuItem($"Save Last {seconds} Seconds", status.IsBuffering);
         var toggle = new TrayMenuItem(
-            _controller.IsPaused ? "Resume Buffering" : "Pause Buffering",
-            _controller.Settings.HasSeenCaptureNotice
+            _controller.Settings.Buffering ? "Turn Buffering Off" : "Turn Buffering On"
         );
         var exit = new TrayMenuItem("Exit");
         var picked = TrayMenu.Show(
@@ -205,7 +236,8 @@ public partial class MainWindow : Window
         }
         else if (picked == toggle)
         {
-            _ = ToggleBufferingAsync();
+            // The Same Saved Switch As Settings
+            _controller.SetBuffering(!_controller.Settings.Buffering);
         }
         else if (picked == exit)
         {
@@ -213,36 +245,18 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task ToggleBufferingAsync()
-    {
-        // The Tray Pauses And Resumes, Buffering Runs By Itself
-        if (_controller.IsPaused)
-        {
-            await _controller.StartAsync();
-        }
-        else
-        {
-            await _controller.StopAsync();
-        }
-    }
-
     private void UpdateTray()
     {
+        // The Same Words As The Chip
         var status = _controller.Recorder.Status;
-        _trayIcon.Icon = status.State switch
-        {
-            CaptureState.Buffering or CaptureState.Starting => _bufferingIcon,
-            CaptureState.Error => _problemIcon,
-            _ => _plainIcon,
-        };
-        var text = status.State switch
-        {
-            CaptureState.Buffering => $"{AppInfo.DisplayName}, {_controller.BufferingText}",
-            CaptureState.Starting => $"{AppInfo.DisplayName}, Starting",
-            CaptureState.Stopping => $"{AppInfo.DisplayName}, Stopping",
-            CaptureState.Error => $"{AppInfo.DisplayName}, Error, {status.Message}",
-            _ => $"{AppInfo.DisplayName}, {_controller.IdleText}",
-        };
+        _trayIcon.Icon =
+            status.State == CaptureState.Error ? _problemIcon
+            : _controller.ShowsBuffering ? _bufferingIcon
+            : _plainIcon;
+        var text =
+            status.State == CaptureState.Error
+                ? $"{AppInfo.DisplayName}, Error, {status.Message}"
+                : $"{AppInfo.DisplayName}, {_controller.StatusText}";
         _trayIcon.Text = text.Length > 127 ? text[..127] : text;
     }
 
@@ -290,11 +304,7 @@ public partial class MainWindow : Window
     {
         // Only The Clips Folder Is Reachable, Streamed With Range Requests
         var folder = _controller.Settings.ClipsDirectory;
-        _shell.SetClipsFolder(folder);
-        if (
-            _browser is null
-            || string.Equals(folder, _mappedClipsFolder, StringComparison.OrdinalIgnoreCase)
-        )
+        if (_browser is null || FilePaths.AreSame(folder, _mappedClipsFolder))
         {
             return;
         }

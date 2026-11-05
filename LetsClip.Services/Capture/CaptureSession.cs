@@ -65,8 +65,11 @@ public sealed class CaptureSession(
 
     public Task Ended => Audio is null ? Video!.Exited : Task.WhenAny(Video!.Exited, Audio.Exited);
 
-    public double NewestEnd =>
-        Math.Min(Video?.Segments.NewestEnd ?? 0, Audio?.Segments.NewestEnd ?? double.MaxValue);
+    public double VideoEnd => Video?.Segments.NewestEnd ?? 0;
+
+    public double AudioEnd => Audio?.Segments.NewestEnd ?? double.MaxValue;
+
+    public double NewestEnd => Math.Min(VideoEnd, AudioEnd);
 
     public double MediaNow()
     {
@@ -125,6 +128,15 @@ public sealed class CaptureSession(
         return Audio?.Segments.Covering(from, to) ?? [];
     }
 
+    public Segment? OpenVideoSegment()
+    {
+        // A Still Window's Segment Never Closes, Read It Open
+        var path = Directory.EnumerateFiles(Folder, "seg_*.ts").MaxBy(file => (file.Length, file));
+        return path is not null && new FileInfo(path).Length > 0
+            ? new Segment(path, VideoEnd, double.MaxValue, 0)
+            : null;
+    }
+
     public IDisposable Pin(double from)
     {
         lock (_pinGate)
@@ -181,27 +193,48 @@ public sealed class CaptureSession(
             CultureInfo.InvariantCulture,
             $"if(eq(N,0),st(0,(RTCTIME-{baseMicroseconds})/1000000/TB-PTS));PTS+ld(0)"
         );
-        var chain = new List<string>
+        var scaledWidth = rotated ? height : width;
+        var scaledHeight = rotated ? width : height;
+        var chain = new List<string> { source, $"setpts='{clock}'" };
+        if (Encoder.GpuFrames)
         {
-            source,
-            $"setpts='{clock}'",
-            "hwdownload",
-            "format=bgra",
-            string.Create(
-                CultureInfo.InvariantCulture,
-                $"scale={(rotated ? height : width)}:{(rotated ? width : height)}:flags=bilinear:out_color_matrix=bt709:out_range=tv"
-            ),
-            "format=nv12",
-        };
-        chain.AddRange(
-            rotation switch
+            // Quick Sync Turns, Sizes And Converts On The GPU
+            var turn = rotation switch
             {
-                90 => ["transpose=clock"],
-                270 => ["transpose=cclock"],
-                180 => ["hflip", "vflip"],
-                _ => [],
-            }
-        );
+                90 => ":transpose=clock",
+                270 => ":transpose=cclock",
+                180 => ":transpose=reversal",
+                _ => "",
+            };
+            chain.AddRange([
+                "hwmap=derive_device=qsv",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"vpp_qsv=w={scaledWidth}:h={scaledHeight}{turn}:format=nv12:out_range=tv:out_color_matrix=bt709:out_color_primaries=bt709:out_color_transfer=bt709"
+                ),
+            ]);
+        }
+        else
+        {
+            chain.AddRange([
+                "hwdownload",
+                "format=bgra",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"scale={scaledWidth}:{scaledHeight}:flags=bilinear:out_color_matrix=bt709:out_range=tv"
+                ),
+                "format=nv12",
+            ]);
+            chain.AddRange(
+                rotation switch
+                {
+                    90 => ["transpose=clock"],
+                    270 => ["transpose=cclock"],
+                    180 => ["hflip", "vflip"],
+                    _ => [],
+                }
+            );
+        }
 
         return
         [
@@ -245,7 +278,7 @@ public sealed class CaptureSession(
             // Encoders Skip The Colour Description, Written Into The Bitstream
             "-bsf:v",
             "h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1:video_full_range_flag=0",
-            .. SegmentArguments("seg"),
+            .. SegmentArguments("seg", flushPackets: isWindow),
         ];
     }
 
@@ -267,19 +300,20 @@ public sealed class CaptureSession(
             AudioMixer.Channels.ToString(CultureInfo.InvariantCulture),
             "-ch_layout",
             "stereo",
-            "-itsoffset",
-            LeadSeconds.ToString(CultureInfo.InvariantCulture),
             "-i",
             "pipe:0",
             "-c:a",
             "aac",
             "-b:a",
             "128k",
+            // Sample Zero Is Media Time One, Shifted On The Output
+            "-output_ts_offset",
+            LeadSeconds.ToString(CultureInfo.InvariantCulture),
             .. SegmentArguments("aud"),
         ];
     }
 
-    private static List<string> SegmentArguments(string prefix)
+    private static List<string> SegmentArguments(string prefix, bool flushPackets = false)
     {
         // Media Clock Timestamps, Each Finished File Listed On Standard Output
         return
@@ -292,7 +326,7 @@ public sealed class CaptureSession(
             "-segment_format",
             "mpegts",
             "-segment_format_options",
-            "mpegts_copyts=1",
+            flushPackets ? "mpegts_copyts=1:flush_packets=1" : "mpegts_copyts=1",
             "-segment_list",
             "pipe:1",
             "-segment_list_type",
@@ -354,7 +388,6 @@ public sealed class CaptureSession(
 
     public sealed class SegmentProcess
     {
-        private readonly Queue<string> _errors = new();
         private readonly TaskCompletionSource _firstSegment = new(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
@@ -364,6 +397,7 @@ public sealed class CaptureSession(
         private readonly string _name;
         private readonly string _folder;
         private readonly Action<SegmentProcess, Segment> _added;
+        private readonly Task _readers;
         private long _lastSegmentTimestamp = Stopwatch.GetTimestamp();
         private long _lastFrames;
         private long _lastFrameTimestamp;
@@ -391,8 +425,7 @@ public sealed class CaptureSession(
                 // Normal Priority Still Records, Only With Less Headroom
             }
 
-            _ = ReadSegmentsAsync();
-            _ = ReadErrorsAsync();
+            _readers = Task.WhenAll(ReadSegmentsAsync(), ReadErrorsAsync());
             _ = WaitForExitAsync();
         }
 
@@ -406,7 +439,7 @@ public sealed class CaptureSession(
 
         public bool HasExited => _exited.Task.IsCompleted;
 
-        public int? ExitCode => HasExited ? Process.ExitCode : null;
+        public int? ExitCode { get; private set; }
 
         public double? FramesPerSecond { get; private set; }
 
@@ -415,21 +448,16 @@ public sealed class CaptureSession(
         public TimeSpan SinceLastSegment =>
             Stopwatch.GetElapsedTime(Interlocked.Read(ref _lastSegmentTimestamp));
 
-        public string? LastError
-        {
-            get
-            {
-                lock (_errors)
-                {
-                    return _errors.LastOrDefault();
-                }
-            }
-        }
+        public string? LastError { get; private set; }
 
         public void Stop()
         {
+            // The Exit Code Is Read And Pipes Drain Before Disposal
             FFmpeg.Kill(Process);
-            Process.WaitForExit(5000);
+            if (_exited.Task.Wait(5000) && _readers.Wait(2000))
+            {
+                Process.Dispose();
+            }
         }
 
         private async Task ReadSegmentsAsync()
@@ -503,15 +531,7 @@ public sealed class CaptureSession(
                         return;
                     }
 
-                    lock (_errors)
-                    {
-                        _errors.Enqueue(CleanError(line));
-                        if (_errors.Count > 20)
-                        {
-                            _errors.Dequeue();
-                        }
-                    }
-
+                    LastError = CleanError(line);
                     s_logger.Info($"FFmpeg {_name} {line}");
                 }
             );
@@ -538,8 +558,16 @@ public sealed class CaptureSession(
 
         private async Task WaitForExitAsync()
         {
-            await Process.WaitForExitAsync();
-            _exited.TrySetResult();
+            // Exited Always Completes, Whoever Waits On The Session Never Hangs
+            try
+            {
+                await Process.WaitForExitAsync();
+                ExitCode = Process.ExitCode;
+            }
+            finally
+            {
+                _exited.TrySetResult();
+            }
         }
 
         private static string CleanError(string line)

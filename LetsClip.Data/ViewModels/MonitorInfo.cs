@@ -15,5 +15,5 @@ public sealed record MonitorInfo(
     int OutputIndex
 )
 {
-    public string Label => $"{FriendlyName} ({Width} × {Height})";
+    public string Label => $"{FriendlyName}: {Width} × {Height}";
 }

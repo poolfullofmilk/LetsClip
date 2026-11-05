@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using LetsClip.Data.Enums;
 using LetsClip.Data.Helpers;
@@ -11,7 +12,7 @@ public sealed record CaptureOptions(
     MonitorInfo Monitor,
     int Seconds,
     int FrameRate,
-    bool FullResolution,
+    int Resolution,
     CaptureQuality Quality,
     string? SystemAudioId,
     string? MicrophoneId,
@@ -38,6 +39,10 @@ public sealed class ReplayRecorder : IDisposable
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
     private static readonly TimeSpan s_startTimeout = TimeSpan.FromSeconds(12);
     private static readonly TimeSpan s_stallTimeout = TimeSpan.FromSeconds(8);
+    private static readonly TimeSpan s_healthPeriod = TimeSpan.FromSeconds(1);
+
+    // A Moving Window Closes Its Segment Within This
+    private static readonly TimeSpan s_windowWait = TimeSpan.FromSeconds(1.5);
 
     // A Session That Ran This Long Restarts When It Drops
     private static readonly TimeSpan s_restartAfter = TimeSpan.FromSeconds(30);
@@ -55,15 +60,19 @@ public sealed class ReplayRecorder : IDisposable
     {
         _library = library;
         Status = CaptureStatus.Idle;
+        // The Health Check Only Ticks While A Session Runs
         _health = new Timer(
             _ => CheckHealth(),
             null,
-            TimeSpan.FromSeconds(1),
-            TimeSpan.FromSeconds(1)
+            Timeout.InfiniteTimeSpan,
+            Timeout.InfiniteTimeSpan
         );
     }
 
     public event Action? StatusChanged;
+
+    // Raised The Moment A Save Is Accepted, Before Any Waiting
+    public event Action? SaveStarted;
 
     public event Action<ClipInfo>? ClipSaved;
 
@@ -102,12 +111,17 @@ public sealed class ReplayRecorder : IDisposable
 
             _ = WatchEndAsync(session);
             UpdateStatus(session, CaptureState.Buffering);
-            s_logger.Info($"Started Buffering {session.Options.Label} With {session.Encoder.Name}");
+            _health.Change(s_healthPeriod, s_healthPeriod);
+            s_logger.Info(
+                $"Started Buffering {session.Options.Label} With {session.Encoder.Name}{(session.Encoder.GpuFrames ? " On The GPU" : "")}"
+            );
         }
-        catch (CaptureException exception)
+        catch (Exception exception) when (IsStartFailure(exception))
         {
-            SetStatus(Status with { State = CaptureState.Error, Message = exception.Message });
-            s_logger.Warn($"Failed To Start Buffering, {exception.Message}");
+            // Any Failed Start Shows As An Error
+            var message = exception.Message.TrimEnd('.');
+            SetStatus(Status with { State = CaptureState.Error, Message = message });
+            s_logger.Warn($"Failed To Start Buffering {exception.GetType().Name}, {message}");
         }
         finally
         {
@@ -143,6 +157,8 @@ public sealed class ReplayRecorder : IDisposable
             {
                 _session = null;
             }
+
+            _health.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
 
             SetStatus(
                 Status with
@@ -210,7 +226,7 @@ public sealed class ReplayRecorder : IDisposable
             throw new CaptureException("Less than 2 GB free for the replay cache");
         }
 
-        var (width, height) = OutputSize(monitor, options.FullResolution);
+        var (width, height) = OutputSize(monitor, options.Resolution);
         var skipped = new List<string>();
         foreach (var encoder in VideoEncoders.Candidates(MonitorCatalog.AdapterVendors()))
         {
@@ -224,7 +240,11 @@ public sealed class ReplayRecorder : IDisposable
                 )
             )
             {
-                skipped.Add($"{encoder.Name} Unavailable");
+                if (!encoder.GpuFrames)
+                {
+                    skipped.Add($"{encoder.Name} Unavailable");
+                }
+
                 continue;
             }
 
@@ -247,10 +267,17 @@ public sealed class ReplayRecorder : IDisposable
 
                 return session;
             }
-            catch (CaptureException exception)
+            catch (Exception exception) when (IsStartFailure(exception))
             {
-                skipped.Add($"{encoder.Name} Failed");
-                s_logger.Warn($"Failed To Capture With {encoder.Name}, {exception.Message}");
+                // A GPU Route Falling Back Is No News
+                if (!encoder.GpuFrames)
+                {
+                    skipped.Add($"{encoder.Name} Failed");
+                }
+
+                s_logger.Warn(
+                    $"Failed To Capture With {encoder.Name}{(encoder.GpuFrames ? " On The GPU" : "")}, {exception.Message}"
+                );
                 session.Shutdown();
                 if (!encoder.IsHardware)
                 {
@@ -300,6 +327,7 @@ public sealed class ReplayRecorder : IDisposable
             }
 
             await Task.Run(session.Shutdown);
+            _health.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
             SetStatus(Status with { State = CaptureState.Error, Message = message });
             s_logger.Warn($"Stopped Buffering With An Error, {message}");
         }
@@ -320,9 +348,15 @@ public sealed class ReplayRecorder : IDisposable
         lock (_gate)
         {
             session = _session;
+            // A Press During A Restart Asks To Try Again
             if (session is null || Status.State != CaptureState.Buffering)
             {
-                return new SaveOutcome(null, "Start buffering first");
+                return new SaveOutcome(
+                    null,
+                    Status.State is CaptureState.Starting or CaptureState.Stopping
+                        ? "Capture is starting, try again in a moment"
+                        : "Start buffering first"
+                );
             }
 
             if (_saves >= MaximumSaves)
@@ -336,9 +370,11 @@ public sealed class ReplayRecorder : IDisposable
             pin = session.Pin(end - session.Options.Seconds - (CaptureSession.SegmentSeconds * 2));
         }
 
-        UpdateStatus(session, null);
         try
         {
+            // Inside The Try, A Failing Handler Never Leaks The Pin
+            UpdateStatus(session, null);
+            SaveStarted?.Invoke();
             await _saveTurn.WaitAsync();
             try
             {
@@ -360,15 +396,11 @@ public sealed class ReplayRecorder : IDisposable
                         or UnauthorizedAccessException
                         or InvalidDataException
                         or TimeoutException
+                        or Win32Exception
             )
         {
             s_logger.Warn($"Failed To Save A Clip {exception.GetType().Name}, {exception.Message}");
-            return new SaveOutcome(
-                null,
-                exception is UnauthorizedAccessException
-                    ? "Cannot write to the clips folder"
-                    : exception.Message
-            );
+            return new SaveOutcome(null, SaveErrorOf(exception));
         }
         finally
         {
@@ -388,30 +420,81 @@ public sealed class ReplayRecorder : IDisposable
         DateTimeOffset recordedAt
     )
     {
-        // The Segment Holding The Press Closes At The Next Keyframe
+        // Waits For The Press's Segment, A Still Window Sends None
+        var isWindow = session.Options.GameWindow != 0;
         var waited = Stopwatch.StartNew();
-        while (session.NewestEnd < end && !session.HasEnded && waited.Elapsed < s_stallTimeout)
+        while (
+            !session.HasEnded
+            && waited.Elapsed < s_stallTimeout
+            && (
+                session.AudioEnd < end
+                || (session.VideoEnd < end && !(isWindow && waited.Elapsed > s_windowWait))
+            )
+        )
         {
             await Task.Delay(100);
         }
 
         var from = end - session.Options.Seconds;
         var video = session.VideoCovering(from, end);
+        var to = Math.Min(end, session.NewestEnd);
+        var videoOffset = 0.0;
+        if (
+            isWindow
+            && session.VideoEnd < end
+            && session.OpenVideoSegment() is { } open
+            && video.All(segment => segment.Path != open.Path)
+        )
+        {
+            // Its Last Frame Holds To The Press As Sound Runs
+            videoOffset = Math.Max(0, from - open.Start);
+            video = [.. video, open];
+            to = Math.Min(end, session.AudioEnd);
+        }
+
         if (video.Count == 0)
         {
             throw new InvalidDataException("Nothing recorded yet");
         }
 
+        // Exactly The Replay Length, Or All Of A Younger Session
         return await ClipSaver.SaveAsync(
             video,
             session.AudioCovering(from, end),
-            Math.Min(end, session.NewestEnd),
+            Math.Max(from, CaptureSession.LeadSeconds),
+            to,
+            videoOffset,
             session.Folder,
-            _library.Folder,
             recordedAt,
-            _library,
-            CancellationToken.None
+            session.Options.FrameRate,
+            _library
         );
+    }
+
+    private static string SaveErrorOf(Exception exception)
+    {
+        // Plain Words, Never A Path Or An Error Code
+        return exception switch
+        {
+            UnauthorizedAccessException => "Cannot write to the clips folder",
+            DirectoryNotFoundException => "The clips folder is not available",
+            IOException => "The clip could not be written",
+            TimeoutException => "Saving took too long, try again",
+            Win32Exception => "FFmpeg could not start, reinstall LetsClip",
+            _ => exception.Message,
+        };
+    }
+
+    private static bool IsStartFailure(Exception exception)
+    {
+        // Slow Tests, Blocked FFmpeg Or Unwritable Cache Fail Starts Too
+        return exception
+            is CaptureException
+                or TimeoutException
+                or IOException
+                or UnauthorizedAccessException
+                or Win32Exception
+                or InvalidOperationException;
     }
     #endregion
 
@@ -473,12 +556,20 @@ public sealed class ReplayRecorder : IDisposable
                     ? $"Capturing at {measured:0} FPS, below {target}, pick a lower frame rate"
                     : $"Capturing at {measured:0} FPS, below {target}"
                 : null;
-            Status = new CaptureStatus(
+            var next = new CaptureStatus(
                 state ?? Status.State,
                 null,
                 _saves > 0,
                 session.Mixer?.Problem ?? slow ?? session.Warning
             );
+
+            // Only A Real Change Wakes The Tray And The Page
+            if (next == Status)
+            {
+                return;
+            }
+
+            Status = next;
         }
 
         StatusChanged?.Invoke();
@@ -488,31 +579,25 @@ public sealed class ReplayRecorder : IDisposable
     {
         lock (_gate)
         {
+            if (status == Status)
+            {
+                return;
+            }
+
             Status = status;
         }
 
         StatusChanged?.Invoke();
     }
-
     #endregion
 
     #region Sizing
-    public static (int Width, int Height) OutputSize(MonitorInfo monitor, bool fullResolution)
+    public static (int Width, int Height) OutputSize(MonitorInfo monitor, int resolution)
     {
-        if (fullResolution)
-        {
-            return (Even(monitor.Width), Even(monitor.Height));
-        }
-
-        // Fits Inside 1080p In The Monitor's Own Orientation, Never Upscaled
-        var portrait = monitor.Height > monitor.Width;
-        var boxWidth = portrait ? 1080 : 1920;
-        var boxHeight = portrait ? 1920 : 1080;
-        var scale = Math.Min(
-            1,
-            Math.Min(boxWidth / (double)monitor.Width, boxHeight / (double)monitor.Height)
-        );
-        return (Even(monitor.Width * scale), Even(monitor.Height * scale));
+        // A 16 By 9 Box, Or The Monitor's Own Size
+        return resolution >= Math.Min(monitor.Width, monitor.Height)
+            ? (Even(monitor.Width), Even(monitor.Height))
+            : ClipExporter.OutputSize(monitor.Width, monitor.Height, resolution);
     }
 
     private static int Even(double value)

@@ -5,13 +5,19 @@ using NLog;
 
 namespace LetsClip.Services.Media;
 
-public sealed record VideoEncoder(string Name, string Codec, bool IsHardware);
+public sealed record VideoEncoder(
+    string Name,
+    string Codec,
+    bool IsHardware,
+    bool GpuFrames = false
+);
 
 public static class VideoEncoders
 {
     public static readonly VideoEncoder Amf = new("AMD AMF", "h264_amf", true);
     public static readonly VideoEncoder Nvenc = new("NVIDIA NVENC", "h264_nvenc", true);
     public static readonly VideoEncoder QuickSync = new("Intel Quick Sync", "h264_qsv", true);
+    public static readonly VideoEncoder QuickSyncGpu = QuickSync with { GpuFrames = true };
     public static readonly VideoEncoder Software = new("x264 on the CPU", "libx264", false);
 
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
@@ -23,17 +29,15 @@ public static class VideoEncoders
         var candidates = new List<VideoEncoder>();
         foreach (var vendor in adapterVendors)
         {
-            var encoder = vendor switch
+            // Quick Sync Converts On The GPU First, CPU Second
+            VideoEncoder[] encoders = vendor switch
             {
-                0x1002 => Amf,
-                0x10DE => Nvenc,
-                0x8086 => QuickSync,
-                _ => null,
+                0x1002 => [Amf],
+                0x10DE => [Nvenc],
+                0x8086 => [QuickSyncGpu, QuickSync],
+                _ => [],
             };
-            if (encoder is not null && !candidates.Contains(encoder))
-            {
-                candidates.Add(encoder);
-            }
+            candidates.AddRange(encoders.Where(encoder => !candidates.Contains(encoder)));
         }
 
         candidates.Add(Software);
@@ -63,8 +67,9 @@ public static class VideoEncoders
 
     private static double LoadOf(int width, int height, int frameRate)
     {
-        // Rates Grow Gently With Pixels Per Second Past 1080p60
-        return Math.Sqrt(Math.Max(1, width * (double)height * frameRate / (1920.0 * 1080 * 60)));
+        // Rates Grow Gently Past 1080p60, Small Frames Start Lower
+        var frame = width * (double)height / (1920.0 * 1080);
+        return Math.Sqrt(Math.Max(Math.Min(1, frame), frame * frameRate / 60));
     }
 
     private static string Megabits(double megabits)
@@ -142,6 +147,9 @@ public static class VideoEncoders
                 level,
                 "-look_ahead",
                 "0",
+                // Forced Keyframes Become IDR, So Window Segments Split
+                "-forced_idr",
+                "1",
             ],
             _ =>
             [
@@ -204,7 +212,12 @@ public static class VideoEncoders
             s_logger.Info($"Skipped {encoder.Name}, {result.LastError}");
         }
 
-        s_tested[key] = result.Succeeded;
+        // Only A Pass Is Remembered, Failures Get Tested Again
+        if (result.Succeeded)
+        {
+            s_tested[key] = true;
+        }
+
         return result.Succeeded;
     }
 }

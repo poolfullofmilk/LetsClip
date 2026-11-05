@@ -22,16 +22,19 @@ public static partial class CacheFolders
         return folder;
     }
 
-    public static void DeleteLeftovers(string? keep)
+    public static void DeleteLeftovers()
     {
         if (!Directory.Exists(AppInfo.CacheDirectory))
         {
             return;
         }
 
+        // Only Folders From Before This Start, One May Be Writing
+        using var self = Process.GetCurrentProcess();
+        var started = self.StartTime.ToUniversalTime();
         foreach (var folder in Directory.EnumerateDirectories(AppInfo.CacheDirectory))
         {
-            if (!string.Equals(folder, keep, StringComparison.OrdinalIgnoreCase))
+            if (Directory.GetCreationTimeUtc(folder) < started)
             {
                 Delete(folder);
             }
@@ -77,9 +80,8 @@ public static partial class CacheFolders
 
     public static bool IsOwnedFolder(string folder, string cacheRoot)
     {
-        var full = Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar);
-        var root = Path.GetFullPath(cacheRoot).TrimEnd(Path.DirectorySeparatorChar);
-        return string.Equals(Path.GetDirectoryName(full), root, StringComparison.OrdinalIgnoreCase)
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
+        return FilePaths.AreSame(Path.GetDirectoryName(full), cacheRoot)
             && Guid.TryParseExact(Path.GetFileName(full), "N", out _);
     }
 
@@ -88,7 +90,8 @@ public static partial class CacheFolders
         return OwnedFileName().IsMatch(name);
     }
 
-    [GeneratedRegex(@"^((seg|aud)_\d{6}\.ts|export-pass(-\d+)?\.log(\.mbtree)?(\.temp)?)$")]
+    // Six Digits Or More, Past A Million Segments Too
+    [GeneratedRegex(@"^((seg|aud)_\d{6,}\.ts|export-pass(-\d+)?\.log(\.mbtree)?(\.temp)?)$")]
     private static partial Regex OwnedFileName();
 
     private static bool SelfTestPasses()
@@ -103,6 +106,8 @@ public static partial class CacheFolders
             && !IsOwnedFolder(Path.Combine(root, Guid.NewGuid().ToString("N"), "Inner"), root)
             && IsOwnedFile("seg_000123.ts")
             && IsOwnedFile("aud_000001.ts")
+            && IsOwnedFile("seg_1000000.ts")
+            && !IsOwnedFile("seg_12345.ts")
             && IsOwnedFile("export-pass-0.log.mbtree")
             && !IsOwnedFile("clip.mp4")
             && !IsOwnedFile("seg_1.ts.mp4");

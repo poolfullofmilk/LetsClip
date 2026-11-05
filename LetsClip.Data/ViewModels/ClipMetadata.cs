@@ -6,5 +6,6 @@ public sealed record ClipMetadata(
     double? TrimStart,
     double? TrimEnd,
     long FileSize,
-    DateTime FileWriteTimeUtc
+    DateTime FileWriteTimeUtc,
+    int? FrameRate = null
 );

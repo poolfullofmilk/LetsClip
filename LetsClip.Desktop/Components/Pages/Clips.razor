@@ -67,7 +67,7 @@
                               Class="rounded-panel">
                         <EmptyState Icon="@Icons.Material.Rounded.VideoLibrary"
                                     Color="Color.Default"
-                                    Text="@EmptyText" />
+                                    Text="No Clips" />
                     </MudPaper>
                 }
                 else
@@ -124,12 +124,14 @@
                                         @* Delete Button *@
                                         <MudElement HtmlTag="span"
                                                     ClickPropagation="false">
-                                            <MudIconButton Icon="@Icons.Material.Rounded.Delete"
-                                                           aria-label="Delete Clip"
-                                                           title="Delete Clip"
-                                                           Color="Color.Error"
-                                                           Size="Size.Small"
-                                                           OnClick="() => DeleteAsync(clip)" />
+                                            <Tooltip Text="Delete Clip"
+                                                     RootClass="d-flex">
+                                                <MudIconButton Icon="@Icons.Material.Rounded.Delete"
+                                                               aria-label="Delete Clip"
+                                                               Color="Color.Error"
+                                                               Size="Size.Small"
+                                                               OnClick="() => DeleteAsync(clip)" />
+                                            </Tooltip>
                                         </MudElement>
                                     </MudStack>
                                 </MudPaper>

@@ -28,12 +28,18 @@ public sealed class ClipLibrary : IDisposable
 
     private readonly SemaphoreSlim _probing = new(4, 4);
     private FileSystemWatcher? _watcher;
-    private Timer? _changeTimer;
+    private readonly Timer _changeTimer;
     private int _filling;
 
     public ClipLibrary(string folder)
     {
         Folder = folder;
+        _changeTimer = new Timer(
+            _ => Changed?.Invoke(),
+            null,
+            Timeout.InfiniteTimeSpan,
+            Timeout.InfiniteTimeSpan
+        );
         Watch();
     }
 
@@ -43,7 +49,7 @@ public sealed class ClipLibrary : IDisposable
 
     public void SetFolder(string folder)
     {
-        if (string.Equals(folder, Folder, StringComparison.OrdinalIgnoreCase))
+        if (FilePaths.AreSame(folder, Folder))
         {
             return;
         }
@@ -153,11 +159,6 @@ public sealed class ClipLibrary : IDisposable
         return file.Exists ? ReadMetadata(file) : null;
     }
 
-    public static void Register(string path, ClipMetadata metadata)
-    {
-        WriteMetadata(path, metadata);
-    }
-
     public static void SaveTrim(string path, TrimRange? range)
     {
         if (MetadataOf(path) is { } metadata)
@@ -166,78 +167,31 @@ public sealed class ClipLibrary : IDisposable
         }
     }
 
-    public static async Task<string?> EnsureThumbnailAsync(
+    public static Task<string?> EnsureThumbnailAsync(
         string path,
         double at,
         CancellationToken token
     )
     {
-        var thumbnail = ThumbnailPathOf(path);
-        if (File.Exists(thumbnail))
-        {
-            return thumbnail;
-        }
-
-        Directory.CreateDirectory(AppInfo.ThumbnailsDirectory);
-        var temporary = thumbnail + ".tmp.jpg";
-        var result = await FFmpeg.RunAsync(
-            FFmpeg.FFmpegPath,
-            [
-                "-hide_banner",
-                "-nostdin",
-                "-loglevel",
-                "error",
-                "-y",
-                "-ss",
-                Seconds(at),
-                "-i",
-                path,
-                "-frames:v",
-                "1",
-                "-vf",
-                "scale=480:-2",
-                "-q:v",
-                "4",
-                temporary,
-            ],
+        return RenderAsync(
+            ThumbnailPathOf(path),
+            ["-ss", Seconds(at), "-i", path, "-frames:v", "1", "-vf", "scale=480:-2", "-q:v", "4"],
             TimeSpan.FromSeconds(30),
             token
         );
-        if (!result.Succeeded || !File.Exists(temporary))
-        {
-            TryDelete(temporary);
-            return null;
-        }
-
-        File.Move(temporary, thumbnail, overwrite: true);
-        return thumbnail;
     }
 
-    public static async Task<string?> EnsureStripAsync(
+    public static Task<string?> EnsureStripAsync(
         string path,
         double duration,
         CancellationToken token
     )
     {
-        // Twelve Frames Across The Clip, One Picture For The Timeline
-        var strip = Path.ChangeExtension(ThumbnailPathOf(path), ".strip.jpg");
-        if (File.Exists(strip))
-        {
-            return strip;
-        }
-
-        Directory.CreateDirectory(AppInfo.ThumbnailsDirectory);
-        var temporary = strip + ".tmp.jpg";
-        // Keyframes Only, So The Last Second Fills No Tile
+        // Twelve Keyframes Across The Clip, The Last Second Skipped
         var rate = Seconds(12 / Math.Max(duration - 1, 0.5));
-        var result = await FFmpeg.RunAsync(
-            FFmpeg.FFmpegPath,
+        return RenderAsync(
+            StripPathOf(path),
             [
-                "-hide_banner",
-                "-nostdin",
-                "-loglevel",
-                "error",
-                "-y",
                 "-skip_frame",
                 "nokey",
                 "-i",
@@ -251,9 +205,31 @@ public sealed class ClipLibrary : IDisposable
                 "passthrough",
                 "-q:v",
                 "5",
-                temporary,
             ],
             TimeSpan.FromSeconds(60),
+            token
+        );
+    }
+
+    private static async Task<string?> RenderAsync(
+        string target,
+        IReadOnlyList<string> arguments,
+        TimeSpan timeout,
+        CancellationToken token
+    )
+    {
+        if (File.Exists(target))
+        {
+            return target;
+        }
+
+        // Each Run Writes Its Own Temporary File
+        Directory.CreateDirectory(AppInfo.ThumbnailsDirectory);
+        var temporary = $"{target}.{Guid.NewGuid():N}.tmp.jpg";
+        var result = await FFmpeg.RunAsync(
+            FFmpeg.FFmpegPath,
+            ["-hide_banner", "-nostdin", "-loglevel", "error", "-y", .. arguments, temporary],
+            timeout,
             token
         );
         if (!result.Succeeded || !File.Exists(temporary))
@@ -262,13 +238,26 @@ public sealed class ClipLibrary : IDisposable
             return null;
         }
 
-        File.Move(temporary, strip, overwrite: true);
-        return strip;
+        File.Move(temporary, target, overwrite: true);
+        return target;
     }
 
     public static string ThumbnailPathOf(string path)
     {
         return Path.Combine(AppInfo.ThumbnailsDirectory, KeyOf(path) + ".jpg");
+    }
+
+    private static string StripPathOf(string path)
+    {
+        return Path.ChangeExtension(ThumbnailPathOf(path), ".strip.jpg");
+    }
+
+    private static void Forget(string path)
+    {
+        // A Deleted Clip Takes Its Pictures And Metadata With It
+        TryDelete(ThumbnailPathOf(path));
+        TryDelete(StripPathOf(path));
+        TryDelete(MetadataPathOf(path));
     }
 
     private async Task<ClipMetadata?> ProbeMetadataAsync(FileInfo file, CancellationToken token)
@@ -327,7 +316,7 @@ public sealed class ClipLibrary : IDisposable
         }
     }
 
-    private static void WriteMetadata(string path, ClipMetadata metadata)
+    public static void WriteMetadata(string path, ClipMetadata metadata)
     {
         try
         {
@@ -382,48 +371,48 @@ public sealed class ClipLibrary : IDisposable
     {
         _watcher?.Dispose();
         _watcher = null;
-        if (!Directory.Exists(Folder))
-        {
-            return;
-        }
-
         try
         {
-            // Clips Moved Or Deleted In Explorer Refresh The Library
+            // A First Run Has No Clips Folder Yet
+            Directory.CreateDirectory(Folder);
+
+            // Explorer Changes Refresh The Library, Temporary Saves Do Not
             var watcher = new FileSystemWatcher(Folder, "*.mp4")
             {
                 NotifyFilter =
                     NotifyFilters.FileName | NotifyFilters.Size | NotifyFilters.LastWrite,
             };
-            watcher.Created += (_, _) => Debounce();
-            watcher.Deleted += (_, _) => Debounce();
-            watcher.Renamed += (_, _) => Debounce();
-            watcher.Changed += (_, _) => Debounce();
+            watcher.Created += (_, change) => Debounce(change.Name);
+            watcher.Deleted += (_, change) =>
+            {
+                Forget(change.FullPath);
+                Debounce(change.Name);
+            };
+            watcher.Renamed += (_, change) => Debounce(change.Name);
+            watcher.Changed += (_, change) => Debounce(change.Name);
             watcher.EnableRaisingEvents = true;
             _watcher = watcher;
         }
-        catch (Exception exception) when (exception is IOException or ArgumentException)
+        catch (Exception exception)
+            when (exception is IOException or ArgumentException or UnauthorizedAccessException)
         {
             // Without A Watcher The Page Still Refreshes When Opened
             s_logger.Warn($"Failed To Watch Clips {exception.GetType().Name}");
         }
     }
 
-    private void Debounce()
+    private void Debounce(string? name)
     {
-        _changeTimer?.Dispose();
-        _changeTimer = new Timer(
-            _ => Changed?.Invoke(),
-            null,
-            s_debounce,
-            Timeout.InfiniteTimeSpan
-        );
+        if (name?.StartsWith(PartialPrefix, StringComparison.Ordinal) != true)
+        {
+            _changeTimer.Change(s_debounce, Timeout.InfiniteTimeSpan);
+        }
     }
 
     public void Dispose()
     {
         _watcher?.Dispose();
-        _changeTimer?.Dispose();
+        _changeTimer.Dispose();
         _probing.Dispose();
         GC.SuppressFinalize(this);
     }

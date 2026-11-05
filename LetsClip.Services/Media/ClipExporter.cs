@@ -11,8 +11,7 @@ public sealed record ExportRequest(
     string SourcePath,
     TrimRange Range,
     double Megabytes,
-    bool Use720p,
-    bool FullFrameRate,
+    double FrameRate,
     bool IncludeAudio,
     string ExportsFolder
 );
@@ -35,18 +34,17 @@ public sealed class ClipExporter
 
     private readonly SemaphoreSlim _running = new(1, 1);
 
-    public static (int Width, int Height) OutputSize(int width, int height, bool use720p)
+    public const string TooSmallMessage =
+        "Too little room for this length, pick a larger size or a shorter selection";
+
+    public static (int Width, int Height) OutputSize(int width, int height, int lines = 1080)
     {
-        // Fits The Box In The Clip's Orientation, Never Upscaled
+        // A 16 By 9 Box In Its Orientation, Never Upscaled
         var portrait = height > width;
-        var longSide = use720p ? 1280 : 1920;
-        var shortSide = use720p ? 720 : 1080;
+        var across = lines * 16 / 9.0;
         var scale = Math.Min(
             1,
-            Math.Min(
-                (portrait ? shortSide : longSide) / (double)width,
-                (portrait ? longSide : shortSide) / (double)height
-            )
+            Math.Min((portrait ? lines : across) / width, (portrait ? across : lines) / height)
         );
         return (EvenUp(width * scale), EvenUp(height * scale));
     }
@@ -110,16 +108,24 @@ public sealed class ClipExporter
             );
         }
 
-        // Past The Ceiling Only Bloats, And Overflows FFmpeg's Rates
+        // Past The Ceiling Only Bloats, Unlimited Lands There
         var duration = request.Range.Length;
         var withAudio = request.IncludeAudio && source.HasAudio;
-        var (width, height) = OutputSize(source.Width, source.Height, request.Use720p);
-        var frameRate = FrameRateOf(source.FrameRate, request.FullFrameRate);
+        var (width, height) = OutputSize(source.Width, source.Height);
+        var frameRate = request.FrameRate;
+        var sourceRate = new FileInfo(request.SourcePath).Length / source.Duration;
         request = request with
         {
             Megabytes = Math.Min(
                 request.Megabytes,
-                SizeBudget.CeilingMegabytes(duration, width, height, frameRate, withAudio)
+                SizeBudget.CeilingMegabytes(
+                    duration,
+                    width,
+                    height,
+                    frameRate,
+                    withAudio,
+                    sourceRate
+                )
             ),
         };
         var budget = SizeBudget.Plan(
@@ -128,11 +134,12 @@ public sealed class ClipExporter
             withAudio,
             width,
             height,
-            frameRate
+            frameRate,
+            sourceRate
         );
         if (budget.Verdict == BudgetVerdict.TooSmall)
         {
-            throw new ExportException(TooSmallMessage(request));
+            throw new ExportException(TooSmallMessage);
         }
 
         // The Graphics Card Measured Faster And Sharper, x264 Falls Back
@@ -210,13 +217,12 @@ public sealed class ClipExporter
 
                     if (size <= budget.TargetBytes)
                     {
-                        var finalPath = ClipSaver.UniquePath(
-                            request.ExportsFolder,
-                            string.Create(
-                                CultureInfo.InvariantCulture,
-                                $"{Path.GetFileNameWithoutExtension(request.SourcePath)} {request.Megabytes:0.#} MB"
-                            )
-                        );
+                        // Named By The Clip's Shown Date, Never By Its Limit
+                        var stem = Path.GetFileNameWithoutExtension(request.SourcePath);
+                        var title = ClipNames.DateOf(stem) is { } date
+                            ? $"{AppInfo.DisplayName} {Formatter.FormatDateTime(date)}"
+                            : stem;
+                        var finalPath = ClipSaver.UniquePath(request.ExportsFolder, title);
                         File.Move(temporary, finalPath);
                         s_logger.Info(
                             $"Exported {Path.GetFileName(finalPath)} At {Formatter.FormatSize(size)} With {encoder.Name} In {attempts} Attempts"
@@ -241,17 +247,13 @@ public sealed class ClipExporter
             }
 
             throw new ExportException(
-                "Could not get under the size limit, try 720p or a shorter selection"
+                "Could not get under the size limit, pick a larger size or a shorter selection"
             );
         }
         finally
         {
             // Only This Export's Own Files, The Source Is Never Touched
-            if (File.Exists(temporary))
-            {
-                File.Delete(temporary);
-            }
-
+            await FFmpeg.DeleteOutputAsync(temporary);
             CacheFolders.Delete(workFolder);
         }
     }
@@ -498,13 +500,6 @@ public sealed class ClipExporter
                     : $"Export failed, {result.LastError}"
             );
         }
-    }
-
-    public static string TooSmallMessage(ExportRequest request)
-    {
-        return request.Use720p
-            ? "Too little room for this length, pick a larger size or a shorter selection"
-            : "Too little room for this length, try 720p, a larger size or a shorter selection";
     }
 
     private static int EvenUp(double value)

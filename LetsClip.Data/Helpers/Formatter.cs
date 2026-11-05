@@ -7,12 +7,6 @@ public static class Formatter
 {
     private static readonly CultureInfo s_invariant = CultureInfo.InvariantCulture;
 
-    // One Date Format Everywhere, Day First
-    private const string DisplayDateTimeFormat = "dd/MM/yyyy HH'h'mm";
-
-    // File Names Keep The Sortable Date
-    private const string FileDateTimeFormat = "yyyy-MM-dd HH-mm-ss";
-
     static Formatter()
     {
         Debug.Assert(SelfTestPasses());
@@ -36,40 +30,21 @@ public static class Formatter
 
     public static string FormatDuration(double seconds)
     {
-        // The Two Largest Parts, 3m 12s Or 2h 5m
-        var whole = (long)Math.Round(Math.Max(0, seconds));
-        if (whole < 60)
-        {
-            return $"{whole}s";
-        }
-
-        return whole < 3600
-            ? $"{whole / 60}m {whole % 60}s"
-            : $"{whole / 3600}h {whole % 3600 / 60}m";
-    }
-
-    public static string FormatClock(double seconds)
-    {
-        // Minutes, Seconds And Tenths, 1:05.3
+        // Zero Parts Left Out, 8m30,5s Or 1h2m
         var tenths = (long)Math.Round(Math.Max(0, seconds) * 10);
-        var minutes = tenths / 600;
-        var rest = tenths % 600;
-        return string.Create(s_invariant, $"{minutes}:{rest / 10:00}{Point}{rest % 10}");
+        var hours = tenths / 36000;
+        var minutes = tenths / 600 % 60;
+        var rest = tenths % 600 / 10.0;
+        var text = (hours > 0 ? $"{hours}h" : "") + (minutes > 0 ? $"{minutes}m" : "");
+        return rest > 0 || text.Length == 0 ? text + rest.ToString("0.#", Shown) + "s" : text;
     }
 
     public static string FormatDateTime(DateTimeOffset time)
     {
-        return time.ToLocalTime().ToString(DisplayDateTimeFormat, s_invariant);
-    }
-
-    public static string FormatFileDateTime(DateTimeOffset time)
-    {
-        return time.ToLocalTime().ToString(FileDateTimeFormat, s_invariant);
-    }
-
-    public static string FormatSeconds(double seconds)
-    {
-        return seconds.ToString("0.0", Shown) + "s";
+        // Day First, No Leading Zero, 05-11-2026 8h30
+        var local = time.ToLocalTime();
+        var minutes = local.Minute > 0 ? local.Minute.ToString(s_invariant) : "";
+        return local.ToString("dd-MM-yyyy H'h'", s_invariant) + minutes;
     }
 
     public static string FormatMegabytes(double megabytes)
@@ -80,15 +55,18 @@ public static class Formatter
     private static bool SelfTestPasses()
     {
         var evening = new DateTimeOffset(new DateTime(2026, 11, 4, 22, 43, 5, DateTimeKind.Local));
-        return FormatDateTime(evening) == "04/11/2026 22h43"
-            && FormatFileDateTime(evening) == "2026-11-04 22-43-05"
+        var morning = new DateTimeOffset(new DateTime(2026, 11, 5, 8, 0, 0, DateTimeKind.Local));
+        return FormatDateTime(evening) == "04-11-2026 22h43"
+            && FormatDateTime(morning) == "05-11-2026 8h"
+            && FormatDateTime(morning.AddMinutes(5)) == "05-11-2026 8h5"
             && FormatSize(20_000_000) == $"20{Point}0 MB"
             && FormatSize(999_499) == "999 KB"
             && FormatSize(1_250_000_000) == $"1{Point}25 GB"
-            && FormatDuration(59.6) == "1m 0s"
-            && FormatDuration(192) == "3m 12s"
-            && FormatDuration(7500) == "2h 5m"
-            && FormatClock(65.34) == $"1:05{Point}3"
-            && FormatClock(59.96) == $"1:00{Point}0";
+            && FormatDuration(0) == "0s"
+            && FormatDuration(30.3) == $"30{Point}3s"
+            && FormatDuration(510.54) == $"8m30{Point}5s"
+            && FormatDuration(59.96) == "1m"
+            && FormatDuration(3725) == "1h2m5s"
+            && FormatDuration(7500) == "2h5m";
     }
 }
