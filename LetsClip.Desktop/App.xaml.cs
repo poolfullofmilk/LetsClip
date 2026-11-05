@@ -153,7 +153,7 @@ public partial class App : Application
             executeOnlyOnce: false
         );
 
-        // Signing In Starts LetsClip In The Tray, Already Buffering
+        // Signing In Starts LetsClip In The Tray, Already Recording
         if (!startsInTray)
         {
             _window.Show();

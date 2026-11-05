@@ -129,7 +129,7 @@ public partial class ClipEditor : IAsyncDisposable
         _range = _metadata is { TrimStart: { } start, TrimEnd: { } end }
             ? TrimRange.Fit(start, end, _duration)
             : DefaultRange;
-        _muted = Controller.IsBuffering;
+        _muted = Controller.IsRecording;
         _time = _range.Start;
         _ = LoadStripAsync(path, _duration, token);
     }
@@ -159,7 +159,9 @@ public partial class ClipEditor : IAsyncDisposable
             _timeline,
             _reference,
             _duration,
-            _range.Start
+            _range.Start,
+            _muted,
+            _volume
         );
     }
 
@@ -343,9 +345,9 @@ public partial class ClipEditor : IAsyncDisposable
             await SetVolumeAsync(1);
         }
 
-        if (!_muted && Controller.IsBuffering)
+        if (!_muted && Controller.IsRecording)
         {
-            Snackbar.Add("Preview sound is recorded too while buffering", Severity.Warning);
+            Snackbar.Add("Preview sound also lands in your next clip", Severity.Warning);
         }
     }
 

@@ -2,8 +2,8 @@ namespace LetsClip.Data.Enums;
 
 public enum BudgetVerdict
 {
+    Sharp,
     Good,
-    Fair,
-    Low,
+    Soft,
     TooSmall,
 }

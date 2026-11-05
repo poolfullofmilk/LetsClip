@@ -47,7 +47,7 @@ public sealed class AudioMixer : IDisposable
         _notifications.DefaultDeviceChanged += (_, eventArgs) =>
             Reconnect(source =>
                 source.FollowsDefault
-                && eventArgs.Flow == DataFlow.Render
+                && eventArgs.Flow == source.Flow
                 && eventArgs.Role == Role.Console
             );
         _notifications.DeviceStateChanged += (_, eventArgs) =>
@@ -187,7 +187,9 @@ public sealed class AudioMixer : IDisposable
 
         public string? Problem { get; private set; }
 
-        public bool FollowsDefault => loopback && deviceId.Length == 0;
+        public bool FollowsDefault => deviceId.Length == 0;
+
+        public DataFlow Flow => loopback ? DataFlow.Render : DataFlow.Capture;
 
         public bool Wants(string changedId)
         {
@@ -210,9 +212,9 @@ public sealed class AudioMixer : IDisposable
                 Disconnect();
                 try
                 {
-                    // An Empty Id Follows The Default Playback Device
+                    // An Empty Id Follows The Windows Default Device
                     var endpoint = FollowsDefault
-                        ? mixer._enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Console)
+                        ? mixer._enumerator.GetDefaultAudioEndpoint(Flow, Role.Console)
                         : mixer._enumerator.GetDevice(deviceId);
                     var builder = new WasapiRecorderBuilder()
                         .WithDevice(endpoint)

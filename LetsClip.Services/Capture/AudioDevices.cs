@@ -7,8 +7,8 @@ namespace LetsClip.Services.Capture;
 
 public static class AudioDevices
 {
-    // An Empty Id Means Whatever Windows Plays To Right Now
-    public const string DefaultPlaybackId = "";
+    // An Empty Id Follows The Windows Default Device
+    public const string AutomaticId = "";
 
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
 

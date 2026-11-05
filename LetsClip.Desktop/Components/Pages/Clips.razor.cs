@@ -35,11 +35,18 @@ public partial class Clips : IDisposable
 
     protected override async Task OnInitializedAsync()
     {
+        // A Save Lists Its Clip At Once, The Watcher Covers Explorer
         Controller.Library.Changed += OnLibraryChanged;
+        Controller.Recorder.ClipSaved += OnClipSaved;
         await LoadAsync();
     }
 
     private void OnLibraryChanged()
+    {
+        _ = InvokeAsync(LoadAsync);
+    }
+
+    private void OnClipSaved(ClipInfo clip)
     {
         _ = InvokeAsync(LoadAsync);
     }
@@ -83,6 +90,7 @@ public partial class Clips : IDisposable
     public void Dispose()
     {
         Controller.Library.Changed -= OnLibraryChanged;
+        Controller.Recorder.ClipSaved -= OnClipSaved;
         _closing.Cancel();
         _closing.Dispose();
         GC.SuppressFinalize(this);

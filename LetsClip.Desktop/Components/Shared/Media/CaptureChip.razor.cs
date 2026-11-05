@@ -15,20 +15,13 @@ public partial class CaptureChip : IDisposable
 
     private string Icon =>
         IsError ? Icons.Material.Rounded.Error
-        : Controller.ShowsBuffering ? Icons.Material.Rounded.FiberManualRecord
-        : Controller.ShowsOff ? Icons.Material.Rounded.PauseCircle
+        : Controller.IsRecording ? Icons.Material.Rounded.FiberManualRecord
         : Icons.Material.Rounded.RadioButtonUnchecked;
 
-    // Red Dot While Buffering, Amber When Turned Off
-    private Color IconColor =>
-        IsError || Controller.ShowsBuffering ? Color.Error
-        : Controller.ShowsOff ? Color.Warning
-        : Color.Default;
+    // The Record Dot Is Red, Errors Say So In Text
+    private Color IconColor => IsError || Controller.IsRecording ? Color.Error : Color.Default;
 
-    private Color ChipColor =>
-        IsError ? Color.Error
-        : Controller.ShowsOff ? Color.Warning
-        : Color.Default;
+    private Color ChipColor => IsError ? Color.Error : Color.Default;
 
     protected override void OnInitialized()
     {

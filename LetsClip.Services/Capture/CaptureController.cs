@@ -10,6 +10,9 @@ namespace LetsClip.Services.Capture;
 
 public sealed class CaptureController : IDisposable
 {
+    // A Save Waits This Long For A Start To Finish
+    private static readonly TimeSpan s_startWait = TimeSpan.FromSeconds(15);
+
     private readonly Lock _gate = new();
 
     // Starts And Stops Run One At A Time, Whoever Asks
@@ -77,30 +80,22 @@ public sealed class CaptureController : IDisposable
 
     public int Resolution => ResolutionChoices.Where(lines => lines <= Settings.Resolution).Max();
 
-    public bool IsBuffering =>
-        Recorder.Status.State is CaptureState.Starting or CaptureState.Buffering;
+    // Starting And A Restart Already Read As Recording
+    public bool IsRecording =>
+        Recorder.Status.State is CaptureState.Recording or CaptureState.Starting
+        || (Recorder.Status.State == CaptureState.Stopping && _holds == CaptureHolds.None);
 
-    // A Restart After A Setting Change Reads As Buffering
-    public bool ShowsBuffering =>
-        Recorder.Status.State is CaptureState.Buffering or CaptureState.Starting
-        || (Recorder.Status.State == CaptureState.Stopping && Settings.Buffering);
-
-    public bool ShowsOff =>
-        !Settings.Buffering
-        && Recorder.Status.State is CaptureState.Stopped or CaptureState.Stopping;
-
-    // Buffering Names The Game It Records
+    // Recording Names The Game It Records
     public string StatusText =>
         Recorder.Status switch
         {
             { IsSaving: true } => "Saving Clip",
-            { State: CaptureState.Error } => "Capture Error",
-            _ when ShowsBuffering => Settings.GamesOnly && Games.GameName is { } game
-                ? $"Buffering {game}"
-                : "Buffering",
-            _ when ShowsOff => "Buffering Off",
+            { State: CaptureState.Error } => "Recording Error",
+            _ when IsRecording => Settings.GamesOnly && Games.GameName is { } game
+                ? $"Recording {game}"
+                : "Recording",
             _ when Settings.GamesOnly => "Waiting for a Game",
-            _ => "Not Buffering",
+            _ => "Not Recording",
         };
 
     public int? GameCount => _installedGames is null ? null : KnownGames().Count;
@@ -155,10 +150,9 @@ public sealed class CaptureController : IDisposable
             return;
         }
 
-        // No Scanning While Buffering Is Off, Locked Or Asleep
-        var settings = Settings;
+        // No Scanning While Locked Or Asleep
         Games.SetGames(KnownGames());
-        Games.SetEnabled(settings.GamesOnly && settings.Buffering && _holds == CaptureHolds.None);
+        Games.SetEnabled(Settings.GamesOnly && _holds == CaptureHolds.None);
     }
 
     private Dictionary<string, string> KnownGames()
@@ -238,15 +232,27 @@ public sealed class CaptureController : IDisposable
     #endregion
 
     #region Starts And Stops
-    public void SetBuffering(bool isOn)
-    {
-        // One Saved Switch, Automation Decides The Rest
-        UpdateSettings(settings => settings with { Buffering = isOn });
-    }
-
     public Task StartAutomaticallyAsync()
     {
         return StepAsync(null);
+    }
+
+    public async Task<SaveOutcome> SaveAsync()
+    {
+        // A Press During A Restart Saves What Follows It
+        var waited = Stopwatch.StartNew();
+        while (
+            (
+                _steps.CurrentCount == 0
+                || Recorder.Status.State is CaptureState.Starting or CaptureState.Stopping
+            )
+            && waited.Elapsed < s_startWait
+        )
+        {
+            await Task.Delay(100);
+        }
+
+        return await Recorder.SaveAsync();
     }
 
     public Task DisplaysChangedAsync()
@@ -283,7 +289,7 @@ public sealed class CaptureController : IDisposable
 
     private Task OnGameChangedAsync(string? game)
     {
-        // The Game Closing Ends The Buffer It Started
+        // The Game Closing Ends The Recording It Started
         return game is null
             ? StepAsync(
                 null,
@@ -307,8 +313,7 @@ public sealed class CaptureController : IDisposable
         {
             change?.Invoke();
             ApplyGames();
-            var settings = Settings;
-            var wanted = settings.Buffering && _holds == CaptureHolds.None ? WantedOptions() : null;
+            var wanted = _holds == CaptureHolds.None ? WantedOptions() : null;
 
             // Nothing To Do Unless Options Differ Or An Error Clears
             var running = Recorder.Options;

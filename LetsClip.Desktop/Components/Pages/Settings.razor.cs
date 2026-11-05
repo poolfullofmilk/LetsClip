@@ -44,6 +44,10 @@ public partial class Settings : IDisposable
         }
     }
 
+    // No Known Game Blocks Turning On, Never Turning Off
+    private bool GamesOnlyUnavailable =>
+        !Controller.Settings.GamesOnly && Controller.GameCount is null or 0;
+
     private string GamesLinkText =>
         Controller.GameCount is { } count ? (count == 1 ? "1 Game" : $"{count} Games") : "Games";
 
@@ -69,14 +73,25 @@ public partial class Settings : IDisposable
 
     private string PlaybackLabel(string? id)
     {
-        return id == AudioDevices.DefaultPlaybackId
-            ? "Automatic"
-            : _playback.FirstOrDefault(device => device.Id == id)?.Name ?? "";
+        return LabelOf(_playback, id);
     }
 
     private string MicrophoneLabel(string? id)
     {
-        return _microphones.FirstOrDefault(device => device.Id == id)?.Name ?? "";
+        return LabelOf(_microphones, id);
+    }
+
+    private static string LabelOf(IReadOnlyList<AudioDeviceInfo> devices, string? id)
+    {
+        // A Saved Device That Is Gone Says So
+        return id == AudioDevices.AutomaticId
+            ? "Automatic"
+            : devices.FirstOrDefault(device => device.Id == id)?.Name ?? "Unplugged Device";
+    }
+
+    private static string? DefaultName(IReadOnlyList<AudioDeviceInfo> devices)
+    {
+        return devices.FirstOrDefault(device => device.IsDefault)?.Name;
     }
 
     private void SetSaveSound(bool enabled)
@@ -116,22 +131,7 @@ public partial class Settings : IDisposable
 
     private void SetMicrophone(bool enabled)
     {
-        // Turning It On Picks The Default Once, Never Silently Later
-        var id =
-            Controller.Settings.MicrophoneDeviceId is { Length: > 0 } known
-            && _microphones.Any(device => device.Id == known)
-                ? known
-                : (
-                    _microphones.FirstOrDefault(device => device.IsDefault)
-                    ?? (_microphones.Count > 0 ? _microphones[0] : null)
-                )?.Id;
-        Controller.UpdateSettings(settings =>
-            settings with
-            {
-                Microphone = enabled && id is not null,
-                MicrophoneDeviceId = id,
-            }
-        );
+        Controller.UpdateSettings(settings => settings with { Microphone = enabled });
     }
 
     private void SetMicrophoneDevice(string id)

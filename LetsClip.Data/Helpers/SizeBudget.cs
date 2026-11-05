@@ -15,16 +15,16 @@ public static class SizeBudget
     public const double MaximumMegabytes = 4000;
 
     // Fixed Limits, Each Offered Only Below What The Export Needs
-    public static readonly double[] Limits = [20, 50, 100, 200, 500];
+    private static readonly double[] s_limits = [20, 50, 100, 200, 500];
 
     // Bits Per Pixel Per Frame, Measured On Screen Captures
-    private const double GoodBitsPerPixel = 0.045;
-    private const double FairBitsPerPixel = 0.02;
-    private const double LowBitsPerPixel = 0.008;
+    private const double SharpBitsPerPixel = 0.045;
+    private const double GoodBitsPerPixel = 0.02;
+    private const double SoftBitsPerPixel = 0.008;
     private const double MinimumVideoBitsPerSecond = 250_000;
 
     // Sharp Twice Over, Slow Clips Counted At 30 Frames
-    private const double CeilingBitsPerPixel = GoodBitsPerPixel * 2;
+    private const double CeilingBitsPerPixel = SharpBitsPerPixel * 2;
     private const double CeilingFrameRate = 30;
 
     // Half Again The Selection's Size Covers A Re-Encode
@@ -88,7 +88,7 @@ public static class SizeBudget
         );
         return
         [
-            .. Limits.Where(limit =>
+            .. s_limits.Where(limit =>
                 limit < ceiling
                 && Plan(
                     limit,
@@ -147,10 +147,10 @@ public static class SizeBudget
         var keepsSource = sourceBytesPerSecond > 0 && targetBytes >= seconds * sourceBytesPerSecond;
         var verdict =
             video < MinimumVideoBitsPerSecond ? BudgetVerdict.TooSmall
-            : keepsSource || bitsPerPixel >= GoodBitsPerPixel ? BudgetVerdict.Good
-            : bitsPerPixel < LowBitsPerPixel ? BudgetVerdict.TooSmall
-            : bitsPerPixel < FairBitsPerPixel ? BudgetVerdict.Low
-            : BudgetVerdict.Fair;
+            : keepsSource || bitsPerPixel >= SharpBitsPerPixel ? BudgetVerdict.Sharp
+            : bitsPerPixel < SoftBitsPerPixel ? BudgetVerdict.TooSmall
+            : bitsPerPixel < GoodBitsPerPixel ? BudgetVerdict.Soft
+            : BudgetVerdict.Good;
         return new ExportBudget(targetBytes, video, audio, verdict);
     }
 
@@ -168,17 +168,17 @@ public static class SizeBudget
             && minute.VideoBitsPerSecond is > 2_300_000 and < 2_500_000
             && silent.VideoBitsPerSecond - minute.VideoBitsPerSecond is > 128_000 and < 136_000
             && Plan(10, 600, true, 1920, 1080, 60, 0).Verdict == BudgetVerdict.TooSmall
-            && Plan(50, 10, true, 1920, 1080, 60, 0).Verdict == BudgetVerdict.Good
+            && Plan(50, 10, true, 1920, 1080, 60, 0).Verdict == BudgetVerdict.Sharp
             && Plan(0.5, 10, true, 1920, 1080, 60, 0).Verdict == BudgetVerdict.TooSmall
             && Plan(20, 0, true, 1920, 1080, 60, 0).Verdict == BudgetVerdict.TooSmall
-            && Plan(9, 30, true, 1920, 1080, 60, still).Verdict == BudgetVerdict.Good
-            && Plan(2, 30, true, 1920, 1080, 60, 1_000_000 / 30.0).Verdict == BudgetVerdict.Good
+            && Plan(9, 30, true, 1920, 1080, 60, still).Verdict == BudgetVerdict.Sharp
+            && Plan(2, 30, true, 1920, 1080, 60, 1_000_000 / 30.0).Verdict == BudgetVerdict.Sharp
             && CeilingMegabytes(30, 1920, 1080, 60, true, 0) == 45
             && CeilingMegabytes(30, 1920, 1080, 60, true, still) == 9
             && CeilingMegabytes(30, 1920, 1080, 3, true, 0) == 23
             && CeilingMegabytes(30, 1920, 1080, 3, true, 6_500_000 / 30.3) == 10
             && CeilingMegabytes(30, 1920, 1080, 60, true, 600_000_000 / 30.0) == 45
-            && Plan(45, 30, true, 1920, 1080, 60, 0).Verdict == BudgetVerdict.Good
+            && Plan(45, 30, true, 1920, 1080, 60, 0).Verdict == BudgetVerdict.Sharp
             && CeilingMegabytes(1, 320, 180, 30, false, 0) == 2
             && CeilingMegabytes(3600, 3840, 2160, 60, true, 0) == MaximumMegabytes
             && LimitsFor(30, 1920, 1080, 60, true, still).SequenceEqual([MaximumMegabytes])

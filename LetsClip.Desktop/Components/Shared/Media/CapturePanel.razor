@@ -62,19 +62,29 @@
             }
             <MudDivider />
             <SettingRow Title="Replay Length">
-                @* Replay Length Buttons *@
-                <MudButtonGroup OverrideStyles="false"
-                                Size="Size.Small">
-                    @foreach (var seconds in UserSettings.ReplayChoices)
-                    {
-                        <MudButton Variant="Variant.Filled"
-                                   Color="@(seconds == Controller.Settings.ReplaySeconds ? Color.Info : Color.Default)"
-                                   Size="Size.Small"
-                                   OnClick="() => SetReplay(seconds)">
-                            @Formatter.FormatDuration(seconds)
-                        </MudButton>
-                    }
-                </MudButtonGroup>
+                @* Replay Length Select *@
+                <MudElement HtmlTag="div"
+                            Class="fixed-width narrow">
+                    <MudSelect T="int"
+                               Value="Controller.Settings.ReplaySeconds"
+                               ValueChanged="SetReplay"
+                               ToStringFunc="ReplayLabel"
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Dense"
+                               Dense
+                               aria-label="Replay Length"
+                               AnchorOrigin="Origin.BottomLeft"
+                               TransformOrigin="Origin.TopLeft"
+                               Class="my-0">
+                        @foreach (var seconds in UserSettings.ReplayChoices)
+                        {
+                            <MudSelectItem T="int"
+                                           Value="seconds">
+                                @ReplayLabel(seconds)
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudElement>
             </SettingRow>
             <MudDivider />
             <SettingRow Title="Resolution">
@@ -96,7 +106,10 @@
                         {
                             <MudSelectItem T="int"
                                            Value="lines">
-                                @ResolutionLabel(lines)
+                                <MudText Typo="Typo.body2"
+                                         Color="@ResolutionColor(lines)">
+                                    @ResolutionLabel(lines)
+                                </MudText>
                             </MudSelectItem>
                         }
                     </MudSelect>
@@ -104,19 +117,32 @@
             </SettingRow>
             <MudDivider />
             <SettingRow Title="Quality">
-                @* Quality Buttons *@
-                <MudButtonGroup OverrideStyles="false"
-                                Size="Size.Small">
-                    @foreach (var quality in Enum.GetValues<CaptureQuality>())
-                    {
-                        <MudButton Variant="Variant.Filled"
-                                   Color="@(quality == Controller.Settings.Quality ? Color.Info : Color.Default)"
-                                   Size="Size.Small"
-                                   OnClick="() => SetQuality(quality)">
-                            @quality
-                        </MudButton>
-                    }
-                </MudButtonGroup>
+                @* Quality Select *@
+                <MudElement HtmlTag="div"
+                            Class="fixed-width narrow">
+                    <MudSelect T="CaptureQuality"
+                               Value="Controller.Settings.Quality"
+                               ValueChanged="SetQuality"
+                               ToStringFunc="QualityLabel"
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Dense"
+                               Dense
+                               aria-label="Quality"
+                               AnchorOrigin="Origin.BottomLeft"
+                               TransformOrigin="Origin.TopLeft"
+                               Class="my-0">
+                        @foreach (var quality in Enum.GetValues<CaptureQuality>())
+                        {
+                            <MudSelectItem T="CaptureQuality"
+                                           Value="quality">
+                                <MudText Typo="Typo.body2"
+                                         Color="@QualityColor(quality)">
+                                    @QualityLabel(quality)
+                                </MudText>
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudElement>
             </SettingRow>
             <MudDivider />
             <SettingRow Title="Frame Rate">
@@ -138,7 +164,10 @@
                         {
                             <MudSelectItem T="int"
                                            Value="rate">
-                                @FrameRateLabel(rate)
+                                <MudText Typo="Typo.body2"
+                                         Color="@FrameRateColor(rate)">
+                                    @FrameRateLabel(rate)
+                                </MudText>
                             </MudSelectItem>
                         }
                     </MudSelect>
@@ -153,19 +182,7 @@
                             Severity="@alert.Severity" />
                 }
 
-                @if (!Controller.Settings.Buffering)
-                {
-                    @* Start Button *@
-                    <MudButton Variant="Variant.Filled"
-                               Color="Color.Info"
-                               StartIcon="@Icons.Material.Rounded.FiberManualRecord"
-                               FullWidth
-                               Class="icon-left"
-                               OnClick="StartBuffering">
-                        Start Buffering
-                    </MudButton>
-                }
-                else if (Status.State == CaptureState.Error)
+                @if (Status.State == CaptureState.Error)
                 {
                     @* Try Again Button *@
                     <MudButton Variant="Variant.Filled"
@@ -183,7 +200,7 @@
                     <MudButton Variant="Variant.Filled"
                                Color="Color.Info"
                                StartIcon="@Icons.Material.Rounded.Save"
-                               Disabled="@(!Controller.ShowsBuffering)"
+                               Disabled="@(!Controller.IsRecording)"
                                FullWidth
                                Class="icon-left"
                                OnClick="SaveAsync">

@@ -24,8 +24,9 @@ public static class AppTheme
     private const string PageBackground = "#202020";
     private const string RaisedSurface = "#2a2a2a";
 
-    // One Accent Blue For Secondary And Info, Darker On Hover
+    // Light Blue Accents, The Strong Blue Tints Tonal Fills
     private const string AccentBlue = "#3d8bfd";
+    private const string AccentLight = "#b1d1fe";
     private const string AccentBlueDarken = "#2b74e0";
 
     // Shared White Overlay Steps
@@ -49,8 +50,7 @@ public static class AppTheme
             Tertiary = TextMedium,
 
             // Status Colors
-            Info = AccentBlue,
-            InfoDarken = AccentBlueDarken,
+            Info = AccentLight,
             Warning = "#f5b544",
 
             // UI Elements

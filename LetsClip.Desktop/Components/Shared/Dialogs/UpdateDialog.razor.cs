@@ -65,9 +65,9 @@ public partial class UpdateDialog
         await SetClosableAsync(false);
         try
         {
-            Updater.Launch(
-                await Updater.DownloadAsync(Release, new Progress<(long, long)>(ShowProgress))
-            );
+            // Off The Window's Thread, So The Window Never Freezes
+            var progress = new Progress<(long, long)>(ShowProgress);
+            Updater.Launch(await Task.Run(() => Updater.DownloadAsync(Release, progress)));
 
             // The New Exe Waits For This One To Exit
             if (Application.Current.MainWindow is MainWindow window)

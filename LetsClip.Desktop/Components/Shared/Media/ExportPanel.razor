@@ -39,24 +39,31 @@
     @if (SourceFrameRate > 60)
     {
         <SettingRow Title="Frame Rate">
-            @* Frame Rate Buttons *@
-            <MudButtonGroup OverrideStyles="false"
-                            Size="Size.Small">
-                <MudButton Variant="Variant.Filled"
-                           Color="@(Controller.Settings.ExportFullFrameRate ? Color.Default : Color.Info)"
-                           Size="Size.Small"
+            @* Frame Rate Select *@
+            <MudElement HtmlTag="div"
+                        Class="fixed-width narrow">
+                <MudSelect T="bool"
+                           Value="Controller.Settings.ExportFullFrameRate"
+                           ValueChanged="SetFullFrameRate"
+                           ToStringFunc="FrameRateLabel"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Dense
                            Disabled="@IsExporting"
-                           OnClick="() => SetFullFrameRate(false)">
-                    60 FPS
-                </MudButton>
-                <MudButton Variant="Variant.Filled"
-                           Color="@(Controller.Settings.ExportFullFrameRate ? Color.Info : Color.Default)"
-                           Size="Size.Small"
-                           Disabled="@IsExporting"
-                           OnClick="() => SetFullFrameRate(true)">
-                    @($"{SourceFrameRate} FPS")
-                </MudButton>
-            </MudButtonGroup>
+                           aria-label="Frame Rate"
+                           AnchorOrigin="Origin.BottomLeft"
+                           TransformOrigin="Origin.TopLeft"
+                           Class="my-0">
+                    <MudSelectItem T="bool"
+                                   Value="false">
+                        @FrameRateLabel(false)
+                    </MudSelectItem>
+                    <MudSelectItem T="bool"
+                                   Value="true">
+                        @FrameRateLabel(true)
+                    </MudSelectItem>
+                </MudSelect>
+            </MudElement>
         </SettingRow>
         <MudDivider />
     }

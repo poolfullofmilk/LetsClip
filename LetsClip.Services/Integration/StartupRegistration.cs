@@ -46,7 +46,7 @@ public static class StartupRegistration
         }
         catch
         {
-            // A Locked Registry Must Not Stop Buffering
+            // A Locked Registry Must Not Stop Recording
         }
     }
 

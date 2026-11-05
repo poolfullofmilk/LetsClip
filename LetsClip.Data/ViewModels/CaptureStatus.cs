@@ -11,7 +11,5 @@ public sealed record CaptureStatus(
 {
     public static readonly CaptureStatus Idle = new(CaptureState.Stopped, null, false, null);
 
-    public bool IsBuffering => State == CaptureState.Buffering;
-
     public bool CanStart => State is CaptureState.Stopped or CaptureState.Error;
 }

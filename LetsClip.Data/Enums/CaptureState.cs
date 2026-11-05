@@ -4,7 +4,7 @@ public enum CaptureState
 {
     Stopped,
     Starting,
-    Buffering,
+    Recording,
     Stopping,
     Error,
 }

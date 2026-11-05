@@ -72,16 +72,7 @@ public static class Updater
         && Path.GetFileName(Environment.ProcessPath)
             ?.StartsWith(ExecutablePrefix, StringComparison.OrdinalIgnoreCase) == true;
 
-    public static Task<string> DownloadAsync(
-        ReleaseInfo release,
-        IProgress<(long Received, long Total)> progress
-    )
-    {
-        // Off The Window's Thread, So The Window Never Freezes
-        return Task.Run(() => DownloadOnPoolAsync(release, progress));
-    }
-
-    private static async Task<string> DownloadOnPoolAsync(
+    public static async Task<string> DownloadAsync(
         ReleaseInfo release,
         IProgress<(long Received, long Total)> progress
     )

@@ -4,13 +4,13 @@
           Spacing="4">
     <MudText Typo="Typo.body2"
              Class="ellipsis">
-        @Device.Name
+        @Text
     </MudText>
-    @if (Device.IsDefault)
+    @if (Detail is not null)
     {
         <MudText Typo="Typo.body2"
-                 Class="mud-text-secondary">
-            Default
+                 Class="mud-text-secondary ellipsis">
+            @Detail
         </MudText>
     }
 </MudStack>

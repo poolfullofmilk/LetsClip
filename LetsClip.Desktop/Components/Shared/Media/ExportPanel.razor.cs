@@ -131,27 +131,21 @@ public partial class ExportPanel : IDisposable
             : "No room left for video";
 
     private string VerdictText =>
-        Budget.Verdict switch
-        {
-            BudgetVerdict.Good => "Sharp",
-            BudgetVerdict.Fair => "Good",
-            BudgetVerdict.Low => "Soft",
-            _ => "Too Small",
-        };
+        Budget.Verdict == BudgetVerdict.TooSmall ? "Too Small" : Budget.Verdict.ToString();
 
     private Color VerdictColor =>
         Budget.Verdict switch
         {
-            BudgetVerdict.Good => Color.Success,
-            BudgetVerdict.Fair => Color.Info,
-            BudgetVerdict.Low => Color.Warning,
+            BudgetVerdict.Sharp => Color.Success,
+            BudgetVerdict.Good => Color.Info,
+            BudgetVerdict.Soft => Color.Warning,
             _ => Color.Error,
         };
 
     private string? VerdictHint =>
         Budget.Verdict switch
         {
-            BudgetVerdict.Low =>
+            BudgetVerdict.Soft =>
                 "Fast motion will look soft at this size, a shorter selection keeps it sharper",
             BudgetVerdict.TooSmall => ClipExporter.TooSmallMessage,
             _ => null,
@@ -186,6 +180,14 @@ public partial class ExportPanel : IDisposable
     {
         // Saved As Picked, A Short Selection Never Lowers It
         Controller.UpdateSettings(settings => settings with { ExportMegabytes = megabytes });
+    }
+
+    private string FrameRateLabel(bool full)
+    {
+        return string.Create(
+            CultureInfo.CurrentCulture,
+            $"{ClipExporter.FrameRateOf(Media.FrameRate, full):0} FPS"
+        );
     }
 
     private void SetFullFrameRate(bool full)

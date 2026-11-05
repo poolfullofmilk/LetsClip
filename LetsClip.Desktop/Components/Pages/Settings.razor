@@ -5,24 +5,13 @@
 <Header Title="Settings">
     <ChildContent>
         <MudStack Spacing="6">
-            @* Buffering Settings *@
+            @* Recording Settings *@
             <MudPaper Elevation="4"
                       Class="rounded-panel px-6 py-2">
                 <MudText Typo="Typo.h6"
                          Class="pt-2">
-                    Buffering
+                    Recording
                 </MudText>
-                <SettingRow Title="Buffer in Background"
-                            Info="LetsClip records everything visible on the chosen monitor, other apps and notifications included, into a short rolling buffer on this PC. Nothing is kept until you save a clip and nothing leaves your PC">
-                    @* Buffering Switch *@
-                    <MudSwitch T="bool"
-                               Value="Controller.Settings.Buffering"
-                               ValueChanged="Controller.SetBuffering"
-                               Color="Color.Info"
-                               aria-label="Buffer in Background"
-                               Class="ma-0" />
-                </SettingRow>
-                <MudDivider />
                 <SettingRow Title="Games Only">
                     @* Games Link *@
                     <MudLink Typo="Typo.body2"
@@ -36,6 +25,7 @@
                                ValueChanged="SetGamesOnly"
                                Color="Color.Info"
                                aria-label="Games Only"
+                               Disabled="@GamesOnlyUnavailable"
                                Class="ma-0" />
                 </SettingRow>
                 <MudDivider />
@@ -131,14 +121,16 @@
                                        TransformOrigin="Origin.TopLeft"
                                        Class="my-0">
                                 <MudSelectItem T="string"
-                                               Value="@AudioDevices.DefaultPlaybackId">
-                                    Automatic
+                                               Value="@AudioDevices.AutomaticId"
+                                               Class="divided">
+                                    <DeviceLabel Text="Automatic"
+                                                 Detail="@DefaultName(_playback)" />
                                 </MudSelectItem>
                                 @foreach (var device in _playback)
                                 {
                                     <MudSelectItem T="string"
                                                    Value="device.Id">
-                                        <DeviceLabel Device="device" />
+                                        <DeviceLabel Text="@device.Name" />
                                     </MudSelectItem>
                                 }
                             </MudSelect>
@@ -150,6 +142,7 @@
                                ValueChanged="SetSystemAudio"
                                Color="Color.Info"
                                aria-label="System Audio"
+                               Disabled="@(!Controller.Settings.SystemAudio && _playback.Count == 0)"
                                Class="ma-0" />
                 </SettingRow>
                 <MudDivider />
@@ -170,11 +163,17 @@
                                        AnchorOrigin="Origin.BottomLeft"
                                        TransformOrigin="Origin.TopLeft"
                                        Class="my-0">
+                                <MudSelectItem T="string"
+                                               Value="@AudioDevices.AutomaticId"
+                                               Class="divided">
+                                    <DeviceLabel Text="Automatic"
+                                                 Detail="@DefaultName(_microphones)" />
+                                </MudSelectItem>
                                 @foreach (var device in _microphones)
                                 {
                                     <MudSelectItem T="string"
                                                    Value="device.Id">
-                                        <DeviceLabel Device="device" />
+                                        <DeviceLabel Text="@device.Name" />
                                     </MudSelectItem>
                                 }
                             </MudSelect>
@@ -186,7 +185,7 @@
                                ValueChanged="SetMicrophone"
                                Color="Color.Info"
                                aria-label="Microphone"
-                               Disabled="@(_microphones.Count == 0)"
+                               Disabled="@(!Controller.Settings.Microphone && _microphones.Count == 0)"
                                Class="ma-0" />
                 </SettingRow>
             </MudPaper>

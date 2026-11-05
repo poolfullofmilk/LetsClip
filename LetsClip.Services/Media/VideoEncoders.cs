@@ -54,14 +54,14 @@ public static class VideoEncoders
         return (long)(LoadOf(width, height, frameRate) * TuningOf(quality).Scale * 40_000_000 / 8);
     }
 
-    private static (double Scale, string Level) TuningOf(CaptureQuality quality)
+    private static (double Scale, string Level, string AmfLevel) TuningOf(CaptureQuality quality)
     {
-        // More Bits And A Lower Quality Level Look Crisper
+        // AMF Counts Quality Up, Matched To x264 By PSNR
         return quality switch
         {
-            CaptureQuality.High => (1.75, "19"),
-            CaptureQuality.Max => (2.5, "16"),
-            _ => (1, "22"),
+            CaptureQuality.High => (1.75, "19", "48"),
+            CaptureQuality.Max => (2.5, "16", "51"),
+            _ => (1, "22", "42"),
         };
     }
 
@@ -86,7 +86,7 @@ public static class VideoEncoders
     )
     {
         // Peaks Stay Capped So The Replay Cache Stays Bounded
-        var (scale, level) = TuningOf(quality);
+        var (scale, level, amfLevel) = TuningOf(quality);
         var load = LoadOf(width, height, frameRate) * scale;
         var target = Megabits(20 * load);
         var peak = Megabits(40 * load);
@@ -106,7 +106,7 @@ public static class VideoEncoders
                 "-rc",
                 "qvbr",
                 "-qvbr_quality_level",
-                level,
+                amfLevel,
                 "-b:v",
                 target,
                 "-maxrate",

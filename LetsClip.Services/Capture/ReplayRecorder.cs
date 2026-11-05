@@ -110,10 +110,10 @@ public sealed class ReplayRecorder : IDisposable
             }
 
             _ = WatchEndAsync(session);
-            UpdateStatus(session, CaptureState.Buffering);
+            UpdateStatus(session, CaptureState.Recording);
             _health.Change(s_healthPeriod, s_healthPeriod);
             s_logger.Info(
-                $"Started Buffering {session.Options.Label} With {session.Encoder.Name}{(session.Encoder.GpuFrames ? " On The GPU" : "")}"
+                $"Started Recording {session.Options.Label} With {session.Encoder.Name}{(session.Encoder.GpuFrames ? " On The GPU" : "")}"
             );
         }
         catch (Exception exception) when (IsStartFailure(exception))
@@ -121,7 +121,7 @@ public sealed class ReplayRecorder : IDisposable
             // Any Failed Start Shows As An Error
             var message = exception.Message.TrimEnd('.');
             SetStatus(Status with { State = CaptureState.Error, Message = message });
-            s_logger.Warn($"Failed To Start Buffering {exception.GetType().Name}, {message}");
+            s_logger.Warn($"Failed To Start Recording {exception.GetType().Name}, {message}");
         }
         finally
         {
@@ -168,7 +168,7 @@ public sealed class ReplayRecorder : IDisposable
                     Warning = null,
                 }
             );
-            s_logger.Info(reason is null ? "Stopped Buffering" : $"Stopped Buffering, {reason}");
+            s_logger.Info(reason is null ? "Stopped Recording" : $"Stopped Recording, {reason}");
         }
         finally
         {
@@ -226,7 +226,12 @@ public sealed class ReplayRecorder : IDisposable
             throw new CaptureException("Less than 2 GB free for the replay cache");
         }
 
-        var (width, height) = OutputSize(monitor, options.Resolution);
+        // A Window Keeps Its Own Shape, No Bars
+        var box = OutputSize(monitor, options.Resolution);
+        var (width, height) =
+            options.GameWindow != 0 && MonitorCatalog.ClientSizeOf(options.GameWindow) is { } client
+                ? FitInside(box, client)
+                : box;
         var skipped = new List<string>();
         foreach (var encoder in VideoEncoders.Candidates(MonitorCatalog.AdapterVendors()))
         {
@@ -329,7 +334,7 @@ public sealed class ReplayRecorder : IDisposable
             await Task.Run(session.Shutdown);
             _health.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
             SetStatus(Status with { State = CaptureState.Error, Message = message });
-            s_logger.Warn($"Stopped Buffering With An Error, {message}");
+            s_logger.Warn($"Stopped Recording With An Error, {message}");
         }
         finally
         {
@@ -348,15 +353,9 @@ public sealed class ReplayRecorder : IDisposable
         lock (_gate)
         {
             session = _session;
-            // A Press During A Restart Asks To Try Again
-            if (session is null || Status.State != CaptureState.Buffering)
+            if (session is null || Status.State != CaptureState.Recording)
             {
-                return new SaveOutcome(
-                    null,
-                    Status.State is CaptureState.Starting or CaptureState.Stopping
-                        ? "Capture is starting, try again in a moment"
-                        : "Start buffering first"
-                );
+                return new SaveOutcome(null, "Nothing is being recorded right now");
             }
 
             if (_saves >= MaximumSaves)
@@ -510,7 +509,7 @@ public sealed class ReplayRecorder : IDisposable
         if (
             session?.Video is not { } video
             || session.Stopping
-            || Status.State != CaptureState.Buffering
+            || Status.State != CaptureState.Recording
         )
         {
             return;
@@ -598,6 +597,19 @@ public sealed class ReplayRecorder : IDisposable
         return resolution >= Math.Min(monitor.Width, monitor.Height)
             ? (Even(monitor.Width), Even(monitor.Height))
             : ClipExporter.OutputSize(monitor.Width, monitor.Height, resolution);
+    }
+
+    public static (int Width, int Height) FitInside(
+        (int Width, int Height) box,
+        (int Width, int Height) source
+    )
+    {
+        // Never Upscaled, Even Sizes For The Encoder
+        var scale = Math.Min(
+            1,
+            Math.Min(box.Width / (double)source.Width, box.Height / (double)source.Height)
+        );
+        return (Even(source.Width * scale), Even(source.Height * scale));
     }
 
     private static int Even(double value)

@@ -15,7 +15,6 @@ public sealed record UserSettings(
     int FrameRate = 30,
     int Resolution = 1080,
     CaptureQuality Quality = CaptureQuality.Normal,
-    bool Buffering = true,
     bool GamesOnly = false,
     string[]? RemovedGames = null,
     AddedGame[]? AddedGames = null,
@@ -24,7 +23,7 @@ public sealed record UserSettings(
     bool SystemAudio = true,
     string SystemAudioDeviceId = "",
     bool Microphone = false,
-    string? MicrophoneDeviceId = null,
+    string MicrophoneDeviceId = "",
     string Hotkey = "Ctrl+Shift+F8",
     string? ClipsFolder = null,
     double ExportMegabytes = 20,
@@ -63,19 +62,10 @@ public sealed record UserSettings(
             var json = File.ReadAllText(s_filePath);
             var settings = JsonSerializer.Deserialize<UserSettings>(json) ?? new UserSettings();
 
-            // Older Files Carry Two Retired Switches
-            if (JsonSerializer.Deserialize<LegacySettings>(json) is { } legacy)
+            // Ponytail: Old Full Size Becomes 2160, 8K Gets 4K
+            if (JsonSerializer.Deserialize<LegacySettings>(json) is { FullResolution: true })
             {
-                settings = settings with
-                {
-                    // Ponytail: Full Size Becomes 2160, An 8K Monitor Gets 4K
-                    Resolution = legacy.FullResolution
-                        ? ResolutionChoices[^1]
-                        : settings.Resolution,
-
-                    // A Notice Answered No Keeps Buffering Off
-                    Buffering = settings.Buffering && legacy.HasSeenCaptureNotice,
-                };
+                settings = settings with { Resolution = ResolutionChoices[^1] };
             }
 
             return settings.Normalized();
@@ -123,6 +113,7 @@ public sealed record UserSettings(
             RemovedGames = RemovedGames?.OfType<string>().ToArray() ?? [],
             AddedGames = AddedGames?.OfType<AddedGame>().ToArray() ?? [],
             SystemAudioDeviceId = SystemAudioDeviceId ?? "",
+            MicrophoneDeviceId = MicrophoneDeviceId ?? "",
             Hotkey = HotkeyGesture.Parse(Hotkey)?.ToString() ?? HotkeyGesture.Default.ToString(),
             ClipsFolder = IsUsableFolder(ClipsFolder) ? ClipsFolder : null,
             ExportMegabytes = SizeBudget.IsValidTarget(ExportMegabytes) ? ExportMegabytes : 20,
@@ -134,5 +125,5 @@ public sealed record UserSettings(
         return !string.IsNullOrWhiteSpace(folder) && Path.IsPathFullyQualified(folder);
     }
 
-    private sealed record LegacySettings(bool FullResolution, bool HasSeenCaptureNotice = true);
+    private sealed record LegacySettings(bool FullResolution);
 }

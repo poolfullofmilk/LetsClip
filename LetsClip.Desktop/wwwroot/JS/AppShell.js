@@ -59,11 +59,13 @@ window.letsClip = (() => {
         if (state && !state.frame) state.frame = requestAnimationFrame(loop);
     };
 
-    // Each Clip Attaches Fresh And Opens At Its Trim Start
-    const attach = (video, playhead, timeline, dotnet, length, start) => {
+    // Each Clip Opens At Its Trim Start, Muted As Shown
+    const attach = (video, playhead, timeline, dotnet, length, start, muted, volume) => {
         detach();
         state = { video, playhead, timeline, dotnet, duration: length, reported: 0, sent: -1, paused: true, stopAt: null, frame: 0, drag: null };
         video.currentTime = start;
+        video.muted = muted;
+        video.volume = volume;
         video.addEventListener("error", state.onError = () => dotnet.invokeMethodAsync("OnPlayerError").catch(() => {}));
         video.addEventListener("loadeddata", state.onLoaded = () => dotnet.invokeMethodAsync("OnPlayerReady").catch(() => {}));
         if (video.readyState >= 2) state.onLoaded();

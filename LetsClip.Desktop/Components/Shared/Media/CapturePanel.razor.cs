@@ -1,4 +1,5 @@
 using LetsClip.Data.Enums;
+using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
 using LetsClip.Desktop.Interop;
 using LetsClip.Services.Capture;
@@ -24,7 +25,8 @@ public partial class CapturePanel : IDisposable
         Status.State == CaptureState.Error && Status.Message is { } error ? (Severity.Error, error)
         : _saveError is { } saveError ? (Severity.Warning, saveError)
         : Shell.HotkeyProblem is { } hotkey ? (Severity.Warning, hotkey)
-        : Status is { IsBuffering: true, Warning: { } warning } ? (Severity.Warning, warning)
+        : Status is { State: CaptureState.Recording, Warning: { } warning }
+            ? (Severity.Warning, warning)
         : Status.Message is { } message ? (Severity.Info, message)
         : null;
 
@@ -45,6 +47,16 @@ public partial class CapturePanel : IDisposable
         return monitor?.FriendlyName ?? "";
     }
 
+    private static string ReplayLabel(int seconds)
+    {
+        return Formatter.FormatDuration(seconds);
+    }
+
+    private static string QualityLabel(CaptureQuality quality)
+    {
+        return quality.ToString();
+    }
+
     private static string FrameRateLabel(int rate)
     {
         return $"{rate} FPS";
@@ -53,6 +65,31 @@ public partial class CapturePanel : IDisposable
     private static string ResolutionLabel(int lines)
     {
         return $"{lines}p";
+    }
+
+    private static Color ResolutionColor(int lines)
+    {
+        // Heavier Picks Read Amber, The Heaviest Red
+        return lines > 1440 ? Color.Error
+            : lines > 1080 ? Color.Warning
+            : Color.Default;
+    }
+
+    private static Color FrameRateColor(int rate)
+    {
+        return rate >= 165 ? Color.Error
+            : rate >= 120 ? Color.Warning
+            : Color.Default;
+    }
+
+    private static Color QualityColor(CaptureQuality quality)
+    {
+        return quality switch
+        {
+            CaptureQuality.Max => Color.Error,
+            CaptureQuality.High => Color.Warning,
+            _ => Color.Default,
+        };
     }
 
     private static string MonitorDetails(MonitorInfo monitor)
@@ -103,13 +140,6 @@ public partial class CapturePanel : IDisposable
         Controller.UpdateSettings(settings => settings with { FrameRate = rate });
     }
 
-    private void StartBuffering()
-    {
-        // The Same Saved Switch As Settings And The Tray
-        _saveError = null;
-        Controller.SetBuffering(true);
-    }
-
     private async Task TryAgainAsync()
     {
         _saveError = null;
@@ -119,7 +149,7 @@ public partial class CapturePanel : IDisposable
     private async Task SaveAsync()
     {
         // The Same Save As The Hotkey, Off The Page's Thread
-        var outcome = await Task.Run(Controller.Recorder.SaveAsync);
+        var outcome = await Task.Run(Controller.SaveAsync);
         _saveError = outcome.Error;
     }
 

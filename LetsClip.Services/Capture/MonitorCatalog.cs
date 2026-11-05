@@ -129,6 +129,17 @@ public static unsafe partial class MonitorCatalog
         );
     }
 
+    public static (int Width, int Height)? ClientSizeOf(nint window)
+    {
+        // The Area The Window Draws, Without Its Frame
+        return
+            GetClientRect(window, out var bounds)
+            && bounds.Right - bounds.Left > 1
+            && bounds.Bottom - bounds.Top > 1
+            ? (bounds.Right - bounds.Left, bounds.Bottom - bounds.Top)
+            : null;
+    }
+
     public static IReadOnlyList<int> AdapterVendors()
     {
         // Hardware Adapters Only, In DXGI Order
@@ -427,6 +438,10 @@ public static unsafe partial class MonitorCatalog
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool GetWindowRect(nint window, out WindowBounds bounds);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetClientRect(nint window, out WindowBounds bounds);
 
     private struct WindowBounds
     {

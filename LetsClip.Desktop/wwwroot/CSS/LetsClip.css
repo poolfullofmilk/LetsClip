@@ -27,16 +27,14 @@
     --page-bottom: 28px;
     --nav-width: 240px;
     --side-width: 360px;
-    --glass-opacity: 66%;
     --glass-blur: blur(12px);
     --row-hover-amount: 12%;
     --row-hover: color-mix(in srgb, var(--mud-palette-black) var(--row-hover-amount), transparent);
     --popover-opacity: 92%;
     --inset-fill: color-mix(in srgb, var(--mud-palette-black) 22%, transparent);
     --shade: color-mix(in srgb, var(--mud-palette-black) 58%, transparent);
-    --tonal-info: color-mix(in srgb, var(--mud-palette-info) 20%, transparent);
-    --tonal-info-hover: color-mix(in srgb, var(--mud-palette-info) 30%, transparent);
-    --tonal-info-text: color-mix(in srgb, var(--mud-palette-info) 40%, var(--mud-palette-white));
+    --tonal-info: color-mix(in srgb, var(--mud-palette-secondary) 20%, transparent);
+    --tonal-info-hover: color-mix(in srgb, var(--mud-palette-secondary) 30%, transparent);
     --tooltip-surface: color-mix(in srgb, var(--mud-palette-white) 9%, var(--mud-palette-surface));
     --scrollbar-thumb: color-mix(in srgb, var(--mud-palette-white) 18%, transparent);
     --scrollbar-thumb-hover: color-mix(in srgb, var(--mud-palette-white) 32%, transparent);
@@ -57,6 +55,11 @@
     background-color: color-mix(in srgb, var(--mud-palette-surface) var(--popover-opacity), transparent);
     backdrop-filter: var(--glass-blur);
 }
+
+    /* A Picked Item Reads Light Blue, Never Dimmed Grey */
+    .mud-popover .mud-selected-item.mud-primary-text {
+        color: var(--mud-palette-info) !important;
+    }
 
 /* Thin Scrollbars With No Arrows, Like The Rest Of Windows */
 ::-webkit-scrollbar {
@@ -162,6 +165,11 @@
     .fixed-width.narrow {
         width: 130px;
     }
+
+/* Automatic Sits Apart From The Devices Below It */
+.mud-list-item.divided {
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
 
 /* Setting Rows Share One Height, Switch Or Button Alike */
 .setting-row {
@@ -416,7 +424,7 @@ html, body {
 /* Blue Buttons, Picks And Info Alerts Are Tonal */
 .mud-button-filled.mud-button-filled-info:not(:disabled, .mud-disabled) {
     background-color: var(--tonal-info);
-    color: var(--tonal-info-text);
+    color: var(--mud-palette-info);
     box-shadow: none;
 }
 
@@ -430,7 +438,7 @@ html, body {
 
     .mud-alert-text-info,
     .mud-alert-text-info .mud-alert-icon {
-        color: var(--tonal-info-text);
+        color: var(--mud-palette-info);
     }
 
 /* Alerts Read At The Size Of Body Text */
@@ -461,7 +469,7 @@ html, body {
 /* The Navigation Marks Its Page Tonal And Darkens On Hover */
 .mud-navmenu.mud-navmenu-info .mud-nav-link.active:not(.mud-nav-link-disabled) {
     background-color: var(--tonal-info);
-    color: var(--tonal-info-text);
+    color: var(--mud-palette-info);
 }
 
     .mud-navmenu.mud-navmenu-info .mud-nav-link.active:not(.mud-nav-link-disabled):hover {
@@ -469,7 +477,7 @@ html, body {
     }
 
     .mud-navmenu.mud-navmenu-info .mud-nav-link.active:not(.mud-nav-link-disabled) .mud-nav-link-icon {
-        color: var(--tonal-info-text);
+        color: var(--mud-palette-info);
     }
 
 .mud-navmenu .mud-nav-link:not(.active):hover {

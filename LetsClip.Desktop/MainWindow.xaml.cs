@@ -29,7 +29,7 @@ public partial class MainWindow : Window
 
     // Tray Icons Per State, Drawn Once
     private readonly Drawing.Icon _plainIcon;
-    private readonly Drawing.Icon _bufferingIcon;
+    private readonly Drawing.Icon _recordingIcon;
     private readonly Drawing.Icon _problemIcon;
 
     private WindowMessages? _messages;
@@ -52,7 +52,7 @@ public partial class MainWindow : Window
         IsVisibleChanged += (_, _) => _ = RestPageAsync();
 
         _plainIcon = Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!)!;
-        _bufferingIcon = WithDot(_plainIcon, ToDrawingColor(AppTheme.Custom.PaletteDark.Error));
+        _recordingIcon = WithDot(_plainIcon, ToDrawingColor(AppTheme.Custom.PaletteDark.Error));
         _problemIcon = WithDot(_plainIcon, ToDrawingColor(AppTheme.Custom.PaletteDark.Warning));
         _trayIcon = new Forms.NotifyIcon
         {
@@ -79,7 +79,7 @@ public partial class MainWindow : Window
         controller.Changed += () =>
             Dispatcher.InvokeAsync(() =>
             {
-                // Turning Buffering Off While Stopped Changes Only The Tray's Words
+                // A Game Found Or Lost Changes The Tray's Words
                 MapClipsFolder();
                 UpdateTray();
             });
@@ -134,7 +134,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Capture Stops, A Running Save Finishes, The Switch Stays
+        // Capture Stops And A Running Save Finishes
         _isExiting = true;
         Hide();
         await _controller.HoldAsync(CaptureHolds.Exiting, "Stopped because LetsClip is closing");
@@ -155,7 +155,7 @@ public partial class MainWindow : Window
     private async Task SaveFromHotkeyAsync()
     {
         // The Hotkey Never Steals Focus, Only Failures Speak Here
-        var outcome = await Task.Run(_controller.Recorder.SaveAsync);
+        var outcome = await Task.Run(_controller.SaveAsync);
         if (outcome.Error is { } error)
         {
             await Dispatcher.InvokeAsync(() =>
@@ -210,19 +210,14 @@ public partial class MainWindow : Window
 
     private void ShowTrayMenu()
     {
-        var status = _controller.Recorder.Status;
         var seconds = _controller.Settings.ReplaySeconds;
         var open = new TrayMenuItem("Open LetsClip");
-        var save = new TrayMenuItem($"Save Last {seconds} Seconds", status.IsBuffering);
-        var toggle = new TrayMenuItem(
-            _controller.Settings.Buffering ? "Turn Buffering Off" : "Turn Buffering On"
-        );
+        var save = new TrayMenuItem($"Save Last {seconds} Seconds", _controller.IsRecording);
         var exit = new TrayMenuItem("Exit");
         var picked = TrayMenu.Show(
             new WindowInteropHelper(this).EnsureHandle(),
             open,
             save,
-            toggle,
             null,
             exit
         );
@@ -233,11 +228,6 @@ public partial class MainWindow : Window
         else if (picked == save)
         {
             _ = SaveFromHotkeyAsync();
-        }
-        else if (picked == toggle)
-        {
-            // The Same Saved Switch As Settings
-            _controller.SetBuffering(!_controller.Settings.Buffering);
         }
         else if (picked == exit)
         {
@@ -251,7 +241,7 @@ public partial class MainWindow : Window
         var status = _controller.Recorder.Status;
         _trayIcon.Icon =
             status.State == CaptureState.Error ? _problemIcon
-            : _controller.ShowsBuffering ? _bufferingIcon
+            : _controller.IsRecording ? _recordingIcon
             : _plainIcon;
         var text =
             status.State == CaptureState.Error
@@ -423,9 +413,7 @@ public partial class MainWindow : Window
                 _trayIcon.ShowBalloonTip(
                     BalloonMilliseconds,
                     "LetsClip Is Still Running",
-                    _controller.IsBuffering
-                        ? "Buffering continues in the tray, right click the icon to stop or exit"
-                        : "It waits in the tray, right click the icon to start buffering or exit",
+                    "It keeps recording in the tray, right click the icon to exit",
                     Forms.ToolTipIcon.Info
                 );
             }

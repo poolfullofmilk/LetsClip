@@ -30,6 +30,7 @@ public sealed class ClipLibrary : IDisposable
     private FileSystemWatcher? _watcher;
     private readonly Timer _changeTimer;
     private int _filling;
+    private int _fillAgain;
 
     public ClipLibrary(string folder)
     {
@@ -88,8 +89,15 @@ public sealed class ClipLibrary : IDisposable
     private void FillThumbnails(List<ClipInfo> missing)
     {
         // Clips Copied In Get Pictures In The Background, One Pass
-        if (missing.Count == 0 || Interlocked.Exchange(ref _filling, 1) == 1)
+        if (missing.Count == 0)
         {
+            return;
+        }
+
+        // A Clip Arriving Mid Pass Gets The Next One
+        if (Interlocked.Exchange(ref _filling, 1) == 1)
+        {
+            Volatile.Write(ref _fillAgain, 1);
             return;
         }
 
@@ -124,6 +132,10 @@ public sealed class ClipLibrary : IDisposable
             finally
             {
                 Interlocked.Exchange(ref _filling, 0);
+                if (Interlocked.Exchange(ref _fillAgain, 0) == 1)
+                {
+                    Changed?.Invoke();
+                }
             }
         });
     }

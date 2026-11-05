@@ -189,7 +189,7 @@ public sealed class DesktopShell
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Choose a Game to Buffer For",
+            Title = "Choose a Game to Record",
             Filter = "Games|*.exe",
         };
         return dialog.ShowDialog(Application.Current.MainWindow) == true ? dialog.FileName : null;
