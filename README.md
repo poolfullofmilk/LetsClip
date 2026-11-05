@@ -11,7 +11,7 @@
 - Saved clips are exactly the replay length you picked
 - Export an MP4 at its best quality or under a size limit (20 MB to 500 MB, only the ones that matter for the clip), at 60 FPS or the clip's own rate
 - Copy the export and paste it anywhere, drag it into another app, or open its folder
-- Watch a clip full screen, and delete clips you do not want, they go to the Recycle Bin
+- Watch a clip full screen at the volume you left it, and delete clips you do not want, they go to the Recycle Bin
 - Plays a soft chime the moment you save a clip, never heard in the clip itself
 - Updates itself
 

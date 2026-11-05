@@ -35,7 +35,7 @@ public partial class Clips : IDisposable
 
     protected override async Task OnInitializedAsync()
     {
-        // A Save Lists Its Clip At Once, The Watcher Covers Explorer
+        // Saves List At Once, The Watcher Covers Explorer
         Controller.Library.Changed += OnLibraryChanged;
         Controller.Recorder.ClipSaved += OnClipSaved;
         await LoadAsync();

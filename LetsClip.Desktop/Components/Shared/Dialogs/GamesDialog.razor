@@ -36,17 +36,11 @@
                           Items="_games"
                           Dense
                           Hover
-                          Bordered
                           Outlined
-                          FixedHeader
                           Elevation="0"
                           Class="fit"
                           Style="max-height:50vh">
 
-                    <HeaderContent>
-                        <MudTh>Name</MudTh>
-                        <MudTh Style="width:56px" />
-                    </HeaderContent>
                     <RowTemplate>
                         <MudTd>
                             <MudText Typo="Typo.body2"
@@ -54,7 +48,8 @@
                                 @context.Name
                             </MudText>
                         </MudTd>
-                        <MudTd Class="text-center">
+                        <MudTd Class="text-center"
+                               Style="width:56px">
                             @if (context.IsRemoved)
                             {
                                 @* Add Back Button *@

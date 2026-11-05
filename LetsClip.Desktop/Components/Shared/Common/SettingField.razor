@@ -1,0 +1,14 @@
+@* Setting Field *@
+<MudStack Spacing="2"
+          Class="py-3">
+    <MudStack Row
+              AlignItems="AlignItems.Center"
+              Spacing="0">
+        <MudText Typo="Typo.subtitle2">@Title</MudText>
+        @if (Info is { } info)
+        {
+            <InfoIcon Text="@info" />
+        }
+    </MudStack>
+    @ChildContent
+</MudStack>

@@ -3,19 +3,9 @@
           AlignItems="AlignItems.Center"
           Spacing="4"
           Class="setting-row">
-    <MudStack Row
-              AlignItems="AlignItems.Center"
-              Spacing="0"
-              Class="flex-grow-1"
-              Style="min-width:0">
-        <MudText Typo="Typo.subtitle2"
-                 Class="ellipsis">
-            @Title
-        </MudText>
-        @if (Info is { } info)
-        {
-            <InfoIcon Text="@info" />
-        }
-    </MudStack>
+    <MudText Typo="Typo.subtitle2"
+             Class="flex-grow-1 ellipsis">
+        @Title
+    </MudText>
     @ChildContent
 </MudStack>

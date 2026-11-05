@@ -80,7 +80,7 @@ public static partial class SaveChime
                     );
             }
 
-            // The Last 30 ms Fade Out, So No Click Ends It
+            // The Last 30 ms Fade Out, Ending Without A Click
             var fade = Math.Min(1, (Length - time) / 0.03);
             writer.Write((short)(Math.Clamp(sample * Volume * fade, -1, 1) * short.MaxValue));
         }

@@ -5,66 +5,67 @@
              Class="pt-2">
         Export
     </MudText>
+    <SettingRow Title="Clip">
+        <MudText Typo="Typo.body2"
+                 Class="mud-text-secondary ellipsis">
+            @ClipText
+        </MudText>
+    </SettingRow>
+    <MudDivider />
     @if (Limits is { Count: > 1 } limits)
     {
-        <SettingRow Title="Size Limit"
-                    Info="The exported file stays under this size. Unlimited keeps all the quality the clip has">
+        <SettingField Title="Size Limit"
+                      Info="The exported file stays under this size. Unlimited keeps all the quality the clip has">
             @* Size Limit Select *@
-            <MudElement HtmlTag="div"
-                        Class="fixed-width narrow">
-                <MudSelect T="double"
-                           Value="Limit"
-                           ValueChanged="SetLimit"
-                           ToStringFunc="LimitLabel"
-                           Variant="Variant.Outlined"
-                           Margin="Margin.Dense"
-                           Dense
-                           Disabled="@IsExporting"
-                           aria-label="Size Limit"
-                           AnchorOrigin="Origin.BottomLeft"
-                           TransformOrigin="Origin.TopLeft"
-                           Class="my-0">
-                    @foreach (var limit in limits)
-                    {
-                        <MudSelectItem T="double"
-                                       Value="limit">
-                            @LimitLabel(limit)
-                        </MudSelectItem>
-                    }
-                </MudSelect>
-            </MudElement>
-        </SettingRow>
+            <MudSelect T="double"
+                       Value="Limit"
+                       ValueChanged="SetLimit"
+                       ToStringFunc="LimitLabel"
+                       Variant="Variant.Outlined"
+                       Margin="Margin.Dense"
+                       Dense
+                       Disabled="@IsExporting"
+                       aria-label="Size Limit"
+                       AnchorOrigin="Origin.BottomLeft"
+                       TransformOrigin="Origin.TopLeft"
+                       Class="my-0">
+                @foreach (var limit in limits)
+                {
+                    <MudSelectItem T="double"
+                                   Value="limit">
+                        @LimitLabel(limit)
+                    </MudSelectItem>
+                }
+            </MudSelect>
+        </SettingField>
         <MudDivider />
     }
     @if (SourceFrameRate > 60)
     {
-        <SettingRow Title="Frame Rate">
+        <SettingField Title="Frame Rate">
             @* Frame Rate Select *@
-            <MudElement HtmlTag="div"
-                        Class="fixed-width narrow">
-                <MudSelect T="bool"
-                           Value="Controller.Settings.ExportFullFrameRate"
-                           ValueChanged="SetFullFrameRate"
-                           ToStringFunc="FrameRateLabel"
-                           Variant="Variant.Outlined"
-                           Margin="Margin.Dense"
-                           Dense
-                           Disabled="@IsExporting"
-                           aria-label="Frame Rate"
-                           AnchorOrigin="Origin.BottomLeft"
-                           TransformOrigin="Origin.TopLeft"
-                           Class="my-0">
-                    <MudSelectItem T="bool"
-                                   Value="false">
-                        @FrameRateLabel(false)
-                    </MudSelectItem>
-                    <MudSelectItem T="bool"
-                                   Value="true">
-                        @FrameRateLabel(true)
-                    </MudSelectItem>
-                </MudSelect>
-            </MudElement>
-        </SettingRow>
+            <MudSelect T="bool"
+                       Value="Controller.Settings.ExportFullFrameRate"
+                       ValueChanged="SetFullFrameRate"
+                       ToStringFunc="FrameRateLabel"
+                       Variant="Variant.Outlined"
+                       Margin="Margin.Dense"
+                       Dense
+                       Disabled="@IsExporting"
+                       aria-label="Frame Rate"
+                       AnchorOrigin="Origin.BottomLeft"
+                       TransformOrigin="Origin.TopLeft"
+                       Class="my-0">
+                <MudSelectItem T="bool"
+                               Value="false">
+                    @FrameRateLabel(false)
+                </MudSelectItem>
+                <MudSelectItem T="bool"
+                               Value="true">
+                    @FrameRateLabel(true)
+                </MudSelectItem>
+            </MudSelect>
+        </SettingField>
         <MudDivider />
     }
     @if (Media.HasAudio)
@@ -72,7 +73,8 @@
         <SettingRow Title="Audio">
             @* Audio Switch *@
             <MudSwitch T="bool"
-                       @bind-Value="IncludeAudio"
+                       Value="Controller.Settings.ExportAudio"
+                       ValueChanged="SetAudio"
                        Color="Color.Info"
                        Disabled="@IsExporting"
                        aria-label="Include Audio"
@@ -80,25 +82,30 @@
         </SettingRow>
         <MudDivider />
     }
+    <SettingRow Title="Output">
+        <MudText Typo="Typo.body2"
+                 Class="mud-text-secondary ellipsis">
+            @OutputText
+        </MudText>
+    </SettingRow>
+    <MudDivider />
+    <SettingRow Title="Bitrate">
+        <MudText Typo="Typo.body2"
+                 Class="mud-text-secondary">
+            @BitrateText
+        </MudText>
+        <MudChip T="string"
+                 Size="Size.Small"
+                 Variant="Variant.Text"
+                 Color="@VerdictColor"
+                 Class="ma-0">
+            @VerdictText
+        </MudChip>
+    </SettingRow>
+    <MudDivider />
 
     <MudStack Spacing="3"
               Class="py-3">
-        <MudStack Row
-                  AlignItems="AlignItems.Center"
-                  Justify="Justify.SpaceBetween"
-                  Spacing="2">
-            <MudText Typo="Typo.body2"
-                     Class="mud-text-secondary">
-                @BudgetText
-            </MudText>
-            <MudChip T="string"
-                     Size="Size.Small"
-                     Variant="Variant.Text"
-                     Color="@VerdictColor"
-                     Class="ma-0">
-                @VerdictText
-            </MudChip>
-        </MudStack>
         @if (VerdictHint is { } hint)
         {
             <MudText Typo="Typo.caption"

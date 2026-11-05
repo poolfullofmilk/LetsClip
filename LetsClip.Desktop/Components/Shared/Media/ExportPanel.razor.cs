@@ -34,7 +34,6 @@ public partial class ExportPanel : IDisposable
     private ExportProgress? _progress;
     private ExportResult? _result;
     private string? _error;
-    private bool IncludeAudio { get; set; } = true;
 
     // Limits This Selection Would Feel, Then Unlimited
     private IReadOnlyList<double> Limits
@@ -85,7 +84,7 @@ public partial class ExportPanel : IDisposable
 
     private double Megabytes => Math.Min(Limit, Ceiling);
 
-    private bool WithAudio => IncludeAudio && Media.HasAudio;
+    private bool WithAudio => Controller.Settings.ExportAudio && Media.HasAudio;
 
     private double SourceBytesPerSecond => Clip.SizeBytes / Media.Duration;
 
@@ -121,14 +120,29 @@ public partial class ExportPanel : IDisposable
         }
     }
 
-    // A Ceiling, Not A Promise, Still Scenes Come Out Smaller
-    private string BudgetText =>
+    private string ClipText =>
+        $"{Media.Width} × {Media.Height} · {Formatter.FormatSize(Clip.SizeBytes)}";
+
+    private string OutputText
+    {
+        get
+        {
+            var (width, height) = OutputSize;
+            return string.Create(
+                CultureInfo.CurrentCulture,
+                $"{width} × {height} · {FrameRate:0} FPS"
+            );
+        }
+    }
+
+    // The Most Video Gets, Still Scenes Come Out Smaller
+    private string BitrateText =>
         Budget.VideoBitsPerSecond > 0
             ? string.Create(
                 CultureInfo.CurrentCulture,
-                $"Up to {Budget.VideoBitsPerSecond / 1e6:0.0} Mbps for Video"
+                $"{Budget.VideoBitsPerSecond / 1e6:0.0} Mbps"
             )
-            : "No room left for video";
+            : "-";
 
     private string VerdictText =>
         Budget.Verdict == BudgetVerdict.TooSmall ? "Too Small" : Budget.Verdict.ToString();
@@ -188,6 +202,11 @@ public partial class ExportPanel : IDisposable
             CultureInfo.CurrentCulture,
             $"{ClipExporter.FrameRateOf(Media.FrameRate, full):0} FPS"
         );
+    }
+
+    private void SetAudio(bool include)
+    {
+        Controller.UpdateSettings(settings => settings with { ExportAudio = include });
     }
 
     private void SetFullFrameRate(bool full)

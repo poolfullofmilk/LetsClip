@@ -129,7 +129,7 @@
     min-height: 0;
 }
 
-/* Dialog Tables Scroll Under A Fixed Header */
+/* Dialog Tables Scroll Inside Their Rounded Box */
 .mud-table.fit {
     display: flex;
     flex-direction: column;
@@ -151,20 +151,12 @@
         overflow-y: auto;
     }
 
-/* Fields Keep One Width, Device Names Need A Wider One */
+/* Device Fields Beside A Switch Keep One Width */
 .fixed-width {
     flex: none !important;
-    width: 250px;
+    width: 400px;
     max-width: 100%;
 }
-
-    .fixed-width.wide {
-        width: 400px;
-    }
-
-    .fixed-width.narrow {
-        width: 130px;
-    }
 
 /* Automatic Sits Apart From The Devices Below It */
 .mud-list-item.divided {
@@ -551,14 +543,14 @@ html, body {
     min-height: 220px;
 }
 
-    /* The Clip Lifts On The Theme Shadow, No Frame */
+    /* The Clip Lifts On The Theme Shadow, Edge To Edge */
     .player video {
         display: block;
         max-width: 100%;
         max-height: 100%;
         border-radius: var(--radius-inner);
         box-shadow: var(--mud-elevation-4);
-        background-color: var(--mud-palette-black);
+        object-fit: cover;
     }
 
 /* Thumbnails In A Track, Handles Outside The Kept Part */
@@ -666,11 +658,6 @@ html, body {
 .button-hint {
     line-height: 1.2;
     opacity: 0.7;
-}
-
-/* Forward Is The Replay Arrow Turned Round */
-.mirror svg {
-    transform: scaleX(-1);
 }
 
 /* The Volume Slider Rises Above Its Button While Hovered */

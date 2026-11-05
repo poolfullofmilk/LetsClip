@@ -43,6 +43,7 @@
         <MudButton Variant="Variant.Filled"
                    Color="Color.Info"
                    StartIcon="@(_isInstalling ? null : Icons.Material.Rounded.SystemUpdateAlt)"
+                   Disabled="@_isInstalling"
                    OnClick="InstallAsync">
             @(_isInstalling ? "Downloading" : "Update Now")
         </MudButton>

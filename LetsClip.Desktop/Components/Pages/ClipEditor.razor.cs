@@ -55,7 +55,7 @@ public partial class ClipEditor : IAsyncDisposable
     private bool _playError;
     private bool _paused = true;
     private bool _muted;
-    private double _volume = 1;
+    private double _volume;
     private double _duration;
     private double _time;
     private TrimRange _range;
@@ -68,6 +68,12 @@ public partial class ClipEditor : IAsyncDisposable
         ClipNames.DateOf(Path.GetFileNameWithoutExtension(FileName)) is { } date
             ? Formatter.FormatDateTime(date)
             : Path.GetFileNameWithoutExtension(FileName);
+
+    // A Renamed Clip Keeps Its Date Below Its Name
+    private string? Subtitle =>
+        _clip is { } clip && !ClipNames.IsGenerated(clip.Name)
+            ? Formatter.FormatDateTime(clip.RecordedAt)
+            : null;
 
     private string MuteTip => _muted ? "Unmute Preview" : "Mute Preview";
 
@@ -129,7 +135,7 @@ public partial class ClipEditor : IAsyncDisposable
         _range = _metadata is { TrimStart: { } start, TrimEnd: { } end }
             ? TrimRange.Fit(start, end, _duration)
             : DefaultRange;
-        _muted = Controller.IsRecording;
+        (_muted, _volume) = (Controller.Settings.PreviewMuted, Controller.Settings.PreviewVolume);
         _time = _range.Start;
         _ = LoadStripAsync(path, _duration, token);
     }
@@ -406,6 +412,23 @@ public partial class ClipEditor : IAsyncDisposable
         _trimTimer?.Dispose();
         EndClip();
         await DetachAsync();
+
+        // The Next Clip Opens As Loud As This One
+        var (muted, volume) = (_muted, _volume);
+        if (
+            Controller.Settings.PreviewMuted != muted
+            || Controller.Settings.PreviewVolume != volume
+        )
+        {
+            Controller.UpdateSettings(settings =>
+                settings with
+                {
+                    PreviewMuted = muted,
+                    PreviewVolume = volume,
+                }
+            );
+        }
+
         GC.SuppressFinalize(this);
     }
 }

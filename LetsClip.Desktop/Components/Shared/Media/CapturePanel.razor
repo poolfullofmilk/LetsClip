@@ -25,9 +25,7 @@
             }
             else
             {
-                <MudStack Spacing="2"
-                          Class="py-3">
-                    <MudText Typo="Typo.subtitle2">Monitor</MudText>
+                <SettingField Title="Monitor">
                     @* Monitor Select *@
                     <MudSelect T="MonitorInfo"
                                Value="Controller.SelectedMonitor"
@@ -48,132 +46,127 @@
                                            Value="monitor">
                                 <MudStack Row
                                           Justify="Justify.SpaceBetween"
+                                          AlignItems="AlignItems.Center"
                                           Spacing="4">
                                     <MudText Typo="Typo.body2">@monitor.FriendlyName</MudText>
-                                    <MudText Typo="Typo.body2"
-                                             Class="mud-text-secondary">
-                                        @MonitorDetails(monitor)
-                                    </MudText>
+                                    <MudStack Spacing="0"
+                                              AlignItems="AlignItems.End">
+                                        <MudText Typo="Typo.body2"
+                                                 Class="mud-text-secondary">
+                                            @($"{monitor.Width} × {monitor.Height}")
+                                        </MudText>
+                                        <MudText Typo="Typo.body2"
+                                                 Class="mud-text-secondary">
+                                            @($"{monitor.RefreshRate} Hz")
+                                        </MudText>
+                                    </MudStack>
                                 </MudStack>
                             </MudSelectItem>
                         }
                     </MudSelect>
-                </MudStack>
+                </SettingField>
             }
             <MudDivider />
-            <SettingRow Title="Replay Length">
+            <SettingField Title="Replay Length">
                 @* Replay Length Select *@
-                <MudElement HtmlTag="div"
-                            Class="fixed-width narrow">
-                    <MudSelect T="int"
-                               Value="Controller.Settings.ReplaySeconds"
-                               ValueChanged="SetReplay"
-                               ToStringFunc="ReplayLabel"
-                               Variant="Variant.Outlined"
-                               Margin="Margin.Dense"
-                               Dense
-                               aria-label="Replay Length"
-                               AnchorOrigin="Origin.BottomLeft"
-                               TransformOrigin="Origin.TopLeft"
-                               Class="my-0">
-                        @foreach (var seconds in UserSettings.ReplayChoices)
-                        {
-                            <MudSelectItem T="int"
-                                           Value="seconds">
-                                @ReplayLabel(seconds)
-                            </MudSelectItem>
-                        }
-                    </MudSelect>
-                </MudElement>
-            </SettingRow>
+                <MudSelect T="int"
+                           Value="Controller.Settings.ReplaySeconds"
+                           ValueChanged="SetReplay"
+                           ToStringFunc="ReplayLabel"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Dense
+                           aria-label="Replay Length"
+                           AnchorOrigin="Origin.BottomLeft"
+                           TransformOrigin="Origin.TopLeft"
+                           Class="my-0">
+                    @foreach (var seconds in UserSettings.ReplayChoices)
+                    {
+                        <MudSelectItem T="int"
+                                       Value="seconds">
+                            @ReplayLabel(seconds)
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+            </SettingField>
             <MudDivider />
-            <SettingRow Title="Resolution">
+            <SettingField Title="Resolution">
                 @* Resolution Select *@
-                <MudElement HtmlTag="div"
-                            Class="fixed-width narrow">
-                    <MudSelect T="int"
-                               Value="Controller.Resolution"
-                               ValueChanged="SetResolution"
-                               ToStringFunc="ResolutionLabel"
-                               Variant="Variant.Outlined"
-                               Margin="Margin.Dense"
-                               Dense
-                               aria-label="Resolution"
-                               AnchorOrigin="Origin.BottomLeft"
-                               TransformOrigin="Origin.TopLeft"
-                               Class="my-0">
-                        @foreach (var lines in Controller.ResolutionChoices)
-                        {
-                            <MudSelectItem T="int"
-                                           Value="lines">
-                                <MudText Typo="Typo.body2"
-                                         Color="@ResolutionColor(lines)">
-                                    @ResolutionLabel(lines)
-                                </MudText>
-                            </MudSelectItem>
-                        }
-                    </MudSelect>
-                </MudElement>
-            </SettingRow>
+                <MudSelect T="int"
+                           Value="Controller.Resolution"
+                           ValueChanged="SetResolution"
+                           ToStringFunc="ResolutionLabel"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Dense
+                           aria-label="Resolution"
+                           AnchorOrigin="Origin.BottomLeft"
+                           TransformOrigin="Origin.TopLeft"
+                           Class="my-0">
+                    @foreach (var lines in Controller.ResolutionChoices)
+                    {
+                        <MudSelectItem T="int"
+                                       Value="lines">
+                            <MudText Typo="Typo.body2"
+                                     Color="@ResolutionColor(lines)">
+                                @ResolutionLabel(lines)
+                            </MudText>
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+            </SettingField>
             <MudDivider />
-            <SettingRow Title="Quality">
+            <SettingField Title="Quality">
                 @* Quality Select *@
-                <MudElement HtmlTag="div"
-                            Class="fixed-width narrow">
-                    <MudSelect T="CaptureQuality"
-                               Value="Controller.Settings.Quality"
-                               ValueChanged="SetQuality"
-                               ToStringFunc="QualityLabel"
-                               Variant="Variant.Outlined"
-                               Margin="Margin.Dense"
-                               Dense
-                               aria-label="Quality"
-                               AnchorOrigin="Origin.BottomLeft"
-                               TransformOrigin="Origin.TopLeft"
-                               Class="my-0">
-                        @foreach (var quality in Enum.GetValues<CaptureQuality>())
-                        {
-                            <MudSelectItem T="CaptureQuality"
-                                           Value="quality">
-                                <MudText Typo="Typo.body2"
-                                         Color="@QualityColor(quality)">
-                                    @QualityLabel(quality)
-                                </MudText>
-                            </MudSelectItem>
-                        }
-                    </MudSelect>
-                </MudElement>
-            </SettingRow>
+                <MudSelect T="CaptureQuality"
+                           Value="Controller.Settings.Quality"
+                           ValueChanged="SetQuality"
+                           ToStringFunc="QualityLabel"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Dense
+                           aria-label="Quality"
+                           AnchorOrigin="Origin.BottomLeft"
+                           TransformOrigin="Origin.TopLeft"
+                           Class="my-0">
+                    @foreach (var quality in Enum.GetValues<CaptureQuality>())
+                    {
+                        <MudSelectItem T="CaptureQuality"
+                                       Value="quality">
+                            <MudText Typo="Typo.body2"
+                                     Color="@QualityColor(quality)">
+                                @QualityLabel(quality)
+                            </MudText>
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+            </SettingField>
             <MudDivider />
-            <SettingRow Title="Frame Rate">
+            <SettingField Title="Frame Rate">
                 @* Frame Rate Select *@
-                <MudElement HtmlTag="div"
-                            Class="fixed-width narrow">
-                    <MudSelect T="int"
-                               Value="Controller.FrameRate"
-                               ValueChanged="SetFrameRate"
-                               ToStringFunc="FrameRateLabel"
-                               Variant="Variant.Outlined"
-                               Margin="Margin.Dense"
-                               Dense
-                               aria-label="Frame Rate"
-                               AnchorOrigin="Origin.BottomLeft"
-                               TransformOrigin="Origin.TopLeft"
-                               Class="my-0">
-                        @foreach (var rate in Controller.FrameRateChoices)
-                        {
-                            <MudSelectItem T="int"
-                                           Value="rate">
-                                <MudText Typo="Typo.body2"
-                                         Color="@FrameRateColor(rate)">
-                                    @FrameRateLabel(rate)
-                                </MudText>
-                            </MudSelectItem>
-                        }
-                    </MudSelect>
-                </MudElement>
-            </SettingRow>
-
+                <MudSelect T="int"
+                           Value="Controller.FrameRate"
+                           ValueChanged="SetFrameRate"
+                           ToStringFunc="FrameRateLabel"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Dense
+                           aria-label="Frame Rate"
+                           AnchorOrigin="Origin.BottomLeft"
+                           TransformOrigin="Origin.TopLeft"
+                           Class="my-0">
+                    @foreach (var rate in Controller.FrameRateChoices)
+                    {
+                        <MudSelectItem T="int"
+                                       Value="rate">
+                            <MudText Typo="Typo.body2"
+                                     Color="@FrameRateColor(rate)">
+                                @FrameRateLabel(rate)
+                            </MudText>
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+            </SettingField>
             <MudStack Spacing="3"
                       Class="py-3">
                 @if (Alert is { } alert)

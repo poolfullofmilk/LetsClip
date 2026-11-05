@@ -48,12 +48,6 @@ public partial class UpdateDialog
 
     private async Task InstallAsync()
     {
-        // A Second Click Waits For The First
-        if (_isInstalling)
-        {
-            return;
-        }
-
         // Debug Or Renamed Builds Have No Release Exe To Replace
         if (!Updater.CanInstall)
         {

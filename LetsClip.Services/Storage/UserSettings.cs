@@ -28,6 +28,9 @@ public sealed record UserSettings(
     string? ClipsFolder = null,
     double ExportMegabytes = 20,
     bool ExportFullFrameRate = false,
+    bool ExportAudio = true,
+    bool PreviewMuted = true,
+    double PreviewVolume = 1,
     bool HasSeenTrayHint = false
 )
 {
@@ -117,6 +120,7 @@ public sealed record UserSettings(
             Hotkey = HotkeyGesture.Parse(Hotkey)?.ToString() ?? HotkeyGesture.Default.ToString(),
             ClipsFolder = IsUsableFolder(ClipsFolder) ? ClipsFolder : null,
             ExportMegabytes = SizeBudget.IsValidTarget(ExportMegabytes) ? ExportMegabytes : 20,
+            PreviewVolume = double.IsFinite(PreviewVolume) ? Math.Clamp(PreviewVolume, 0, 1) : 1,
         };
     }
 

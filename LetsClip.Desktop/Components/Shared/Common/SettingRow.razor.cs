@@ -7,10 +7,6 @@ public partial class SettingRow
     [Parameter]
     public required string Title { get; set; }
 
-    // Explained In A Tooltip Beside The Title
-    [Parameter]
-    public string? Info { get; set; }
-
     [Parameter]
     public RenderFragment? ChildContent { get; set; }
 }

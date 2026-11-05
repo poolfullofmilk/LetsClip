@@ -14,9 +14,6 @@ public partial class PlayerButton
     public bool Filled { get; set; }
 
     [Parameter]
-    public string? Class { get; set; }
-
-    [Parameter]
     public bool Disabled { get; set; }
 
     [Parameter]

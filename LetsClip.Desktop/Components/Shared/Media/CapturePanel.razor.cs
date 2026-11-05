@@ -92,11 +92,6 @@ public partial class CapturePanel : IDisposable
         };
     }
 
-    private static string MonitorDetails(MonitorInfo monitor)
-    {
-        return $"{monitor.Width} × {monitor.Height} · {monitor.RefreshRate} Hz";
-    }
-
     private void OutlineMonitors(bool isOpen)
     {
         if (isOpen)

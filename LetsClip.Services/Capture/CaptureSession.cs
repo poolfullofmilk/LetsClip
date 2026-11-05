@@ -189,10 +189,16 @@ public sealed class CaptureSession(
             );
 
         // One Wall Clock Reading Puts Video On The Media Clock
-        var clock = string.Create(
+        var start = string.Create(
             CultureInfo.InvariantCulture,
-            $"if(eq(N,0),st(0,(RTCTIME-{baseMicroseconds})/1000000/TB-PTS));PTS+ld(0)"
+            $"if(eq(N,0),st(0,(RTCTIME-{baseMicroseconds})/1000000/TB-PTS);st(1,PTS));"
         );
+
+        // A Late Grab Keeps Its Own Slot, Real Drift Re-Anchors
+        var clock = isWindow
+            ? start + "PTS+ld(0)"
+            : start
+                + "st(2,ld(1)+N/(FR*TB));if(gt(abs(PTS-ld(2)),1.5/(FR*TB)),st(1,PTS-N/(FR*TB));st(2,PTS));ld(2)+ld(0)";
         var scaledWidth = rotated ? height : width;
         var scaledHeight = rotated ? width : height;
         var chain = new List<string> { source, $"setpts='{clock}'" };

@@ -43,10 +43,13 @@ else
                          Class="ellipsis">
                     @Title
                 </MudText>
-                <MudText Typo="Typo.body2"
-                         Class="mud-text-secondary ellipsis">
-                    @_clip?.Details
-                </MudText>
+                @if (Subtitle is { } subtitle)
+                {
+                    <MudText Typo="Typo.body2"
+                             Class="mud-text-secondary ellipsis">
+                        @subtitle
+                    </MudText>
+                }
             </MudStack>
             <MudSpacer />
             @* Show In Folder Button *@
@@ -116,7 +119,7 @@ else
                                               Disabled="@(!_ready)"
                                               OnClick="SetStartAtPlayhead" />
                                 @* Back Button *@
-                                <PlayerButton Icon="@Icons.Material.Rounded.Replay"
+                                <PlayerButton Icon="@Icons.Material.Rounded.Replay5"
                                               Text="Back 5 Seconds"
                                               Disabled="@(!_ready)"
                                               OnClick="() => NudgeAsync(-SeekStep)" />
@@ -127,9 +130,8 @@ else
                                               Disabled="@(!_ready)"
                                               OnClick="TogglePlayAsync" />
                                 @* Forward Button *@
-                                <PlayerButton Icon="@Icons.Material.Rounded.Replay"
+                                <PlayerButton Icon="@Icons.Material.Rounded.Forward5"
                                               Text="Forward 5 Seconds"
-                                              Class="mirror"
                                               Disabled="@(!_ready)"
                                               OnClick="() => NudgeAsync(SeekStep)" />
                                 @* Set End Button *@
@@ -143,7 +145,7 @@ else
                                       Justify="Justify.FlexEnd"
                                       Spacing="1">
                                 @* Reset Button *@
-                                <PlayerButton Icon="@Icons.Material.Rounded.RestartAlt"
+                                <PlayerButton Icon="@Icons.Material.Rounded.Refresh"
                                               Text="Reset Trim"
                                               Disabled="@(!_ready || _range == DefaultRange)"
                                               OnClick="ResetTrim" />
