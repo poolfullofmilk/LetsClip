@@ -27,5 +27,5 @@ public partial class Notice
 
     // Warnings Read In Their Own Colour
     private string ClassName =>
-        $"rounded-panel {(Severity == Severity.Warning ? "mud-warning-text" : "")} {Class}";
+        $"{(Severity == Severity.Warning ? "mud-warning-text" : "")} {Class}";
 }

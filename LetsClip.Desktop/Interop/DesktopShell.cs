@@ -137,20 +137,19 @@ public sealed class DesktopShell
     #region Files
     public static string ClipUrl(string path)
     {
-        // Stamped, So A Changed File Never Comes From Cache
-        var stamp = File.GetLastWriteTimeUtc(path).Ticks;
-        return $"https://{ClipsHost}/{Uri.EscapeDataString(Path.GetFileName(path))}?v={stamp}";
+        return UrlOf(ClipsHost, path);
     }
 
     public static string ThumbnailUrl(string? path)
     {
-        if (path is null || !File.Exists(path))
-        {
-            return "";
-        }
+        return path is not null && File.Exists(path) ? UrlOf(ThumbnailsHost, path) : "";
+    }
 
+    private static string UrlOf(string host, string path)
+    {
+        // Stamped, So A Changed File Never Comes From Cache
         var stamp = File.GetLastWriteTimeUtc(path).Ticks;
-        return $"https://{ThumbnailsHost}/{Uri.EscapeDataString(Path.GetFileName(path))}?v={stamp}";
+        return $"https://{host}/{Uri.EscapeDataString(Path.GetFileName(path))}?v={stamp}";
     }
 
     public static bool CopyFile(string path)

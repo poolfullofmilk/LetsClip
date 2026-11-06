@@ -4,6 +4,7 @@ using LetsClip.Desktop.Components.Shared.Common;
 using LetsClip.Desktop.Components.Shared.Dialogs;
 using LetsClip.Desktop.Interop;
 using LetsClip.Services.Capture;
+using LetsClip.Services.Media;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using MudBlazor;
@@ -256,7 +257,7 @@ public partial class Settings : IDisposable
         else
         {
             // The New Keys Are Taken, The Old Ones Come Back
-            _ = Shell.ApplyHotkey(Hotkey.Parse(Controller.Settings.Hotkey));
+            RestoreHotkey();
             _hotkeyError = $"{chosen} is taken by another app, kept {Controller.Settings.Hotkey}";
         }
 
@@ -267,8 +268,13 @@ public partial class Settings : IDisposable
     {
         await StopKeysAsync();
         _hotkeyError = null;
-        _ = Shell.ApplyHotkey(Hotkey.Parse(Controller.Settings.Hotkey));
+        RestoreHotkey();
         StateHasChanged();
+    }
+
+    private void RestoreHotkey()
+    {
+        _ = Shell.ApplyHotkey(Hotkey.Parse(Controller.Settings.Hotkey));
     }
 
     private async Task StopKeysAsync()
@@ -315,7 +321,7 @@ public partial class Settings : IDisposable
         try
         {
             Directory.CreateDirectory(full);
-            var probe = Path.Combine(full, $".LetsClip-{Guid.NewGuid():N}.probe");
+            var probe = Path.Combine(full, $"{ClipLibrary.PartialPrefix}{Guid.NewGuid():N}.probe");
             File.WriteAllText(probe, "");
             File.Delete(probe);
         }
@@ -354,7 +360,7 @@ public partial class Settings : IDisposable
         // Leaving Mid Pick Restores The Hotkey And Stops Listening
         if (_capturingKey)
         {
-            _ = Shell.ApplyHotkey(Hotkey.Parse(Controller.Settings.Hotkey));
+            RestoreHotkey();
             _ = StopKeysAsync();
         }
 

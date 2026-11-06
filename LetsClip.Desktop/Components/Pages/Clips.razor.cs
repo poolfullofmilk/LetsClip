@@ -175,22 +175,12 @@ public partial class Clips : IDisposable
 
     private void SetGame(string game, bool shown)
     {
-        if (shown)
-        {
-            _draft.Add(game);
-        }
-        else
-        {
-            _draft.Remove(game);
-        }
+        _ = shown ? _draft.Add(game) : _draft.Remove(game);
     }
 
     private void SetAll(bool? shown)
     {
-        _draft =
-            shown == true
-                ? new HashSet<string>(Games, StringComparer.OrdinalIgnoreCase)
-                : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        _draft = new HashSet<string>(shown == true ? Games : [], StringComparer.OrdinalIgnoreCase);
     }
 
     private void ResetFilter()

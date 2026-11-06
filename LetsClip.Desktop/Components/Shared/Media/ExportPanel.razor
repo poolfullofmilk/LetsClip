@@ -51,6 +51,13 @@
         </SettingRow>
         <MudDivider />
     }
+    <SettingRow Title="Resolution">
+        <MudText Typo="Typo.body2"
+                 Class="mud-text-secondary">
+            @($"{OutputSize.Width} × {OutputSize.Height}")
+        </MudText>
+    </SettingRow>
+    <MudDivider />
     @if (SourceFrameRate > 60)
     {
         <SettingRow Title="Frame Rate">
@@ -80,8 +87,17 @@
                 </MudSelect>
             </MudElement>
         </SettingRow>
-        <MudDivider />
     }
+    else
+    {
+        <SettingRow Title="Frame Rate">
+            <MudText Typo="Typo.body2"
+                     Class="mud-text-secondary">
+                @($"{FrameRate:0} FPS")
+            </MudText>
+        </SettingRow>
+    }
+    <MudDivider />
     @if (Media.HasAudio)
     {
         <SettingRow Title="Audio">
@@ -98,12 +114,6 @@
         </SettingRow>
         <MudDivider />
     }
-    <SettingRow Title="Output">
-        <MediaChips Width="OutputSize.Width"
-                    Height="OutputSize.Height"
-                    FrameRate="FrameRate" />
-    </SettingRow>
-    <MudDivider />
     <SettingRow Title="Bitrate">
         <MudText Typo="Typo.body2"
                  Class="mud-text-secondary">

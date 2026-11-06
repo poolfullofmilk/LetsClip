@@ -107,7 +107,7 @@
                                Value="ShownDevice(_playback, Controller.Settings.SystemAudioDeviceId)"
                                ValueChanged="SetPlaybackDevice"
                                ToStringFunc="@(id => LabelOf(_playback, id))"
-                               aria-label="Playback Device"
+                               Label="Device"
                                Variant="Variant.Outlined"
                                Margin="Margin.Dense"
                                Dense
@@ -151,7 +151,7 @@
                                Value="ShownDevice(_microphones, Controller.Settings.MicrophoneDeviceId)"
                                ValueChanged="SetMicrophoneDevice"
                                ToStringFunc="@(id => LabelOf(_microphones, id))"
-                               aria-label="Microphone Device"
+                               Label="Device"
                                Variant="Variant.Outlined"
                                Margin="Margin.Dense"
                                Dense

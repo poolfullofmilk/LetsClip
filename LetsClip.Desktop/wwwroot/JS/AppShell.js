@@ -87,7 +87,10 @@ window.letsClip = (() => {
         detach();
         // Frame Starts, Then The Clip's End
         const bounds = [...new Set(frames.map((time) => Math.max(0, time)).filter((time) => time < length)), length].sort((first, second) => first - second);
-        state = { video, playhead, timeline, dotnet, separator, bounds, duration: length, reported: 0, sent: -1, paused: true, stopAt: null, frame: 0, drag: null };
+        // One Signal Takes Every Listener Off On Detach
+        const listening = new AbortController();
+        const { signal } = listening;
+        state = { video, playhead, timeline, dotnet, separator, bounds, listening, duration: length, reported: 0, sent: -1, paused: true, stopAt: null, frame: 0, drag: null };
         // Points Saved Before Snapping Move Onto Their Frames
         const range = { start, end };
         setEdge(range, "start", start);
@@ -95,24 +98,22 @@ window.letsClip = (() => {
         if (range.start !== start || range.end !== end) commit(range);
         video.currentTime = range.start + inside;
         setVolume(volume, false);
-        video.addEventListener("error", state.onError = () => dotnet.invokeMethodAsync("OnPlayerError").catch(() => {}));
-        video.addEventListener(
-            "loadeddata",
-            (state.onLoaded = () => {
-                dotnet.invokeMethodAsync("OnPlayerReady").catch(() => {});
-                play(range.start, range.end);
-            }),
-            { once: true }
-        );
-        if (video.readyState >= 2) state.onLoaded();
-        if (video.error) state.onError();
-        video.addEventListener("dblclick", state.onDouble = () => fullScreen());
-        timeline.addEventListener("pointerdown", state.onDown = (event) => down(event));
-        timeline.addEventListener("pointermove", state.onMove = (event) => move(event));
-        timeline.addEventListener("pointerup", state.onUp = (event) => up(event));
-        timeline.addEventListener("pointercancel", state.onUp);
-        timeline.addEventListener("keydown", state.onKey = (event) => key(event));
-        for (const name of wakers) video.addEventListener(name, kick);
+        const failed = () => dotnet.invokeMethodAsync("OnPlayerError").catch(() => {});
+        const loaded = () => {
+            dotnet.invokeMethodAsync("OnPlayerReady").catch(() => {});
+            play(range.start, range.end);
+        };
+        video.addEventListener("error", failed, { signal });
+        video.addEventListener("loadeddata", loaded, { signal, once: true });
+        if (video.readyState >= 2) loaded();
+        if (video.error) failed();
+        video.addEventListener("dblclick", fullScreen, { signal });
+        timeline.addEventListener("pointerdown", down, { signal });
+        timeline.addEventListener("pointermove", move, { signal });
+        timeline.addEventListener("pointerup", up, { signal });
+        timeline.addEventListener("pointercancel", up, { signal });
+        timeline.addEventListener("keydown", key, { signal });
+        for (const name of wakers) video.addEventListener(name, kick, { signal });
         kick();
     };
 
@@ -120,17 +121,9 @@ window.letsClip = (() => {
     const detach = () => {
         if (!state) return;
         cancelAnimationFrame(state.frame);
-        const { video, timeline } = state;
-        video.removeEventListener("error", state.onError);
-        video.removeEventListener("loadeddata", state.onLoaded);
-        video.removeEventListener("dblclick", state.onDouble);
-        for (const name of wakers) video.removeEventListener(name, kick);
+        state.listening.abort();
+        const { video } = state;
         if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-        timeline.removeEventListener("pointerdown", state.onDown);
-        timeline.removeEventListener("pointermove", state.onMove);
-        timeline.removeEventListener("pointerup", state.onUp);
-        timeline.removeEventListener("pointercancel", state.onUp);
-        timeline.removeEventListener("keydown", state.onKey);
         video.pause();
         video.removeAttribute("src");
         video.load();
@@ -154,7 +147,7 @@ window.letsClip = (() => {
         return low;
     };
 
-    // The Nearest Frame Edge Within Half A Step, Else The Time
+    // Nearest Frame Edge Within Half A Step, Else The Time
     const fit = (time, low, high) => {
         const clamped = Math.min(high, Math.max(low, time));
         const index = floorIndex(clamped);
@@ -302,7 +295,7 @@ window.letsClip = (() => {
         if (state.stopAt !== null && time >= state.stopAt) state.stopAt = null;
     };
 
-    // A Typed Or Marked Point Moves Its Handle Like A Drag
+    // A Typed Or Marked Point Moves Like A Drag
     const place = (edge, time) => {
         if (!state) return;
         const range = readRange();
@@ -357,14 +350,12 @@ window.letsClip = (() => {
             else if (plain && event.key === "Enter") done(true);
             else dotnet.invokeMethodAsync("OnKeys", event.code, event.ctrlKey, event.altKey, event.shiftKey, event.metaKey).catch(() => {});
         };
-        const onHidden = () => {
-            if (document.hidden) done(false);
-        };
-        window.addEventListener("keydown", listener, true);
-        document.addEventListener("visibilitychange", onHidden);
+        const listening = new AbortController();
+        const { signal } = listening;
+        window.addEventListener("keydown", listener, { signal, capture: true });
+        document.addEventListener("visibilitychange", () => document.hidden && done(false), { signal });
         stopKeys = () => {
-            window.removeEventListener("keydown", listener, true);
-            document.removeEventListener("visibilitychange", onHidden);
+            listening.abort();
             stopKeys = () => {};
         };
     };

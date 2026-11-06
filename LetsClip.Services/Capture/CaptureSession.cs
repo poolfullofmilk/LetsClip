@@ -544,8 +544,11 @@ public sealed class CaptureSession(
                         s_logger.Debug(
                             $"FFmpeg {_name} {line}{(line == _lastWarning ? $" ({_warningRepeats} Times)" : "")}"
                         );
-                        (_lastWarning, _warningRepeats) =
-                            line == _lastWarning ? (_lastWarning, _warningRepeats) : (line, 0);
+                        if (line != _lastWarning)
+                        {
+                            (_lastWarning, _warningRepeats) = (line, 0);
+                        }
+
                         return;
                     }
 

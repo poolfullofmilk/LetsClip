@@ -186,7 +186,7 @@ public sealed class CaptureController : IDisposable
 
     public IReadOnlyList<GameEntry> GameList()
     {
-        // Found And Added Games, Those Taken Off The List Last
+        // Found And Added Games, Each Marked If Switched Off
         var settings = Settings;
         var games = new Dictionary<string, AddedGame>(
             _installedGames ?? new Dictionary<string, AddedGame>(),
@@ -203,15 +203,12 @@ public sealed class CaptureController : IDisposable
         );
         return
         [
-            .. games
-                .Values.Select(game => new GameEntry(
-                    game.Key,
-                    game.Name,
-                    game.Path,
-                    removed.Contains(game.Key)
-                ))
-                .OrderBy(game => game.IsRemoved)
-                .ThenBy(game => game.Name, StringComparer.CurrentCultureIgnoreCase),
+            .. games.Values.Select(game => new GameEntry(
+                game.Key,
+                game.Name,
+                game.Path,
+                removed.Contains(game.Key)
+            )),
         ];
     }
 
@@ -235,7 +232,7 @@ public sealed class CaptureController : IDisposable
 
     public void SetRemoved(string key, bool removed)
     {
-        // A Removed Game Stays Listed, Greyed At The Bottom
+        // A Switched Off Game Keeps Its Row
         UpdateSettings(settings =>
             settings with
             {

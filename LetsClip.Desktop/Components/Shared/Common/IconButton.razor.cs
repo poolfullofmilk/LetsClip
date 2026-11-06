@@ -22,8 +22,5 @@ public partial class IconButton
     public bool Disabled { get; set; }
 
     [Parameter]
-    public string RootClass { get; set; } = "d-flex";
-
-    [Parameter]
     public EventCallback OnClick { get; set; }
 }

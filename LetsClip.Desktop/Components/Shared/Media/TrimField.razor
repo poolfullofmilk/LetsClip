@@ -2,10 +2,6 @@
 <MudStack Row
           AlignItems="AlignItems.Center"
           Spacing="2">
-    <MudText Typo="Typo.body2"
-             Class="mud-text-secondary">
-        @Label
-    </MudText>
     <MudElement HtmlTag="div"
                 Class="trim-field"
                 data-edge="@Label"
@@ -13,12 +9,12 @@
         @* Time Field *@
         <MudTextField @key="_version"
                       T="string"
+                      Label="@Label"
                       Value="@Formatter.FormatDuration(Value)"
                       ValueChanged="CommitAsync"
                       Variant="Variant.Outlined"
                       Margin="Margin.Dense"
                       Disabled="Disabled"
-                      aria-label="@Label"
                       Class="my-0" />
     </MudElement>
     @* Set Here Button *@

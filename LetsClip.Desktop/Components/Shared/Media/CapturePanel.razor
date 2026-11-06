@@ -30,13 +30,16 @@
                         </MudLink>
                     </MudStack>
                 </SettingRow>
+                <MudDivider />
             }
-            else
-            {
-                <SettingField Title="Monitor">
+            <MudStack Spacing="5"
+                      Class="pt-6 pb-4">
+                @if (!Controller.Settings.GamesOnly)
+                {
                     @* Monitor Select *@
                     <FieldDetail Detail="@MonitorDetail(Controller.SelectedMonitor)">
                         <MudSelect T="MonitorInfo"
+                                   Label="Monitor"
                                    OpenIcon="@Icons.Material.Rounded.ArrowDropDown"
                                    CloseIcon="@Icons.Material.Rounded.ArrowDropUp"
                                    Value="Controller.SelectedMonitor"
@@ -47,7 +50,6 @@
                                    Variant="Variant.Outlined"
                                    Margin="Margin.Dense"
                                    Dense
-                                   aria-label="Monitor"
                                    Class="my-0">
                             @foreach (var monitor in Controller.Monitors)
                             {
@@ -74,12 +76,10 @@
                             }
                         </MudSelect>
                     </FieldDetail>
-                </SettingField>
-            }
-            <MudDivider />
-            <SettingField Title="Replay Length">
+                }
                 @* Replay Length Select *@
                 <MudSelect T="int"
+                           Label="Replay Length"
                            OpenIcon="@Icons.Material.Rounded.ArrowDropDown"
                            CloseIcon="@Icons.Material.Rounded.ArrowDropUp"
                            Value="Controller.Settings.ReplaySeconds"
@@ -88,7 +88,6 @@
                            Variant="Variant.Outlined"
                            Margin="Margin.Dense"
                            Dense
-                           aria-label="Replay Length"
                            Class="my-0">
                     @foreach (var seconds in UserSettings.ReplayChoices)
                     {
@@ -98,13 +97,11 @@
                         </MudSelectItem>
                     }
                 </MudSelect>
-            </SettingField>
-            <MudDivider />
-            <SettingField Title="Resolution">
                 @* Resolution Select *@
                 <FieldDetail Color="@ResolutionColor(Controller.Resolution)"
                              Detail="@RecommendedText(Controller.Resolution == Controller.RecommendedResolution)">
                     <MudSelect T="int"
+                               Label="Resolution"
                                OpenIcon="@Icons.Material.Rounded.ArrowDropDown"
                                CloseIcon="@Icons.Material.Rounded.ArrowDropUp"
                                Value="Controller.Resolution"
@@ -113,7 +110,6 @@
                                Variant="Variant.Outlined"
                                Margin="Margin.Dense"
                                Dense
-                               aria-label="Resolution"
                                Class="my-0">
                         @foreach (var lines in Controller.ResolutionChoices)
                         {
@@ -126,13 +122,11 @@
                         }
                     </MudSelect>
                 </FieldDetail>
-            </SettingField>
-            <MudDivider />
-            <SettingField Title="Quality">
                 @* Quality Select *@
                 <FieldDetail Color="@QualityColor(Controller.Settings.Quality)"
                              Detail="@RecommendedText(Controller.Settings.Quality == CaptureQuality.Normal)">
                     <MudSelect T="CaptureQuality"
+                               Label="Quality"
                                OpenIcon="@Icons.Material.Rounded.ArrowDropDown"
                                CloseIcon="@Icons.Material.Rounded.ArrowDropUp"
                                Value="Controller.Settings.Quality"
@@ -141,7 +135,6 @@
                                Variant="Variant.Outlined"
                                Margin="Margin.Dense"
                                Dense
-                               aria-label="Quality"
                                Class="my-0">
                         @foreach (var quality in Enum.GetValues<CaptureQuality>())
                         {
@@ -154,13 +147,11 @@
                         }
                     </MudSelect>
                 </FieldDetail>
-            </SettingField>
-            <MudDivider />
-            <SettingField Title="Frame Rate">
                 @* Frame Rate Select *@
                 <FieldDetail Color="@FrameRateColor(Controller.FrameRate)"
                              Detail="@RecommendedText(Controller.FrameRate == Controller.RecommendedFrameRate)">
                     <MudSelect T="int"
+                               Label="Frame Rate"
                                OpenIcon="@Icons.Material.Rounded.ArrowDropDown"
                                CloseIcon="@Icons.Material.Rounded.ArrowDropUp"
                                Value="Controller.FrameRate"
@@ -169,7 +160,6 @@
                                Variant="Variant.Outlined"
                                Margin="Margin.Dense"
                                Dense
-                               aria-label="Frame Rate"
                                Class="my-0">
                         @foreach (var rate in Controller.FrameRateChoices)
                         {
@@ -182,9 +172,6 @@
                         }
                     </MudSelect>
                 </FieldDetail>
-            </SettingField>
-            <MudStack Spacing="3"
-                      Class="pt-3 pb-4">
                 @if (Alert is { } alert)
                 {
                     <Notice Text="@alert.Text"

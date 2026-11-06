@@ -22,6 +22,7 @@
     --radius-panel: 20px;
     --radius-inner: 10px;
     --radius-thumb: 6px;
+    --radius-pill: 999px;
     --page-gutter: 28px;
     --page-top: 80px;
     --page-bottom: 28px;
@@ -79,7 +80,7 @@
 
 ::-webkit-scrollbar-thumb {
     border: 3px solid transparent;
-    border-radius: 10px;
+    border-radius: var(--radius-pill);
     background-clip: padding-box;
     background-color: var(--scrollbar-thumb);
 }
@@ -130,11 +131,11 @@
     min-height: 0;
 }
 
-/* Dialog Tables Scroll Inside Their Rounded Box */
+/* Dialog Tables Scroll Inside A Box Rounded Like Fields */
 .mud-table.fit {
     display: flex;
     flex-direction: column;
-    border-radius: var(--radius-inner);
+    border-radius: var(--mud-default-borderradius);
     overflow: hidden;
 }
 
@@ -195,13 +196,13 @@
     left: 12px;
     height: 3px;
     overflow: hidden;
-    border-radius: 2px;
+    border-radius: var(--radius-pill);
     pointer-events: none;
 }
 
     .level-meter > div {
         height: 100%;
-        border-radius: 2px;
+        border-radius: var(--radius-pill);
         background-color: var(--mud-palette-info);
         transition: width 50ms linear;
     }
@@ -350,7 +351,7 @@
 
 /* Tracks Run Rounded, The Filled Part Too */
 .mud-slider .mud-slider-filled {
-    border-radius: 4px;
+    border-radius: var(--radius-pill);
 }
 
 .mud-slider.mud-slider-info .mud-slider-input:is(:active, :focus-visible)::-webkit-slider-thumb {
@@ -643,7 +644,7 @@
 /* Progress Bars Run Rounded */
 .mud-progress-linear,
 .mud-progress-linear .mud-progress-linear-bar {
-    border-radius: 4px;
+    border-radius: var(--radius-pill);
 }
 /* #endregion */
 
@@ -652,6 +653,11 @@
 .games-table .game-icon {
     width: 40px;
     line-height: 0;
+}
+
+/* Square Exe Icons Get The Thumb Radius */
+.games-table .game-icon img {
+    border-radius: var(--radius-thumb);
 }
 
 .games-table .game-switch {
@@ -721,20 +727,6 @@ mark {
     .clip-thumb .clip-duration {
         right: 8px;
     }
-
-    /* The Game Or App It Recorded, Top Right, Shortened */
-    .clip-thumb .clip-game {
-        position: absolute;
-        top: 8px;
-        right: 8px;
-        max-width: calc(100% - 16px);
-    }
-
-        .clip-thumb .clip-game .mud-chip-content {
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
 /* #endregion */
 
 /* #region Editor */
@@ -816,7 +808,7 @@ mark {
 
 /* Thumbnails In A Track, Handles Outside The Kept Part */
 .timeline {
-    --handle-width: 14px;
+    --handle-width: 12px;
     flex-shrink: 0;
     height: var(--timeline-height);
     position: relative;
@@ -910,7 +902,7 @@ mark {
         width: 3px;
         height: 18px;
         margin: auto;
-        border-radius: 1.5px;
+        border-radius: var(--radius-pill);
         background-color: var(--mud-palette-white);
         opacity: 0.8;
     }
@@ -923,7 +915,7 @@ mark {
     bottom: 0;
     width: 3px;
     margin-left: -1.5px;
-    border-radius: 1.5px;
+    border-radius: var(--radius-pill);
     background-color: var(--mud-palette-white);
     box-shadow: 0 0 4px rgba(0,0,0, 0.6);
     pointer-events: none;
@@ -986,12 +978,13 @@ mark {
         display: block;
     }
 
-/* The 16 Px Thumb Keeps 10 Px Clear */
-.volume-paper {
+/* Thumb Keeps 10 Px Clear, Shadow Even All Round */
+.volume .volume-paper {
     display: flex;
     align-items: center;
     width: 120px;
     height: 36px;
     padding-inline: 10px;
+    box-shadow: 0 0 12px rgba(0,0,0, 0.5);
 }
 /* #endregion */

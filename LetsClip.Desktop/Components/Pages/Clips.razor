@@ -202,20 +202,9 @@
                                             <MudImage Src="@thumbnail"
                                                       Alt="@clip.Title" />
                                         }
-                                        @if (clip.Game is { } game)
-                                        {
-                                            <MudChip T="string"
-                                                     Size="Size.Small"
-                                                     Variant="Variant.Filled"
-                                                     Color="Color.Dark"
-                                                     Class="clip-game ma-0">
-                                                @game
-                                            </MudChip>
-                                        }
                                         <MediaChips Width="clip.Width"
                                                     Height="clip.Height"
                                                     FrameRate="clip.FrameRate"
-                                                    OnImage
                                                     Class="clip-media" />
                                         <MudChip T="string"
                                                  Size="Size.Small"

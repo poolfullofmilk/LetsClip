@@ -216,9 +216,11 @@ internal static partial class GameScanner
             foreach (var shortcut in shortcuts)
             {
                 string target = shell.CreateShortcut(shortcut).TargetPath;
+                // Web Apps Run Inside The Browser's Own Process
                 if (
                     target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
                     && !target.StartsWith(windows, StringComparison.OrdinalIgnoreCase)
+                    && !target.EndsWith("_proxy.exe", StringComparison.OrdinalIgnoreCase)
                     && !IsRejectedExecutable(Path.GetFileNameWithoutExtension(target))
                     && !IsRejectedExecutable(Path.GetFileNameWithoutExtension(shortcut))
                     && File.Exists(target)
@@ -237,6 +239,34 @@ internal static partial class GameScanner
         catch (Exception exception) when (exception is COMException or InvalidOperationException)
         {
             // An Unreadable Start Menu Only Means Fewer Apps To Pick
+        }
+
+        return MergeLaunchers(apps);
+    }
+
+    private static List<AddedGame> MergeLaunchers(List<AddedGame> shortcuts)
+    {
+        // A Launcher One Folder Down Names An Exe Named App
+        var apps = shortcuts.DistinctBy(app => app.Key, StringComparer.OrdinalIgnoreCase).ToList();
+        foreach (var launcher in apps.ToList())
+        {
+            var folder = Path.GetDirectoryName(Path.GetDirectoryName(launcher.Path));
+            var index = apps.FindIndex(app =>
+                string.Equals(
+                    Path.GetDirectoryName(app.Path),
+                    folder,
+                    StringComparison.OrdinalIgnoreCase
+                )
+                && app.Name.Equals(
+                    Path.GetFileNameWithoutExtension(app.Path),
+                    StringComparison.OrdinalIgnoreCase
+                )
+            );
+            if (index >= 0)
+            {
+                apps[index] = apps[index] with { Name = launcher.Name };
+                apps.Remove(launcher);
+            }
         }
 
         return apps;
@@ -462,6 +492,24 @@ internal static partial class GameScanner
             BuildDisplayName("assettocorsa", "assettocorsa") != "Assetto Corsa"
             || BuildDisplayName("Sons Of The Forest", "sonsoftheforest") != "Sons Of The Forest"
             || BuildDisplayName("cuphead", "cuphead") != "Cuphead"
+        )
+        {
+            return false;
+        }
+
+        // A Tray Launcher Folds Into The App It Opens
+        List<AddedGame> shortcuts =
+        [
+            new("lghub", "LGHUB", @"C:\Program Files\LGHUB\lghub.exe"),
+            new("lghubsystemtray", "Logitech G HUB", @"C:\Program Files\LGHUB\tray\lghub_tray.exe"),
+            new("lghubsystemtray", "Logitech G HUB", @"C:\Program Files\LGHUB\tray\lghub_tray.exe"),
+            new("winword", "Word", @"C:\Program Files\Office\WINWORD.EXE"),
+            new("gitgui", "Git GUI", @"C:\Program Files\Office\cmd\git-gui.exe"),
+        ];
+        var merged = MergeLaunchers(shortcuts);
+        if (
+            merged.Count != 3
+            || merged[0] != new AddedGame("lghub", "Logitech G HUB", shortcuts[0].Path)
         )
         {
             return false;
