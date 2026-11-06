@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
 
 namespace LetsClip.Services.Media;
@@ -40,6 +41,45 @@ public static class MediaProbe
         }
     }
 
+    public static async Task<double[]> FrameTimesAsync(string path, CancellationToken token)
+    {
+        // Each Video Frame's Start, Read From Packets Without Decoding
+        var result = await FFmpeg.RunAsync(
+            FFmpeg.FFprobePath,
+            [
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "packet=pts_time",
+                "-of",
+                "csv=p=0",
+                path,
+            ],
+            s_timeout,
+            token
+        );
+        return result.Succeeded
+            ?
+            [
+                .. result
+                    .Output.Split('\n')
+                    .Select(line =>
+                        double.TryParse(
+                            line.Trim().TrimEnd(','),
+                            CultureInfo.InvariantCulture,
+                            out var time
+                        )
+                            ? time
+                            : double.NaN
+                    )
+                    .Where(double.IsFinite)
+                    .Order(),
+            ]
+            : [];
+    }
+
     private static MediaInfo? Parse(string json)
     {
         if (JsonSerializer.Deserialize<Probe>(json, s_json) is not { Format: { } format } probe)
@@ -59,9 +99,13 @@ public static class MediaProbe
             ? average
             : RateOf(video?.RFrameRate);
 
-        // A Missing Duration Reads As Zero
+        // A Sound Tail Under A Step Never Lengthens The Clip
+        var duration =
+            video?.Duration is > 0 and var picture && format.Duration - picture < TrimRange.Step
+                ? picture
+                : format.Duration;
         return new MediaInfo(
-            format.Duration,
+            duration,
             video?.CodecName,
             video?.PixFmt,
             video?.Width ?? 0,
@@ -94,6 +138,7 @@ public static class MediaProbe
         string? PixFmt,
         int Width,
         int Height,
+        double? Duration,
         string? AvgFrameRate,
         string? RFrameRate,
         ProbeDisposition? Disposition

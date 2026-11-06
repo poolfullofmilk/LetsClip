@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace LetsClip.Data.Helpers;
 
@@ -30,6 +32,13 @@ public static class FilePaths
             : root + Path.DirectorySeparatorChar;
         return string.Equals(full, root, StringComparison.OrdinalIgnoreCase)
             || full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static string KeyOf(string path)
+    {
+        // One File Name Safe Key Per Path, Any Spelling
+        var normalized = Path.GetFullPath(path).ToUpperInvariant();
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized)))[..32];
     }
 
     private static string? Normal(string? path)

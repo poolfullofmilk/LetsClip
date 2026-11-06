@@ -8,9 +8,22 @@
         <MudStack Spacing="3">
             <MudText Typo="Typo.body2"
                      Class="mud-text-secondary text-relaxed">
-                Games come from your libraries, apps are added by you. Removed ones stay at the bottom, ready to add back
+                Games and apps switched on are recorded while they run
             </MudText>
-            @if (!Controller.GamesScanned)
+            @* Game Search *@
+            <MudTextField T="string"
+                          @bind-Value="_search"
+                          Immediate
+                          Placeholder="Search"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Rounded.Search"
+                          Clearable
+                          ClearIcon="@Icons.Material.Rounded.Clear"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          aria-label="Search Games and Apps"
+                          Class="my-0" />
+            @if (IsLoading)
             {
                 <MudStack Row
                           AlignItems="AlignItems.Center"
@@ -21,54 +34,57 @@
                                          Indeterminate />
                     <MudText Typo="Typo.body2"
                              Class="mud-text-secondary">
-                        Looking for installed games
+                        Looking for games and apps
                     </MudText>
                 </MudStack>
             }
-            else if (_games.Count == 0)
+            else if (ShownRows.Count == 0)
             {
-                <EmptyState Icon="@Icons.Material.Rounded.SportsEsports"
+                <EmptyState Icon="@Icons.Material.Rounded.SearchOff"
                             Text="No Games or Apps Found" />
             }
             else
             {
                 @* Games Table *@
-                <MudTable T="GameEntry"
-                          Items="_games"
+                <MudTable T="AddedGame"
+                          Items="ShownRows"
                           Dense
                           Hover
                           Outlined
                           Elevation="0"
-                          Class="fit"
+                          Class="fit games-table"
                           Style="max-height:50vh">
 
                     <RowTemplate>
-                        <MudTd>
-                            <MudText Typo="Typo.body2"
-                                     Class="@(context.IsRemoved ? "mud-text-disabled" : null)">
-                                @context.Name
-                            </MudText>
-                        </MudTd>
-                        <MudTd Class="text-center"
-                               Style="width:56px">
-                            @if (context.IsRemoved)
+                        <MudTd Class="game-icon">
+                            @if (_icons.GetValueOrDefault(context.Key) is { Length: > 0 } icon)
                             {
-                                @* Add Back Button *@
-                                <IconButton Icon="@Icons.Material.Rounded.Add"
-                                            Text="Add Back"
-                                            Color="Color.Info"
-                                            RootClass="d-flex justify-center"
-                                            OnClick="() => Controller.SetRemoved(context.Key, false)" />
+                                <MudImage Src="@icon"
+                                          Alt=""
+                                          Width="24"
+                                          Height="24" />
                             }
                             else
                             {
-                                @* Remove Button *@
-                                <IconButton Icon="@Icons.Material.Rounded.Close"
-                                            Text="Remove"
-                                            Color="Color.Error"
-                                            RootClass="d-flex justify-center"
-                                            OnClick="() => Controller.SetRemoved(context.Key, true)" />
+                                <MudIcon Icon="@Icons.Material.Rounded.SportsEsports"
+                                         Class="mud-text-secondary" />
                             }
+                        </MudTd>
+                        <MudTd>
+                            <MudText Typo="Typo.body2"
+                                     Class="ellipsis">
+                                <MudHighlighter Text="@context.Name"
+                                                HighlightedText="@_search" />
+                            </MudText>
+                        </MudTd>
+                        <MudTd Class="game-switch">
+                            @* Record Switch *@
+                            <MudSwitch T="bool"
+                                       Value="IsRecorded(context)"
+                                       ValueChanged="on => SetRecorded(context, on)"
+                                       Color="Color.Info"
+                                       aria-label="@($"Record {context.Name}")"
+                                       Class="ma-0" />
                         </MudTd>
                     </RowTemplate>
 
@@ -77,31 +93,13 @@
         </MudStack>
     </DialogContent>
     <DialogActions>
-        @* Add Game Menu *@
-        <MudMenu Label="Add Game or App"
-                 StartIcon="@Icons.Material.Rounded.Add"
-                 Variant="Variant.Filled"
-                 Color="Color.Info"
-                 Dense
-                 MaxHeight="360"
-                 AnchorOrigin="Origin.TopRight"
-                 TransformOrigin="Origin.BottomRight">
-            <ChildContent>
-                @foreach (var app in RunningApps)
-                {
-                    <MudMenuItem Label="@app.Name"
-                                 OnClick="() => Controller.AddGame(app)" />
-                }
-                @if (RunningApps.Count > 0)
-                {
-                    <MudDivider />
-                }
-                @* Browse Item *@
-                <MudMenuItem Icon="@Icons.Material.Rounded.FolderOpen"
-                             Label="Browse for an Exe"
-                             OnClick="BrowseForGame" />
-            </ChildContent>
-        </MudMenu>
+        @* Browse Button *@
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Info"
+                   StartIcon="@Icons.Material.Rounded.FolderOpen"
+                   OnClick="BrowseForGame">
+            Browse for an Exe
+        </MudButton>
     </DialogActions>
 
 </MudDialog>

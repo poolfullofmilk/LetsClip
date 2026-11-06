@@ -25,7 +25,7 @@ public sealed class CaptureController : IDisposable
     private readonly SemaphoreSlim _steps = new(1, 1);
     private CaptureHolds _holds;
     private string? _lastGame;
-    private IReadOnlyDictionary<string, string>? _installedGames;
+    private IReadOnlyDictionary<string, AddedGame>? _installedGames;
     private int _failures;
     private int _retry;
     private volatile bool _quietRetry;
@@ -188,13 +188,13 @@ public sealed class CaptureController : IDisposable
     {
         // Found And Added Games, Those Taken Off The List Last
         var settings = Settings;
-        var names = new Dictionary<string, string>(
-            _installedGames ?? new Dictionary<string, string>(),
+        var games = new Dictionary<string, AddedGame>(
+            _installedGames ?? new Dictionary<string, AddedGame>(),
             StringComparer.OrdinalIgnoreCase
         );
         foreach (var added in settings.AddedGames ?? [])
         {
-            names[added.Key] = added.Name;
+            games[added.Key] = added;
         }
 
         var removed = new HashSet<string>(
@@ -203,8 +203,13 @@ public sealed class CaptureController : IDisposable
         );
         return
         [
-            .. names
-                .Select(game => new GameEntry(game.Key, game.Value, removed.Contains(game.Key)))
+            .. games
+                .Values.Select(game => new GameEntry(
+                    game.Key,
+                    game.Name,
+                    game.Path,
+                    removed.Contains(game.Key)
+                ))
                 .OrderBy(game => game.IsRemoved)
                 .ThenBy(game => game.Name, StringComparer.CurrentCultureIgnoreCase),
         ];

@@ -5,67 +5,81 @@
              Class="pt-2">
         Export
     </MudText>
+    <SettingRow Title="Length">
+        <MudText Typo="Typo.body2"
+                 Class="mud-text-secondary player-time"
+                 data-length>
+            @Formatter.FormatDuration(Range.Length)
+        </MudText>
+    </SettingRow>
+    <MudDivider />
     <SettingRow Title="Original Size">
         <MudText Typo="Typo.body2"
-                 Class="mud-text-secondary ellipsis">
+                 Class="mud-text-secondary">
             @Formatter.FormatSize(Clip.SizeBytes)
         </MudText>
     </SettingRow>
     <MudDivider />
     @if (Limits is { Count: > 1 } limits)
     {
-        <SettingField Title="Size Limit"
-                      Info="The exported file stays under this size. Unlimited keeps all the quality the clip has">
+        <SettingRow Title="Size Limit"
+                    Info="The exported file stays under this size. Unlimited keeps all the quality the clip has">
             @* Size Limit Select *@
-            <MudSelect T="double"
-                       OpenIcon="@Icons.Material.Rounded.ArrowDropDown"
-                       CloseIcon="@Icons.Material.Rounded.ArrowDropUp"
-                       Value="Limit"
-                       ValueChanged="SetLimit"
-                       ToStringFunc="LimitLabel"
-                       Variant="Variant.Outlined"
-                       Margin="Margin.Dense"
-                       Dense
-                       Disabled="@IsExporting"
-                       aria-label="Size Limit"
-                       Class="my-0">
-                @foreach (var limit in limits)
-                {
-                    <MudSelectItem T="double"
-                                   Value="limit">
-                        @LimitLabel(limit)
-                    </MudSelectItem>
-                }
-            </MudSelect>
-        </SettingField>
+            <MudElement HtmlTag="div"
+                        Class="short-width">
+                <MudSelect T="double"
+                           OpenIcon="@Icons.Material.Rounded.ArrowDropDown"
+                           CloseIcon="@Icons.Material.Rounded.ArrowDropUp"
+                           Value="Limit"
+                           ValueChanged="SetLimit"
+                           ToStringFunc="LimitLabel"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Dense
+                           Disabled="@IsExporting"
+                           aria-label="Size Limit"
+                           Class="my-0">
+                    @foreach (var limit in limits)
+                    {
+                        <MudSelectItem T="double"
+                                       Value="limit">
+                            @LimitLabel(limit)
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+            </MudElement>
+        </SettingRow>
         <MudDivider />
     }
     @if (SourceFrameRate > 60)
     {
-        <SettingField Title="Frame Rate">
+        <SettingRow Title="Frame Rate">
             @* Frame Rate Select *@
-            <MudSelect T="bool"
-                       OpenIcon="@Icons.Material.Rounded.ArrowDropDown"
-                       CloseIcon="@Icons.Material.Rounded.ArrowDropUp"
-                       Value="Controller.Settings.ExportFullFrameRate"
-                       ValueChanged="SetFullFrameRate"
-                       ToStringFunc="FrameRateLabel"
-                       Variant="Variant.Outlined"
-                       Margin="Margin.Dense"
-                       Dense
-                       Disabled="@IsExporting"
-                       aria-label="Frame Rate"
-                       Class="my-0">
-                <MudSelectItem T="bool"
-                               Value="false">
-                    @FrameRateLabel(false)
-                </MudSelectItem>
-                <MudSelectItem T="bool"
-                               Value="true">
-                    @FrameRateLabel(true)
-                </MudSelectItem>
-            </MudSelect>
-        </SettingField>
+            <MudElement HtmlTag="div"
+                        Class="short-width">
+                <MudSelect T="bool"
+                           OpenIcon="@Icons.Material.Rounded.ArrowDropDown"
+                           CloseIcon="@Icons.Material.Rounded.ArrowDropUp"
+                           Value="Controller.Settings.ExportFullFrameRate"
+                           ValueChanged="SetFullFrameRate"
+                           ToStringFunc="FrameRateLabel"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Dense
+                           Disabled="@IsExporting"
+                           aria-label="Frame Rate"
+                           Class="my-0">
+                    <MudSelectItem T="bool"
+                                   Value="false">
+                        @FrameRateLabel(false)
+                    </MudSelectItem>
+                    <MudSelectItem T="bool"
+                                   Value="true">
+                        @FrameRateLabel(true)
+                    </MudSelectItem>
+                </MudSelect>
+            </MudElement>
+        </SettingRow>
         <MudDivider />
     }
     @if (Media.HasAudio)
@@ -132,7 +146,7 @@
                                    Rounded
                                    Size="Size.Medium" />
                 @* Cancel Button *@
-                <MudButton Variant="Variant.Text"
+                <MudButton Variant="Variant.Filled"
                            Color="Color.Error"
                            Size="Size.Small"
                            FullWidth
@@ -150,7 +164,7 @@
                        Disabled="@(!CanExport)"
                        FullWidth
                        OnClick="ExportAsync">
-                @(IsCut ? "Export and Save" : "Export")
+                @ExportText
             </MudButton>
         }
 

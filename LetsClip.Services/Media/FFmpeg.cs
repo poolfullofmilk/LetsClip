@@ -188,8 +188,8 @@ public static partial class FFmpeg
 
     public static string Seconds(double value)
     {
-        // Invariant Seconds To The Millisecond, Never Below Zero
-        return Math.Max(0, value).ToString("0.###", CultureInfo.InvariantCulture);
+        // Invariant Seconds To The Microsecond, Never Below Zero
+        return Math.Max(0, value).ToString("0.######", CultureInfo.InvariantCulture);
     }
 
     private static bool IsProgress(string line)

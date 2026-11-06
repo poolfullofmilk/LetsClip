@@ -79,6 +79,12 @@ public partial class ExportPanel : IDisposable
 
     private bool IsCut => Range.Length < Media.Duration - TrimRange.Step / 2;
 
+    // Once Exported, The Same Selection Reads Again
+    private string ExportText =>
+        IsCut ? "Export and Save"
+        : _result is null ? "Export"
+        : "Export Again";
+
     private bool CanExport =>
         !IsExporting
         && Range.IsValidFor(Media.Duration)
@@ -207,6 +213,7 @@ public partial class ExportPanel : IDisposable
             if (IsCut)
             {
                 _progress = new ExportProgress("Saving the Cut", 1);
+                StateHasChanged();
                 await OnSaveCut.InvokeAsync(request.Range);
             }
         }

@@ -16,7 +16,8 @@ public static class AppInfo
     public static Version Version { get; } =
         Assembly.GetEntryAssembly()?.GetName().Version ?? new Version(0, 0);
 
-    public static string VersionText { get; } = Version.ToString(Version.Build > 0 ? 3 : 2);
+    // Shown Like The Release Tags, v1.8
+    public static string VersionText { get; } = "v" + Version.ToString(Version.Build > 0 ? 3 : 2);
 
     // Debug Builds Never Touch The Installed App's Files
 #if DEBUG

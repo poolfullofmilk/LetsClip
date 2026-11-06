@@ -231,6 +231,12 @@
     max-width: 100%;
 }
 
+/* Panel Selects Hold Short Values Like 20 MB */
+.short-width {
+    flex: none !important;
+    width: 150px;
+}
+
 /* Automatic Sits Apart From The Devices Below It */
 .mud-list-item.divided {
     border-bottom: 1px solid var(--mud-palette-lines-default);
@@ -621,23 +627,11 @@
         transform: translateY(-50%);
     }
 
-/* The Clip Name Edits In Place At The Title's Size */
-.rename-field {
-    width: 360px;
-    max-width: 100%;
+/* The Recorded Date Sits Greyed At The Name's End */
+.title-field .mud-input-adornment-text {
+    color: var(--mud-palette-text-secondary);
+    font-size: var(--mud-typography-body2-size);
 }
-
-    .rename-field .mud-input {
-        box-shadow: inset 0 -2px 0 var(--mud-palette-info);
-        font-size: var(--mud-typography-h5-size);
-        font-weight: var(--mud-typography-h5-weight);
-        line-height: var(--mud-typography-h5-lineheight);
-    }
-
-        .rename-field .mud-input input {
-            padding: 0;
-            font: inherit;
-        }
 
 /* A Spinner Replaces A Button's Icon While It Works */
 .mud-button-icon-start .button-spinner {
@@ -654,6 +648,17 @@
 /* #endregion */
 
 /* #region Clips */
+/* Game Rows Lead With Their Icon, End On Their Switch */
+.games-table .game-icon {
+    width: 40px;
+    line-height: 0;
+}
+
+.games-table .game-switch {
+    width: 64px;
+    text-align: end;
+}
+
 /* The Game Filter Opens Under Its Button, Its List Scrolls */
 .filter-popover {
     width: 280px;
@@ -960,7 +965,7 @@ mark {
     opacity: 0.7;
 }
 
-/* The Volume Slider Rises Above Its Button While Hovered */
+/* The Volume Slider Opens Beside Its Button, Inside Its Panel */
 .volume {
     position: relative;
     display: flex;
@@ -969,12 +974,12 @@ mark {
 /* Its Padding Bridges The Gap, Hover Stays */
 .volume-pop {
     position: absolute;
-    bottom: 100%;
-    left: 50%;
+    top: 50%;
+    right: 100%;
     z-index: 10;
     display: none;
-    padding-bottom: 8px;
-    transform: translateX(-50%);
+    padding-right: 8px;
+    transform: translateY(-50%);
 }
 
     .volume:is(:hover, :focus-within) .volume-pop {
@@ -983,18 +988,10 @@ mark {
 
 /* The 16 Px Thumb Keeps 10 Px Clear */
 .volume-paper {
-    position: relative;
-    width: 36px;
-    height: 120px;
+    display: flex;
+    align-items: center;
+    width: 120px;
+    height: 36px;
+    padding-inline: 10px;
 }
-
-    /* MudBlazor Only Rotates The Slider, So Centre It Here */
-    .volume-paper .mud-slider {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 100px;
-        height: auto;
-        translate: -50% -50%;
-    }
 /* #endregion */

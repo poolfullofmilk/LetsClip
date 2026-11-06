@@ -9,6 +9,9 @@ public partial class TrimField
     public required string Label { get; set; }
 
     [Parameter]
+    public required string Icon { get; set; }
+
+    [Parameter]
     public double Value { get; set; }
 
     [Parameter]
@@ -16,6 +19,10 @@ public partial class TrimField
 
     [Parameter]
     public EventCallback<double> OnCommit { get; set; }
+
+    // Moves The Point To The Frame On Screen
+    [Parameter]
+    public EventCallback OnSet { get; set; }
 
     private int _version;
 

@@ -44,6 +44,9 @@ window.letsClip = (() => {
 
     // The Shortest Selection, Matching TrimRange.Step
     const step = 0.1;
+
+    // A Shown Edge Sits Half A Millisecond Inside Its Frame
+    const inside = 0.0005;
     let state = null;
 
     // The Editor Attaches Only A Clip Longer Than Zero
@@ -58,7 +61,7 @@ window.letsClip = (() => {
         const { video, playhead, dotnet } = state;
         if (state.stopAt !== null && !video.paused && video.currentTime >= state.stopAt) {
             video.pause();
-            video.currentTime = state.stopAt;
+            video.currentTime = Math.max(0, state.stopAt - inside);
         }
         const time = video.currentTime;
         playhead.style.left = percent(time);
@@ -80,17 +83,24 @@ window.letsClip = (() => {
     };
 
     // Each Clip Opens Playing Its Kept Part With Sound
-    const attach = (video, playhead, timeline, dotnet, length, start, end, volume, separator) => {
+    const attach = (video, playhead, timeline, dotnet, length, start, end, volume, separator, frames) => {
         detach();
-        state = { video, playhead, timeline, dotnet, separator, duration: length, reported: 0, sent: -1, paused: true, stopAt: null, frame: 0, drag: null };
-        video.currentTime = start;
+        // Frame Starts, Then The Clip's End
+        const bounds = [...new Set(frames.map((time) => Math.max(0, time)).filter((time) => time < length)), length].sort((first, second) => first - second);
+        state = { video, playhead, timeline, dotnet, separator, bounds, duration: length, reported: 0, sent: -1, paused: true, stopAt: null, frame: 0, drag: null };
+        // Points Saved Before Snapping Move Onto Their Frames
+        const range = { start, end };
+        setEdge(range, "start", start);
+        setEdge(range, "end", end);
+        if (range.start !== start || range.end !== end) commit(range);
+        video.currentTime = range.start + inside;
         setVolume(volume, false);
         video.addEventListener("error", state.onError = () => dotnet.invokeMethodAsync("OnPlayerError").catch(() => {}));
         video.addEventListener(
             "loadeddata",
             (state.onLoaded = () => {
                 dotnet.invokeMethodAsync("OnPlayerReady").catch(() => {});
-                play(start, end);
+                play(range.start, range.end);
             }),
             { once: true }
         );
@@ -131,10 +141,37 @@ window.letsClip = (() => {
     const handleOf = (edge) => state.timeline.querySelector(`[data-handle="${edge}"]`);
     const readRange = () => ({ start: parseFloat(handleOf("start").dataset.time), end: parseFloat(handleOf("end").dataset.time) });
 
+    // The Last Frame Edge At Or Before A Time
+    const floorIndex = (time) => {
+        const { bounds } = state;
+        let low = 0;
+        let high = bounds.length - 1;
+        while (low < high) {
+            const middle = (low + high + 1) >> 1;
+            if (bounds[middle] <= time + 1e-6) low = middle;
+            else high = middle - 1;
+        }
+        return low;
+    };
+
+    // The Nearest Frame Edge Within Half A Step, Else The Time
+    const fit = (time, low, high) => {
+        const clamped = Math.min(high, Math.max(low, time));
+        const index = floorIndex(clamped);
+        const near = [state.bounds[index], state.bounds[index + 1]]
+            .filter((bound) => bound !== undefined && bound >= low - 1e-6 && bound <= high + 1e-6 && Math.abs(bound - clamped) <= step / 2)
+            .sort((first, second) => Math.abs(first - clamped) - Math.abs(second - clamped))[0];
+        return near ?? Math.round(clamped * 1000) / 1000;
+    };
+
     const setEdge = (range, edge, time) => {
-        const value = Math.round(time * 1000) / 1000;
-        if (edge === "start") range.start = Math.min(Math.max(0, value), range.end - step);
-        else range.end = Math.max(Math.min(duration(), value), range.start + step);
+        if (edge === "start") range.start = fit(time, 0, range.end - step);
+        else range.end = fit(time, range.start + step, duration());
+    };
+
+    // Start Shows Its First Frame, End The Last One Kept
+    const showEdge = (range, edge) => {
+        state.video.currentTime = edge === "start" ? range.start + inside : Math.max(range.start, range.end - inside);
     };
 
     // A Drag Paints The Handles, Blazor Hears Once It Settles
@@ -169,8 +206,9 @@ window.letsClip = (() => {
             input.value = formatTime(time);
             field.dataset.seconds = String(Math.round(time * 10) / 10).replace(".", state.separator);
         }
-        const length = document.querySelector("[data-length]");
-        if (length) length.textContent = formatTime(end - start);
+        // Its Own Text Node, Which Blazor Keeps Writing To
+        const length = document.querySelector("[data-length]")?.firstChild;
+        if (length) length.nodeValue = formatTime(end - start);
     };
 
     const commit = (range) => state.dotnet.invokeMethodAsync("OnRange", range.start, range.end).catch(() => {});
@@ -188,7 +226,7 @@ window.letsClip = (() => {
         delete handle.dataset.grabbed;
         setEdge(range, edge, time);
         paint(range);
-        state.video.currentTime = range[edge];
+        showEdge(range, edge);
         state.keyed = { range, at: performance.now() };
         commit(range);
     };
@@ -226,7 +264,7 @@ window.letsClip = (() => {
         }
         setEdge(state.range, state.drag, time);
         paint(state.range);
-        state.video.currentTime = state.range[state.drag];
+        showEdge(state.range, state.drag);
     };
 
     // Pointer Moves Already Arrive Once Per Frame
@@ -249,7 +287,7 @@ window.letsClip = (() => {
     const play = (start, end) => {
         if (!state) return;
         const { video } = state;
-        if (video.currentTime < start - 0.05 || video.currentTime >= end - 0.05) video.currentTime = start;
+        if (video.currentTime < start - 0.05 || video.currentTime >= end - 0.05) video.currentTime = start + inside;
         state.stopAt = end;
         video.play().catch(() => {});
     };
@@ -264,8 +302,23 @@ window.letsClip = (() => {
         if (state.stopAt !== null && time >= state.stopAt) state.stopAt = null;
     };
 
-    const seek = (time) => {
-        if (state) state.video.currentTime = clamp(time);
+    // A Typed Or Marked Point Moves Its Handle Like A Drag
+    const place = (edge, time) => {
+        if (!state) return;
+        const range = readRange();
+        setEdge(range, edge, time);
+        paint(range);
+        showEdge(range, edge);
+        commit(range);
+    };
+
+    // The Frame On Screen Starts The Clip Or Ends It
+    const mark = (edge) => {
+        if (!state) return;
+        const { bounds, video } = state;
+        const index = Math.min(floorIndex(video.currentTime), bounds.length - 2);
+        const frame = edge === "start" ? bounds[index] : bounds[index + 1];
+        place(edge, frame !== undefined && Math.abs(frame - video.currentTime) <= step / 2 ? frame : video.currentTime);
     };
 
     const setVolume = (volume, muted) => {
@@ -315,5 +368,5 @@ window.letsClip = (() => {
             stopKeys = () => {};
         };
     };
-    return { transition, attach, detach, play, pause, nudge, seek, setVolume, fullScreen, watchKeys, stopKeys: () => stopKeys() };
+    return { transition, attach, detach, play, pause, nudge, place, mark, setVolume, fullScreen, watchKeys, stopKeys: () => stopKeys() };
 })();

@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Windows;
 using LetsClip.Data.Enums;
 using LetsClip.Data.Helpers;
@@ -45,7 +43,7 @@ public partial class App : Application
             false,
             EventResetMode.AutoReset,
             AppInfo.SandboxRoot is { } sandbox
-                ? $"{AppInfo.FolderName}.{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(sandbox.ToUpperInvariant())))[..16]}.Show"
+                ? $"{AppInfo.FolderName}.{FilePaths.KeyOf(sandbox)}.Show"
                 : $"{AppInfo.FolderName}.Show",
             out var isFirstInstance
         );
@@ -117,7 +115,7 @@ public partial class App : Application
 
         // Every Log Starts With What Ran Where And Its Settings
         s_logger.Info(
-            $"Started {AppInfo.DisplayName} v{AppInfo.VersionText}{(startsInTray ? " In The Tray" : "")} On {System.Runtime.InteropServices.RuntimeInformation.OSDescription}, .NET {Environment.Version}, {Environment.ProcessorCount} Threads{(AppInfo.SandboxRoot is null ? "" : ", Sandboxed")}"
+            $"Started {AppInfo.DisplayName} {AppInfo.VersionText}{(startsInTray ? " In The Tray" : "")} On {System.Runtime.InteropServices.RuntimeInformation.OSDescription}, .NET {Environment.Version}, {Environment.ProcessorCount} Threads{(AppInfo.SandboxRoot is null ? "" : ", Sandboxed")}"
         );
         var controller = new CaptureController();
         s_logger.Info($"Settings {System.Text.Json.JsonSerializer.Serialize(controller.Settings)}");

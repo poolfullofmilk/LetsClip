@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using LetsClip.Data.ViewModels;
 using Microsoft.Win32;
 
 namespace LetsClip.Services.Games;
@@ -68,9 +70,9 @@ internal static partial class GameScanner
 
     #region Scan
     // Reads Many Folders, Its One Caller Keeps The Result
-    public static IReadOnlyDictionary<string, string> Scan()
+    public static IReadOnlyDictionary<string, AddedGame> Scan()
     {
-        Dictionary<string, string> installedGames = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, AddedGame> installedGames = new(StringComparer.OrdinalIgnoreCase);
 
         var gameRoots = DiscoverSteamGameRoots()
             .Concat(DiscoverEpicGameRoots())
@@ -82,18 +84,25 @@ internal static partial class GameScanner
         foreach (var rootDirectory in gameRoots)
         {
             var folderName = new DirectoryInfo(rootDirectory).Name;
-            var executableName = ResolveMainExecutableName(rootDirectory, folderName);
-            if (executableName is null)
+            var executablePath = ResolveMainExecutable(rootDirectory, folderName);
+            if (executablePath is null)
             {
                 continue;
             }
 
-            var processName = NormalizeProcessKey(executableName);
+            var processName = NormalizeProcessKey(Path.GetFileNameWithoutExtension(executablePath));
 
             // The First Folder Claiming A Key Keeps It
             if (processName.Length >= 2 && processName != "launcher")
             {
-                installedGames.TryAdd(processName, BuildDisplayName(folderName, processName));
+                installedGames.TryAdd(
+                    processName,
+                    new AddedGame(
+                        processName,
+                        BuildDisplayName(folderName, processName),
+                        executablePath
+                    )
+                );
             }
         }
 
@@ -113,9 +122,9 @@ internal static partial class GameScanner
             : CultureInfo.CurrentCulture.TextInfo.ToTitleCase(folderName);
     }
 
-    private static string? ResolveMainExecutableName(string rootDirectory, string folderName)
+    private static string? ResolveMainExecutable(string rootDirectory, string folderName)
     {
-        string? bestExecutableName = null;
+        string? bestExecutablePath = null;
         var bestScore = int.MinValue;
 
         foreach (var subdirectory in s_executableSubdirectories)
@@ -136,12 +145,12 @@ internal static partial class GameScanner
                 if (score > bestScore)
                 {
                     bestScore = score;
-                    bestExecutableName = executableName;
+                    bestExecutablePath = executablePath;
                 }
             }
         }
 
-        return bestExecutableName;
+        return bestExecutablePath;
     }
 
     private static bool IsRejectedExecutable(string executableName) =>
@@ -182,6 +191,55 @@ internal static partial class GameScanner
         }
 
         return cleaned.Contains("valorant") ? "valorant" : cleaned;
+    }
+    #endregion
+
+    #region Start Menu
+    // Start Menu Shortcuts To Installed Exes, Windows' Own Left Out
+    public static List<AddedGame> ScanStartMenu()
+    {
+        var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        List<AddedGame> apps = [];
+        try
+        {
+            dynamic shell = Activator.CreateInstance(
+                Type.GetTypeFromProgID("WScript.Shell")
+                    ?? throw new InvalidOperationException("No WScript Shell")
+            )!;
+            var shortcuts = new[]
+            {
+                Environment.SpecialFolder.CommonPrograms,
+                Environment.SpecialFolder.Programs,
+            }.SelectMany(folder =>
+                EnumerateFilesSafely(Environment.GetFolderPath(folder), "*.lnk", recurse: true)
+            );
+            foreach (var shortcut in shortcuts)
+            {
+                string target = shell.CreateShortcut(shortcut).TargetPath;
+                if (
+                    target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+                    && !target.StartsWith(windows, StringComparison.OrdinalIgnoreCase)
+                    && !IsRejectedExecutable(Path.GetFileNameWithoutExtension(target))
+                    && !IsRejectedExecutable(Path.GetFileNameWithoutExtension(shortcut))
+                    && File.Exists(target)
+                )
+                {
+                    apps.Add(
+                        new AddedGame(
+                            NormalizeProcessKey(Path.GetFileNameWithoutExtension(target)),
+                            Path.GetFileNameWithoutExtension(shortcut),
+                            target
+                        )
+                    );
+                }
+            }
+        }
+        catch (Exception exception) when (exception is COMException or InvalidOperationException)
+        {
+            // An Unreadable Start Menu Only Means Fewer Apps To Pick
+        }
+
+        return apps;
     }
     #endregion
 
@@ -359,9 +417,17 @@ internal static partial class GameScanner
     #endregion
 
     #region File System
-    private static IEnumerable<string> EnumerateFilesSafely(string directoryPath, string pattern) =>
+    private static IEnumerable<string> EnumerateFilesSafely(
+        string directoryPath,
+        string pattern,
+        bool recurse = false
+    ) =>
         Directory.Exists(directoryPath)
-            ? Directory.EnumerateFiles(directoryPath, pattern, new EnumerationOptions())
+            ? Directory.EnumerateFiles(
+                directoryPath,
+                pattern,
+                new EnumerationOptions { RecurseSubdirectories = recurse }
+            )
             : [];
 
     private static IEnumerable<string> EnumerateDirectoriesSafely(string? directoryPath) =>

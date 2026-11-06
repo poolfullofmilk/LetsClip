@@ -1,7 +1,5 @@
 using System.Collections.Concurrent;
 using System.ComponentModel;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
@@ -201,6 +199,7 @@ public sealed class ClipLibrary : IDisposable
     public static async Task CutAsync(string path, TrimRange range, CancellationToken token)
     {
         // Stream Copied, The MP4 Edit List Hides The Keyframe Pre-Roll
+        // A Hair Early, So The Start Frame Itself Is Kept
         var metadata =
             MetadataOf(path) ?? throw new InvalidDataException("The clip could not be read");
         var temporary = Path.Combine(
@@ -218,7 +217,7 @@ public sealed class ClipLibrary : IDisposable
                     "error",
                     "-y",
                     "-ss",
-                    FFmpeg.Seconds(range.Start),
+                    FFmpeg.Seconds(range.Start - TrimRange.EdgeMargin),
                     "-i",
                     path,
                     "-t",
@@ -373,7 +372,7 @@ public sealed class ClipLibrary : IDisposable
 
     public static string ThumbnailPathOf(string path)
     {
-        return Path.Combine(AppInfo.ThumbnailsDirectory, KeyOf(path) + ".jpg");
+        return Path.Combine(AppInfo.ThumbnailsDirectory, FilePaths.KeyOf(path) + ".jpg");
     }
 
     private static string StripPathOf(string path)
@@ -493,13 +492,7 @@ public sealed class ClipLibrary : IDisposable
 
     private static string MetadataPathOf(string path)
     {
-        return Path.Combine(s_metadataDirectory, KeyOf(path) + ".json");
-    }
-
-    private static string KeyOf(string path)
-    {
-        var normalized = Path.GetFullPath(path).ToUpperInvariant();
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized)))[..32];
+        return Path.Combine(s_metadataDirectory, FilePaths.KeyOf(path) + ".json");
     }
 
     private static void TryDelete(string path)

@@ -270,6 +270,8 @@ public static class ClipExporter
             CultureInfo.InvariantCulture,
             $"scale={job.Width}:{job.Height}:force_original_aspect_ratio=decrease:flags=lanczos,pad={job.Width}:{job.Height}:-1:-1:color=black,setsar=1,format=yuv420p"
         );
+
+        // A Hair Early, So The Start Frame Itself Is Kept
         List<string> input =
         [
             "-hide_banner",
@@ -281,7 +283,7 @@ public static class ClipExporter
             "pipe:2",
             "-nostats",
             "-ss",
-            FFmpeg.Seconds(range.Start),
+            FFmpeg.Seconds(range.Start - TrimRange.EdgeMargin),
             "-i",
             job.Request.SourcePath,
             "-t",

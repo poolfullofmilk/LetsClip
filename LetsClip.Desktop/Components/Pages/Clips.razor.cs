@@ -31,9 +31,6 @@ public partial class Clips : IDisposable
     private IReadOnlyList<ClipInfo>? _nextClips;
     private int _loads;
 
-    // Clips Without A Game Recorded The Monitor
-    private const string MonitorEntry = "Monitor";
-
     // The Games Shown, Null For All, Kept While LetsClip Runs
     private static HashSet<string>? s_shownGames;
 
@@ -160,7 +157,7 @@ public partial class Clips : IDisposable
     #region Game Filter
     private static string GameOf(ClipInfo clip)
     {
-        return clip.Game ?? MonitorEntry;
+        return clip.Game ?? ClipInfo.MonitorTitle;
     }
 
     private void OpenFilter()

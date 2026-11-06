@@ -32,42 +32,23 @@ else
             <IconButton Icon="@Icons.Material.Rounded.ArrowBack"
                         Text="All Clips"
                         OnClick="Back" />
-            <MudStack Spacing="0"
-                      Class="header-title ml-1">
-                @if (_renaming is not null)
-                {
-                    @* Name Field *@
-                    <MudTextField T="string"
-                                  @bind-Value="_renaming"
-                                  Immediate
-                                  AutoFocus
-                                  Underline="false"
-                                  Placeholder="@DefaultTitle"
-                                  OnKeyDown="RenameKey"
-                                  OnBlur="CommitRename"
-                                  aria-label="Clip Name"
-                                  Class="rename-field my-0" />
-                }
-                else
-                {
-                    <MudText Typo="Typo.h5"
-                             Class="ellipsis">
-                        @Title
-                    </MudText>
-                }
-                @if (Subtitle is { } subtitle)
-                {
-                    <MudText Typo="Typo.body2"
-                             Class="mud-text-secondary ellipsis">
-                        @subtitle
-                    </MudText>
-                }
-            </MudStack>
-            @* Rename Button *@
-            <IconButton Icon="@Icons.Material.Rounded.Edit"
-                        Text="Rename Clip"
-                        Disabled="@(_clip is null || _renaming is not null)"
-                        OnClick="StartRename" />
+            @* Clip Name Field *@
+            <MudTextField @key="_path"
+                          @ref="_titleField"
+                          T="string"
+                          Value="_titleText"
+                          ValueChanged="TypeTitle"
+                          Immediate
+                          Placeholder="@DefaultTitle"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Adornment="Adornment.End"
+                          AdornmentText="@RecordedText"
+                          Disabled="@(_clip is null)"
+                          OnBlur="SettleTitle"
+                          OnKeyDown="TitleKeyAsync"
+                          aria-label="Clip Name"
+                          Class="title-field fixed-width my-0" />
             <MudSpacer />
             @if (_clip?.HasOriginal == true)
             {
@@ -143,11 +124,6 @@ else
                                       AlignItems="AlignItems.Center"
                                       Justify="Justify.Center"
                                       Spacing="1">
-                                @* Set Start Button *@
-                                <IconButton Icon="@Icons.Material.Rounded.FirstPage"
-                                            Text="Set Start Here"
-                                            Disabled="@(!_ready)"
-                                            OnClick="SetStartAtPlayhead" />
                                 @* Back Button *@
                                 <IconButton Icon="@Icons.Material.Rounded.Replay5"
                                             Text="Back 5 Seconds"
@@ -165,11 +141,6 @@ else
                                             Text="Forward 5 Seconds"
                                             Disabled="@(!_ready)"
                                             OnClick="() => NudgeAsync(SeekStep)" />
-                                @* Set End Button *@
-                                <IconButton Icon="@Icons.Material.Rounded.LastPage"
-                                            Text="Set End Here"
-                                            Disabled="@(!_ready)"
-                                            OnClick="SetEndAtPlayhead" />
                             </MudStack>
                             <MudStack Row
                                       AlignItems="AlignItems.Center"
@@ -246,29 +217,20 @@ else
 
                         <MudStack Row
                                   AlignItems="AlignItems.Center"
-                                  Spacing="5"
+                                  Justify="Justify.SpaceBetween"
                                   Class="trim-row">
                             <TrimField Label="Start"
+                                       Icon="@Icons.Material.Rounded.FirstPage"
                                        Value="_range.Start"
                                        Disabled="@(!_ready)"
-                                       OnCommit="SetStartAsync" />
+                                       OnCommit="@(start => PlaceAsync("start", start))"
+                                       OnSet="@(() => MarkAsync("start"))" />
                             <TrimField Label="End"
+                                       Icon="@Icons.Material.Rounded.LastPage"
                                        Value="_range.End"
                                        Disabled="@(!_ready)"
-                                       OnCommit="SetEndAsync" />
-                            <MudSpacer />
-                            @* Selection Length *@
-                            <MudText Typo="Typo.body2"
-                                     Class="selectable-text player-time">
-                                <MudElement HtmlTag="span"
-                                            Class="mud-text-secondary mr-2">
-                                    Length
-                                </MudElement>
-                                <MudElement HtmlTag="span"
-                                            data-length>
-                                    @Formatter.FormatDuration(_range.Length)
-                                </MudElement>
-                            </MudText>
+                                       OnCommit="@(end => PlaceAsync("end", end))"
+                                       OnSet="@(() => MarkAsync("end"))" />
                         </MudStack>
                     </MudStack>
                 </MudPaper>

@@ -3,10 +3,20 @@
           AlignItems="AlignItems.Center"
           Spacing="4"
           Class="setting-row">
-    <MudText Typo="Typo.subtitle2"
-             Class="flex-grow-1 ellipsis">
-        @Title
-    </MudText>
+    <MudStack Row
+              AlignItems="AlignItems.Center"
+              Spacing="2"
+              Class="flex-grow-1"
+              Style="min-width:0">
+        <MudText Typo="Typo.subtitle2"
+                 Class="ellipsis">
+            @Title
+        </MudText>
+        @if (Info is { } info)
+        {
+            <InfoIcon Text="@info" />
+        }
+    </MudStack>
     @ChildContent
     @if (Switch is { } on)
     {

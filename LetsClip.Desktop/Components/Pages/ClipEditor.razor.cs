@@ -21,7 +21,9 @@ public partial class ClipEditor : IAsyncDisposable
 
     // Every Clip Opens Playing At Half Volume, Changed In Tenths
     private const double OpeningVolume = 0.5;
-    private static readonly TimeSpan s_trimSaveDelay = TimeSpan.FromMilliseconds(400);
+
+    // Writes Wait For Dragging Or Typing To Settle
+    private static readonly TimeSpan s_saveDelay = TimeSpan.FromMilliseconds(400);
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
 
     [Parameter]
@@ -46,6 +48,7 @@ public partial class ClipEditor : IAsyncDisposable
     private CancellationTokenSource? _lifetime;
     private DotNetObjectReference<ClipEditor>? _reference;
     private Action? _pendingTrim;
+    private Action? _pendingTitle;
     private PlayerClock? _clock;
     private ElementReference _video;
     private ElementReference _playhead;
@@ -54,6 +57,7 @@ public partial class ClipEditor : IAsyncDisposable
     private ClipInfo? _clip;
     private MediaInfo? _media;
     private string? _stripUrl;
+    private double[] _frames = [];
     private string? _loadedName;
     private bool _missing;
     private bool _ready;
@@ -64,27 +68,21 @@ public partial class ClipEditor : IAsyncDisposable
     private double _volume = OpeningVolume;
     private int _volumeShown;
     private double _duration;
-    private double _time;
     private TrimRange _range;
-    private Timer? _trimTimer;
-
-    // The Name Being Typed, Null While Not Renaming
-    private string? _renaming;
+    private Timer? _saveTimer;
+    private MudTextField<string>? _titleField;
+    private string _titleText = "";
 
     private string VideoUrl => _path is null ? "" : DesktopShell.ClipUrl(_path);
 
-    // A Given Name, Else The Date, Also While Loading
-    private string Title => _clip?.Title ?? DefaultTitle;
+    private string Title => _clip?.Title ?? "";
 
+    // The Game Or App, Shown While The Field Is Empty
     private string DefaultTitle =>
-        _clip is { } clip ? (clip with { CustomTitle = null }).Title
-        : ClipNames.DateOf(Path.GetFileNameWithoutExtension(FileName)) is { } date
-            ? Formatter.FormatDateTime(date)
-        : Path.GetFileNameWithoutExtension(FileName);
+        _clip is { } clip ? (clip with { CustomTitle = null }).Title : "";
 
-    // A Title Other Than The Date Keeps The Date Below
-    private string? Subtitle =>
-        _clip is { ShowsDate: true } clip ? Formatter.FormatDateTime(clip.RecordedAt) : null;
+    private string RecordedText =>
+        _clip is { } clip ? Formatter.FormatDateTime(clip.RecordedAt) : "";
 
     private string MuteTip => _muted ? "Unmute Preview" : "Mute Preview";
 
@@ -127,9 +125,11 @@ public partial class ClipEditor : IAsyncDisposable
 
         var path = Path.Combine(Controller.Settings.ClipsDirectory, FileName);
         var clip = await Task.Run(() => Controller.Library.GetAsync(path, token), token);
+        var frames = Task.Run(() => MediaProbe.FrameTimesAsync(path, token), token);
         var media = clip is null
             ? null
             : await Task.Run(() => MediaProbe.ProbeAsync(path, token), token);
+        _frames = await frames;
 
         // Another Clip Opened Meanwhile, This Result Belongs To Nobody
         if (token.IsCancellationRequested)
@@ -145,6 +145,7 @@ public partial class ClipEditor : IAsyncDisposable
 
         // Window Clips Keep Their Capture Rate, Probes Read Low
         _clip = clip;
+        _titleText = clip.Title;
         _path = path;
         var metadata = ClipLibrary.MetadataOf(path);
         _media = media with { FrameRate = metadata?.FrameRate ?? media.FrameRate };
@@ -153,7 +154,6 @@ public partial class ClipEditor : IAsyncDisposable
             ? TrimRange.Fit(start, end, _duration)
             : DefaultRange;
         (_muted, _volume, _volumeShown) = (false, OpeningVolume, 0);
-        _time = _range.Start;
         s_logger.Info(
             $"Opened {FileName} In The Editor, {Formatter.FormatDuration(_duration)} At {_media.Width} × {_media.Height}, {_media.FrameRate:0} FPS, Kept {Formatter.FormatDuration(_range.Start)} To {Formatter.FormatDuration(_range.End)}"
         );
@@ -181,7 +181,8 @@ public partial class ClipEditor : IAsyncDisposable
             _range.Start,
             _range.End,
             _volume,
-            CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator
+            CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator,
+            _frames
         );
     }
 
@@ -216,7 +217,7 @@ public partial class ClipEditor : IAsyncDisposable
         _lifetime?.Cancel();
         _lifetime?.Dispose();
         _lifetime = null;
-        SaveTrimNow();
+        SaveNow();
     }
 
     private async Task LoadStripAsync(string path, double duration, CancellationToken token)
@@ -237,7 +238,6 @@ public partial class ClipEditor : IAsyncDisposable
     public void OnPlayerTime(double time, bool paused)
     {
         // Only The Clock Follows Playback, Not The Whole Editor
-        _time = time;
         _clock?.Show(time);
         if (paused != _paused)
         {
@@ -282,27 +282,16 @@ public partial class ClipEditor : IAsyncDisposable
         ScheduleTrimSave();
     }
 
-    private void SetStartAtPlayhead()
+    private async Task MarkAsync(string edge)
     {
-        SetRange(_range.WithStart(_time));
+        // The Page Script Knows The Frame On Screen
+        await JavaScript.InvokeVoidAsync("letsClip.mark", edge);
     }
 
-    private void SetEndAtPlayhead()
+    private async Task PlaceAsync(string edge, double seconds)
     {
-        SetRange(_range.WithEnd(_time, _duration));
-    }
-
-    private async Task SetStartAsync(double start)
-    {
-        // A Typed Point Moves Its Handle Like A Drag
-        SetRange(_range.WithStart(start));
-        await JavaScript.InvokeVoidAsync("letsClip.seek", _range.Start);
-    }
-
-    private async Task SetEndAsync(double end)
-    {
-        SetRange(_range.WithEnd(end, _duration));
-        await JavaScript.InvokeVoidAsync("letsClip.seek", _range.End);
+        // A Typed Point Snaps To Its Frame Like A Drag
+        await JavaScript.InvokeVoidAsync("letsClip.place", edge, seconds);
     }
 
     private void ScheduleTrimSave()
@@ -322,19 +311,25 @@ public partial class ClipEditor : IAsyncDisposable
                     metadata => metadata with { TrimStart = range?.Start, TrimEnd = range?.End }
                 )
         );
-        _trimTimer ??= new Timer(
-            _ => SaveTrimNow(),
+        SaveSoon();
+    }
+
+    private void SaveSoon()
+    {
+        _saveTimer ??= new Timer(
+            _ => SaveNow(),
             null,
             Timeout.InfiniteTimeSpan,
             Timeout.InfiniteTimeSpan
         );
-        _trimTimer.Change(s_trimSaveDelay, Timeout.InfiniteTimeSpan);
+        _saveTimer.Change(s_saveDelay, Timeout.InfiniteTimeSpan);
     }
 
-    private void SaveTrimNow()
+    private void SaveNow()
     {
-        // Taken Once, So The Trim Is Never Written Twice
+        // Taken Once, So Nothing Is Written Twice
         Interlocked.Exchange(ref _pendingTrim, null)?.Invoke();
+        Interlocked.Exchange(ref _pendingTitle, null)?.Invoke();
     }
 
     private string Percent(double seconds)
@@ -345,7 +340,7 @@ public partial class ClipEditor : IAsyncDisposable
 
     private static string Exact(double value)
     {
-        return value.ToString("0.###", CultureInfo.InvariantCulture);
+        return value.ToString("0.######", CultureInfo.InvariantCulture);
     }
     #endregion
 
@@ -390,44 +385,50 @@ public partial class ClipEditor : IAsyncDisposable
         await JavaScript.InvokeVoidAsync("letsClip.fullScreen");
     }
 
-    #region Rename
-    private void StartRename()
+    #region Title
+    private void TypeTitle(string text)
     {
-        _renaming = Title;
-    }
-
-    private void RenameKey(KeyboardEventArgs key)
-    {
-        // Enter Keeps The Name, Escape Puts The Old One Back
-        if (key.Key == "Enter")
-        {
-            CommitRename();
-        }
-        else if (key.Key == "Escape")
-        {
-            _renaming = null;
-        }
-    }
-
-    private void CommitRename()
-    {
-        var name = _renaming?.Trim();
-        _renaming = null;
-        if (name is null || _clip is not { } clip || _path is not { } path)
+        _titleText = text;
+        if (_clip is not { } clip || _path is not { } path)
         {
             return;
         }
 
-        // Empty Or The Default Name Goes Back To The Default
-        var title = name.Length == 0 || name == DefaultTitle ? null : name;
+        // Empty Or The Default Name Means The Default
+        var typed = text.Trim();
+        var title = typed.Length == 0 || typed == DefaultTitle ? null : typed;
         if (title == clip.CustomTitle)
         {
             return;
         }
 
-        ClipLibrary.UpdateMetadata(path, metadata => metadata with { Title = title });
         _clip = clip with { CustomTitle = title };
-        s_logger.Info($"Renamed {FileName} To {title ?? "Its Default Name"}");
+        var fileName = FileName;
+        Volatile.Write(
+            ref _pendingTitle,
+            () =>
+            {
+                ClipLibrary.UpdateMetadata(path, metadata => metadata with { Title = title });
+                s_logger.Info($"Renamed {fileName} To {title ?? "Its Default Name"}");
+            }
+        );
+        SaveSoon();
+    }
+
+    private void SettleTitle()
+    {
+        // Leaving Writes At Once, An Empty Field Shows The Default
+        SaveNow();
+        _titleText = Title;
+    }
+
+    private async Task TitleKeyAsync(KeyboardEventArgs key)
+    {
+        // Enter Or Escape Ends Typing Like Leaving The Field
+        if (key.Key is "Enter" or "Escape" && _titleField is { } field)
+        {
+            await field.BlurAsync();
+        }
     }
     #endregion
 
@@ -457,8 +458,8 @@ public partial class ClipEditor : IAsyncDisposable
 
     private async Task ReplaceFileAsync(Func<Task> replace)
     {
-        // The Player Lets Go, An Unsaved Trim Is Dropped
-        Interlocked.Exchange(ref _pendingTrim, null);
+        // Pending Writes Land First, Then The Player Lets Go
+        SaveNow();
         await DetachAsync();
         try
         {
@@ -515,7 +516,7 @@ public partial class ClipEditor : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         // Writes A Pending Trim, Then Lets Go Of The File
-        _trimTimer?.Dispose();
+        _saveTimer?.Dispose();
         EndClip();
         await DetachAsync();
         GC.SuppressFinalize(this);

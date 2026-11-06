@@ -15,6 +15,9 @@ public partial class Settings : IDisposable
 {
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
 
+    // A Slid Volume Plays Once Settled, Restarts Cut The Chime
+    private static readonly TimeSpan s_chimeDelay = TimeSpan.FromMilliseconds(300);
+
     [Inject]
     public required CaptureController Controller { get; set; }
 
@@ -31,6 +34,7 @@ public partial class Settings : IDisposable
     private IReadOnlyList<AudioDeviceInfo> _microphones = [];
     private DotNetObjectReference<Settings>? _reference;
     private MicrophoneMeter? _meter;
+    private Timer? _chimeTimer;
     private bool _capturingKey;
     private Hotkey? _pendingKey;
     private string? _folderError;
@@ -193,13 +197,15 @@ public partial class Settings : IDisposable
 
     private void SetSaveSoundVolume(double level)
     {
-        // Each Step Plays At Its New Level
         Controller.UpdateSettings(settings => settings with { SaveSoundVolume = level });
-        SaveChime.Play(Controller.Recorder, level);
+        _chimeTimer ??= new Timer(_ => PlaySaveSound());
+        _chimeTimer.Change(s_chimeDelay, Timeout.InfiniteTimeSpan);
     }
 
     private void PlaySaveSound()
     {
+        // A Click Plays At Once, Dropping A Pending Slide
+        _chimeTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         SaveChime.Play(Controller.Recorder, Controller.Settings.SaveSoundVolume);
     }
 
@@ -353,6 +359,7 @@ public partial class Settings : IDisposable
         }
 
         _reference?.Dispose();
+        _chimeTimer?.Dispose();
         GC.SuppressFinalize(this);
     }
 }

@@ -31,7 +31,7 @@ public partial class VolumeButton
     private async Task SlideAsync(double value)
     {
         // Every Caller Gets Whole Tenths
-        await ValueChanged.InvokeAsync(Math.Round(value / Step) * Step);
+        await ValueChanged.InvokeAsync(Math.Round(value, 1));
     }
 
     public static string IconOf(double volume)

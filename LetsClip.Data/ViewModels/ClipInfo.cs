@@ -17,16 +17,13 @@ public sealed record ClipInfo(
     bool HasOriginal
 )
 {
-    // A Name Given In LetsClip, Else A Generated File's Date
-    public string Title =>
-        CustomTitle
-        ?? (ClipNames.DateOf(Name) is not null ? Formatter.FormatDateTime(RecordedAt) : Name);
+    // Clips Without A Game Recorded The Monitor
+    public const string MonitorTitle = "Monitor";
 
-    // A Title Other Than The Date Keeps The Date Below
-    public bool ShowsDate => CustomTitle is not null || ClipNames.DateOf(Name) is null;
+    // A Given Name, Else The Game, Else Monitor
+    public string Title =>
+        CustomTitle ?? Game ?? (ClipNames.DateOf(Name) is null ? Name : MonitorTitle);
 
     public string Details =>
-        ShowsDate
-            ? $"{Formatter.FormatDateTime(RecordedAt)} · {Formatter.FormatSize(SizeBytes)}"
-            : Formatter.FormatSize(SizeBytes);
+        $"{Formatter.FormatDateTime(RecordedAt)} · {Formatter.FormatSize(SizeBytes)}";
 }

@@ -94,11 +94,25 @@ public sealed partial class GameWatcher : IDisposable
         var product = FileVersionInfo.GetVersionInfo(executablePath).ProductName?.Trim();
         return new AddedGame(
             GameScanner.NormalizeProcessKey(file),
-            string.IsNullOrEmpty(product) ? file : product
+            string.IsNullOrEmpty(product) ? file : product,
+            executablePath
         );
     }
 
-    public static IReadOnlyList<AddedGame> RunningApps()
+    public static IReadOnlyList<AddedGame> FindApps()
+    {
+        // Start Menu Names First, Open Apps Add Portable Ones
+        return
+        [
+            .. GameScanner
+                .ScanStartMenu()
+                .Concat(RunningApps())
+                .Where(app => !app.Key.StartsWith("letsclip", StringComparison.Ordinal))
+                .DistinctBy(app => app.Key, StringComparer.OrdinalIgnoreCase),
+        ];
+    }
+
+    private static List<AddedGame> RunningApps()
     {
         // Apps With A Titled Window, Named Like An Added Exe
         var processes = Process.GetProcesses();
@@ -121,8 +135,7 @@ public sealed partial class GameWatcher : IDisposable
                                 process.ProcessName
                             )
                     )
-                    .DistinctBy(app => app.Key)
-                    .OrderBy(app => app.Name, StringComparer.CurrentCultureIgnoreCase),
+                    .DistinctBy(app => app.Key),
             ];
         }
         finally
