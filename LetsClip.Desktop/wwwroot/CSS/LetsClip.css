@@ -286,7 +286,8 @@
         height: auto;
     }
 
-    .fill {
+    .fill,
+    .main-panel {
         flex: none;
     }
 
@@ -318,9 +319,9 @@
     }
 }
 
-/* Info Icons Lift Softly On A Wide Light Shadow */
+/* Info Icons Lift Like Chips, On The Slight Shadow */
 .info-icon svg {
-    filter: drop-shadow(0 3px 12px rgba(0,0,0, 0.22));
+    filter: drop-shadow(var(--mud-elevation-1));
 }
 
 /* Badges Lift Off Their Surface Like Chips */
@@ -529,7 +530,6 @@
 .mud-button-filled.mud-button-filled-info:not(:disabled, .mud-disabled) {
     background-color: var(--tonal-info);
     color: var(--mud-palette-info);
-    box-shadow: none;
 }
 
     .mud-button-filled.mud-button-filled-info:not(:disabled, .mud-disabled):is(:hover, :focus-visible, :active) {
@@ -630,9 +630,15 @@
 
 /* The Recorded Date Sits Greyed At The Name's End */
 .title-field .mud-input-adornment-text {
+    margin-inline-start: 8px;
     color: var(--mud-palette-text-secondary);
     font-size: var(--mud-typography-body2-size);
 }
+
+    /* A Long Name Ends In Dots Before The Date */
+    .title-field input {
+        text-overflow: ellipsis;
+    }
 
 /* A Spinner Replaces A Button's Icon While It Works */
 .mud-button-icon-start .button-spinner {
@@ -917,7 +923,7 @@ mark {
     margin-left: -1.5px;
     border-radius: var(--radius-pill);
     background-color: var(--mud-palette-white);
-    box-shadow: 0 0 4px rgba(0,0,0, 0.6);
+    box-shadow: var(--mud-elevation-1);
     pointer-events: none;
 }
 
@@ -978,13 +984,12 @@ mark {
         display: block;
     }
 
-/* Thumb Keeps 10 Px Clear, Shadow Even All Round */
-.volume .volume-paper {
+/* The 16 Px Thumb Keeps 10 Px Clear */
+.volume-paper {
     display: flex;
     align-items: center;
     width: 120px;
     height: 36px;
     padding-inline: 10px;
-    box-shadow: 0 0 12px rgba(0,0,0, 0.5);
 }
 /* #endregion */

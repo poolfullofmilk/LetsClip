@@ -27,18 +27,12 @@
             @* Size Limit Select *@
             <MudElement HtmlTag="div"
                         Class="short-width">
-                <MudSelect T="double"
-                           OpenIcon="@Icons.Material.Rounded.ArrowDropDown"
-                           CloseIcon="@Icons.Material.Rounded.ArrowDropUp"
-                           Value="Limit"
-                           ValueChanged="SetLimit"
-                           ToStringFunc="LimitLabel"
-                           Variant="Variant.Outlined"
-                           Margin="Margin.Dense"
-                           Dense
-                           Disabled="@IsExporting"
-                           aria-label="Size Limit"
-                           Class="my-0">
+                <ChoiceSelect T="double"
+                              Value="Limit"
+                              ValueChanged="SetLimit"
+                              ToStringFunc="LimitLabel"
+                              Disabled="@IsExporting"
+                              aria-label="Size Limit">
                     @foreach (var limit in limits)
                     {
                         <MudSelectItem T="double"
@@ -46,7 +40,7 @@
                             @LimitLabel(limit)
                         </MudSelectItem>
                     }
-                </MudSelect>
+                </ChoiceSelect>
             </MudElement>
         </SettingRow>
         <MudDivider />
@@ -64,18 +58,12 @@
             @* Frame Rate Select *@
             <MudElement HtmlTag="div"
                         Class="short-width">
-                <MudSelect T="bool"
-                           OpenIcon="@Icons.Material.Rounded.ArrowDropDown"
-                           CloseIcon="@Icons.Material.Rounded.ArrowDropUp"
-                           Value="Controller.Settings.ExportFullFrameRate"
-                           ValueChanged="SetFullFrameRate"
-                           ToStringFunc="FrameRateLabel"
-                           Variant="Variant.Outlined"
-                           Margin="Margin.Dense"
-                           Dense
-                           Disabled="@IsExporting"
-                           aria-label="Frame Rate"
-                           Class="my-0">
+                <ChoiceSelect T="bool"
+                              Value="Controller.Settings.ExportFullFrameRate"
+                              ValueChanged="SetFullFrameRate"
+                              ToStringFunc="FrameRateLabel"
+                              Disabled="@IsExporting"
+                              aria-label="Frame Rate">
                     <MudSelectItem T="bool"
                                    Value="false">
                         @FrameRateLabel(false)
@@ -84,7 +72,7 @@
                                    Value="true">
                         @FrameRateLabel(true)
                     </MudSelectItem>
-                </MudSelect>
+                </ChoiceSelect>
             </MudElement>
         </SettingRow>
     }

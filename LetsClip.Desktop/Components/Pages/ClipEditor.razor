@@ -227,6 +227,7 @@ else
                                        OnSet="@(() => MarkAsync("start"))" />
                             <TrimField Label="End"
                                        Icon="@Icons.Material.Rounded.LastPage"
+                                       ButtonFirst
                                        Value="_range.End"
                                        Disabled="@(!_ready)"
                                        OnCommit="@(end => PlaceAsync("end", end))"

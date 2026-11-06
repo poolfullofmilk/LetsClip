@@ -1,0 +1,17 @@
+@typeparam T
+
+@* Choice Select *@
+<MudSelect T="T"
+           Value="Value"
+           ValueChanged="ValueChanged"
+           ToStringFunc="ToStringFunc"
+           OpenChanged="OpenChanged"
+           OpenIcon="@Icons.Material.Rounded.ArrowDropDown"
+           CloseIcon="@Icons.Material.Rounded.ArrowDropUp"
+           Variant="Variant.Outlined"
+           Margin="Margin.Dense"
+           Dense
+           Class="my-0"
+           @attributes="Attributes">
+    @ChildContent
+</MudSelect>

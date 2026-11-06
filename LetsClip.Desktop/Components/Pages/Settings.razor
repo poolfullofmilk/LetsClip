@@ -14,16 +14,14 @@
             <SettingRow Title="Games and Apps Only"
                         Switch="Controller.Settings.GamesOnly"
                         SwitchChanged="SetGamesOnly">
-                @* Edit Games Chip *@
-                <MudChip T="string"
-                         Icon="@Icons.Material.Rounded.SportsEsports"
-                         Color="Color.Info"
-                         Size="Size.Small"
-                         Variant="Variant.Text"
-                         OnClick="ShowGamesAsync"
-                         Class="ma-0">
+                @* Edit Games Button *@
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Info"
+                           Size="Size.Small"
+                           StartIcon="@Icons.Material.Rounded.SportsEsports"
+                           OnClick="ShowGamesAsync">
                     Edit Games and Apps
-                </MudChip>
+                </MudButton>
             </SettingRow>
             <MudDivider />
             <SettingRow Title="Start with Windows"
@@ -101,18 +99,12 @@
                 @* Playback Device Select *@
                 <FieldDetail Class="fixed-width"
                              Detail="@DetailOf(_playback, Controller.Settings.SystemAudioDeviceId)">
-                    <MudSelect T="string"
-                               OpenIcon="@Icons.Material.Rounded.ArrowDropDown"
-                               CloseIcon="@Icons.Material.Rounded.ArrowDropUp"
-                               Value="ShownDevice(_playback, Controller.Settings.SystemAudioDeviceId)"
-                               ValueChanged="SetPlaybackDevice"
-                               ToStringFunc="@(id => LabelOf(_playback, id))"
-                               Label="Device"
-                               Variant="Variant.Outlined"
-                               Margin="Margin.Dense"
-                               Dense
-                               Disabled="@(!Controller.Settings.SystemAudio)"
-                               Class="my-0">
+                    <ChoiceSelect T="string"
+                                  Value="ShownDevice(_playback, Controller.Settings.SystemAudioDeviceId)"
+                                  ValueChanged="SetPlaybackDevice"
+                                  ToStringFunc="@(id => LabelOf(_playback, id))"
+                                  Label="Device"
+                                  Disabled="@(!Controller.Settings.SystemAudio)">
                         <MudSelectItem T="string"
                                        Value="@AudioDevices.AutomaticId"
                                        Class="divided">
@@ -127,7 +119,7 @@
                                            Detail="@device.Adapter" />
                             </MudSelectItem>
                         }
-                    </MudSelect>
+                    </ChoiceSelect>
                 </FieldDetail>
             </SettingRow>
             <MudDivider />
@@ -145,18 +137,12 @@
                 @* Microphone Select *@
                 <FieldDetail Class="fixed-width"
                              Detail="@DetailOf(_microphones, Controller.Settings.MicrophoneDeviceId)">
-                    <MudSelect T="string"
-                               OpenIcon="@Icons.Material.Rounded.ArrowDropDown"
-                               CloseIcon="@Icons.Material.Rounded.ArrowDropUp"
-                               Value="ShownDevice(_microphones, Controller.Settings.MicrophoneDeviceId)"
-                               ValueChanged="SetMicrophoneDevice"
-                               ToStringFunc="@(id => LabelOf(_microphones, id))"
-                               Label="Device"
-                               Variant="Variant.Outlined"
-                               Margin="Margin.Dense"
-                               Dense
-                               Disabled="@(!Controller.Settings.Microphone)"
-                               Class="my-0">
+                    <ChoiceSelect T="string"
+                                  Value="ShownDevice(_microphones, Controller.Settings.MicrophoneDeviceId)"
+                                  ValueChanged="SetMicrophoneDevice"
+                                  ToStringFunc="@(id => LabelOf(_microphones, id))"
+                                  Label="Device"
+                                  Disabled="@(!Controller.Settings.Microphone)">
                         <MudSelectItem T="string"
                                        Value="@AudioDevices.AutomaticId"
                                        Class="divided">
@@ -171,7 +157,7 @@
                                            Detail="@device.Adapter" />
                             </MudSelectItem>
                         }
-                    </MudSelect>
+                    </ChoiceSelect>
                     @if (_meter is { } meter)
                     {
                         <LevelMeter Read="meter.ReadLevel" />

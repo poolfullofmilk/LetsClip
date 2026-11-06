@@ -20,7 +20,7 @@
                               Style="min-width:0">
                         <MudText Typo="Typo.body2"
                                  Class="mud-text-secondary ellipsis">
-                            @(Controller.Games.GameName ?? "Waiting for a Game or App")
+                            @(Controller.Games.GameName ?? "Waiting")
                         </MudText>
                         @* Settings Link *@
                         <MudLink Typo="Typo.caption"
@@ -38,19 +38,13 @@
                 {
                     @* Monitor Select *@
                     <FieldDetail Detail="@MonitorDetail(Controller.SelectedMonitor)">
-                        <MudSelect T="MonitorInfo"
-                                   Label="Monitor"
-                                   OpenIcon="@Icons.Material.Rounded.ArrowDropDown"
-                                   CloseIcon="@Icons.Material.Rounded.ArrowDropUp"
-                                   Value="Controller.SelectedMonitor"
-                                   ValueChanged="SelectMonitor"
-                                   OpenChanged="OutlineMonitors"
-                                   ToStringFunc="MonitorLabel"
-                                   Placeholder="Pick the Monitor to Record"
-                                   Variant="Variant.Outlined"
-                                   Margin="Margin.Dense"
-                                   Dense
-                                   Class="my-0">
+                        <ChoiceSelect T="MonitorInfo"
+                                      Label="Monitor"
+                                      Value="Controller.SelectedMonitor"
+                                      ValueChanged="SelectMonitor"
+                                      OpenChanged="OutlineMonitors"
+                                      ToStringFunc="MonitorLabel"
+                                      Placeholder="Pick the Monitor to Record">
                             @foreach (var monitor in Controller.Monitors)
                             {
                                 <MudSelectItem T="MonitorInfo"
@@ -74,21 +68,15 @@
                                     </MudStack>
                                 </MudSelectItem>
                             }
-                        </MudSelect>
+                        </ChoiceSelect>
                     </FieldDetail>
                 }
                 @* Replay Length Select *@
-                <MudSelect T="int"
-                           Label="Replay Length"
-                           OpenIcon="@Icons.Material.Rounded.ArrowDropDown"
-                           CloseIcon="@Icons.Material.Rounded.ArrowDropUp"
-                           Value="Controller.Settings.ReplaySeconds"
-                           ValueChanged="SetReplay"
-                           ToStringFunc="ReplayLabel"
-                           Variant="Variant.Outlined"
-                           Margin="Margin.Dense"
-                           Dense
-                           Class="my-0">
+                <ChoiceSelect T="int"
+                              Label="Replay Length"
+                              Value="Controller.Settings.ReplaySeconds"
+                              ValueChanged="SetReplay"
+                              ToStringFunc="ReplayLabel">
                     @foreach (var seconds in UserSettings.ReplayChoices)
                     {
                         <MudSelectItem T="int"
@@ -96,21 +84,15 @@
                             @ReplayLabel(seconds)
                         </MudSelectItem>
                     }
-                </MudSelect>
+                </ChoiceSelect>
                 @* Resolution Select *@
                 <FieldDetail Color="@ResolutionColor(Controller.Resolution)"
                              Detail="@RecommendedText(Controller.Resolution == Controller.RecommendedResolution)">
-                    <MudSelect T="int"
-                               Label="Resolution"
-                               OpenIcon="@Icons.Material.Rounded.ArrowDropDown"
-                               CloseIcon="@Icons.Material.Rounded.ArrowDropUp"
-                               Value="Controller.Resolution"
-                               ValueChanged="SetResolution"
-                               ToStringFunc="ResolutionLabel"
-                               Variant="Variant.Outlined"
-                               Margin="Margin.Dense"
-                               Dense
-                               Class="my-0">
+                    <ChoiceSelect T="int"
+                                  Label="Resolution"
+                                  Value="Controller.Resolution"
+                                  ValueChanged="SetResolution"
+                                  ToStringFunc="ResolutionLabel">
                         @foreach (var lines in Controller.ResolutionChoices)
                         {
                             <MudSelectItem T="int"
@@ -120,22 +102,16 @@
                                            Detail="@RecommendedText(lines == Controller.RecommendedResolution)" />
                             </MudSelectItem>
                         }
-                    </MudSelect>
+                    </ChoiceSelect>
                 </FieldDetail>
                 @* Quality Select *@
                 <FieldDetail Color="@QualityColor(Controller.Settings.Quality)"
                              Detail="@RecommendedText(Controller.Settings.Quality == CaptureQuality.Normal)">
-                    <MudSelect T="CaptureQuality"
-                               Label="Quality"
-                               OpenIcon="@Icons.Material.Rounded.ArrowDropDown"
-                               CloseIcon="@Icons.Material.Rounded.ArrowDropUp"
-                               Value="Controller.Settings.Quality"
-                               ValueChanged="SetQuality"
-                               ToStringFunc="QualityLabel"
-                               Variant="Variant.Outlined"
-                               Margin="Margin.Dense"
-                               Dense
-                               Class="my-0">
+                    <ChoiceSelect T="CaptureQuality"
+                                  Label="Quality"
+                                  Value="Controller.Settings.Quality"
+                                  ValueChanged="SetQuality"
+                                  ToStringFunc="QualityLabel">
                         @foreach (var quality in Enum.GetValues<CaptureQuality>())
                         {
                             <MudSelectItem T="CaptureQuality"
@@ -145,22 +121,16 @@
                                            Detail="@RecommendedText(quality == CaptureQuality.Normal)" />
                             </MudSelectItem>
                         }
-                    </MudSelect>
+                    </ChoiceSelect>
                 </FieldDetail>
                 @* Frame Rate Select *@
                 <FieldDetail Color="@FrameRateColor(Controller.FrameRate)"
                              Detail="@RecommendedText(Controller.FrameRate == Controller.RecommendedFrameRate)">
-                    <MudSelect T="int"
-                               Label="Frame Rate"
-                               OpenIcon="@Icons.Material.Rounded.ArrowDropDown"
-                               CloseIcon="@Icons.Material.Rounded.ArrowDropUp"
-                               Value="Controller.FrameRate"
-                               ValueChanged="SetFrameRate"
-                               ToStringFunc="FrameRateLabel"
-                               Variant="Variant.Outlined"
-                               Margin="Margin.Dense"
-                               Dense
-                               Class="my-0">
+                    <ChoiceSelect T="int"
+                                  Label="Frame Rate"
+                                  Value="Controller.FrameRate"
+                                  ValueChanged="SetFrameRate"
+                                  ToStringFunc="FrameRateLabel">
                         @foreach (var rate in Controller.FrameRateChoices)
                         {
                             <MudSelectItem T="int"
@@ -170,7 +140,7 @@
                                            Detail="@RecommendedText(rate == Controller.RecommendedFrameRate)" />
                             </MudSelectItem>
                         }
-                    </MudSelect>
+                    </ChoiceSelect>
                 </FieldDetail>
                 @if (Alert is { } alert)
                 {
