@@ -8,17 +8,25 @@ public sealed record ClipInfo(
     DateTimeOffset RecordedAt,
     double Duration,
     long SizeBytes,
-    string? ThumbnailPath
+    string? ThumbnailPath,
+    int Width,
+    int Height,
+    int FrameRate,
+    string? CustomTitle,
+    string? Game,
+    bool HasOriginal
 )
 {
-    public string FileName => System.IO.Path.GetFileName(Path);
-
-    // A Dated Title Leaves Only The Size Below It
+    // A Name Given In LetsClip, Else A Generated File's Date
     public string Title =>
-        ClipNames.IsGenerated(Name) ? Formatter.FormatDateTime(RecordedAt) : Name;
+        CustomTitle
+        ?? (ClipNames.DateOf(Name) is not null ? Formatter.FormatDateTime(RecordedAt) : Name);
+
+    // A Title Other Than The Date Keeps The Date Below
+    public bool ShowsDate => CustomTitle is not null || ClipNames.DateOf(Name) is null;
 
     public string Details =>
-        ClipNames.IsGenerated(Name)
-            ? Formatter.FormatSize(SizeBytes)
-            : $"{Formatter.FormatDateTime(RecordedAt)} · {Formatter.FormatSize(SizeBytes)}";
+        ShowsDate
+            ? $"{Formatter.FormatDateTime(RecordedAt)} · {Formatter.FormatSize(SizeBytes)}"
+            : Formatter.FormatSize(SizeBytes);
 }

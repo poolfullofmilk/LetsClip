@@ -6,6 +6,21 @@ document.addEventListener("keydown", (event) => {
     }
 });
 
+// A Focused Trim Field Holds Plain Seconds, Selected
+document.addEventListener("focusin", (event) => {
+    const field = event.target instanceof HTMLInputElement ? event.target.closest("[data-seconds]") : null;
+    if (!field) return;
+    event.target.dataset.shown = event.target.value;
+    event.target.value = field.dataset.seconds;
+    event.target.select();
+});
+
+// Left Untouched It Shows Its Time Again
+document.addEventListener("focusout", (event) => {
+    const field = event.target instanceof HTMLInputElement ? event.target.closest("[data-seconds]") : null;
+    if (field && event.target.value === field.dataset.seconds) event.target.value = event.target.dataset.shown;
+});
+
 // Escape Closes An Open Menu, Focus Returns To Its Button
 window.addEventListener(
     "keydown",
@@ -22,12 +37,19 @@ window.addEventListener(
 );
 
 window.letsClip = (() => {
+    // Changes Run Through Here Animate, Named Cards Slide
+    const transition = (dotnet, method) => {
+        document.startViewTransition(() => dotnet.invokeMethodAsync(method).catch(() => {}));
+    };
+
     // The Shortest Selection, Matching TrimRange.Step
     const step = 0.1;
     let state = null;
 
-    const duration = () => state.duration || state.video.duration || 0;
+    // The Editor Attaches Only A Clip Longer Than Zero
+    const duration = () => state.duration;
     const clamp = (time) => Math.min(duration(), Math.max(0, time));
+    const percent = (time) => `${Math.min(100, Math.max(0, (time / duration()) * 100))}%`;
 
     // The Playhead Follows Each Frame, Blazor Hears Ten A Second
     const loop = () => {
@@ -39,9 +61,7 @@ window.letsClip = (() => {
             video.currentTime = state.stopAt;
         }
         const time = video.currentTime;
-        if (playhead && duration() > 0) {
-            playhead.style.left = `${Math.min(100, Math.max(0, (time / duration()) * 100))}%`;
-        }
+        playhead.style.left = percent(time);
         const now = performance.now();
         if (video.paused !== state.paused || (time !== state.sent && now - state.reported > 100)) {
             state.reported = now;
@@ -59,15 +79,21 @@ window.letsClip = (() => {
         if (state && !state.frame) state.frame = requestAnimationFrame(loop);
     };
 
-    // Each Clip Opens At Its Trim Start, Muted As Shown
-    const attach = (video, playhead, timeline, dotnet, length, start, muted, volume) => {
+    // Each Clip Opens Playing Its Kept Part With Sound
+    const attach = (video, playhead, timeline, dotnet, length, start, end, volume, separator) => {
         detach();
-        state = { video, playhead, timeline, dotnet, duration: length, reported: 0, sent: -1, paused: true, stopAt: null, frame: 0, drag: null };
+        state = { video, playhead, timeline, dotnet, separator, duration: length, reported: 0, sent: -1, paused: true, stopAt: null, frame: 0, drag: null };
         video.currentTime = start;
-        video.muted = muted;
-        video.volume = volume;
+        setVolume(volume, false);
         video.addEventListener("error", state.onError = () => dotnet.invokeMethodAsync("OnPlayerError").catch(() => {}));
-        video.addEventListener("loadeddata", state.onLoaded = () => dotnet.invokeMethodAsync("OnPlayerReady").catch(() => {}));
+        video.addEventListener(
+            "loadeddata",
+            (state.onLoaded = () => {
+                dotnet.invokeMethodAsync("OnPlayerReady").catch(() => {});
+                play(start, end);
+            }),
+            { once: true }
+        );
         if (video.readyState >= 2) state.onLoaded();
         if (video.error) state.onError();
         video.addEventListener("dblclick", state.onDouble = () => fullScreen());
@@ -113,7 +139,6 @@ window.letsClip = (() => {
 
     // A Drag Paints The Handles, Blazor Hears Once It Settles
     const paint = ({ start, end }) => {
-        const percent = (time) => `${Math.min(100, Math.max(0, (time / duration()) * 100))}%`;
         const [before, after] = state.timeline.querySelectorAll(".timeline-shade");
         const selection = state.timeline.querySelector(".timeline-selection");
         before.style.width = percent(start);
@@ -122,6 +147,30 @@ window.letsClip = (() => {
         selection.style.width = percent(end - start);
         handleOf("start").style.left = percent(start);
         handleOf("end").style.left = percent(end);
+        showTimes({ start, end });
+    };
+
+    // Written Like Formatter.FormatDuration, 1m30,5s
+    const formatTime = (seconds) => {
+        const tenths = Math.round(Math.max(0, seconds) * 10);
+        const hours = Math.floor(tenths / 36000);
+        const minutes = Math.floor(tenths / 600) % 60;
+        const rest = (tenths % 600) / 10;
+        const text = (hours ? `${hours}h` : "") + (minutes ? `${minutes}m` : "");
+        return rest > 0 || !text ? `${text}${String(rest).replace(".", state.separator)}s` : text;
+    };
+
+    // Start, End And Length Follow A Drag Live
+    const showTimes = ({ start, end }) => {
+        for (const [edge, time] of [["Start", start], ["End", end]]) {
+            const field = document.querySelector(`.trim-field[data-edge="${edge}"]`);
+            const input = field?.querySelector("input");
+            if (!input || input === document.activeElement) continue;
+            input.value = formatTime(time);
+            field.dataset.seconds = String(Math.round(time * 10) / 10).replace(".", state.separator);
+        }
+        const length = document.querySelector("[data-length]");
+        if (length) length.textContent = formatTime(end - start);
     };
 
     const commit = (range) => state.dotnet.invokeMethodAsync("OnRange", range.start, range.end).catch(() => {});
@@ -136,6 +185,7 @@ window.letsClip = (() => {
         const time = { ArrowLeft: range[edge] - jump, ArrowDown: range[edge] - jump, ArrowRight: range[edge] + jump, ArrowUp: range[edge] + jump, Home: 0, End: duration() }[event.key];
         if (time === undefined) return;
         event.preventDefault();
+        delete handle.dataset.grabbed;
         setEdge(range, edge, time);
         paint(range);
         state.video.currentTime = range[edge];
@@ -143,9 +193,10 @@ window.letsClip = (() => {
         commit(range);
     };
 
+    // Unclamped, So A Handle Grabbed Anywhere Reaches Both Ends
     const timeAt = (event) => {
         const bounds = state.timeline.getBoundingClientRect();
-        return Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width)) * duration();
+        return ((event.clientX - bounds.left) / bounds.width) * duration();
     };
 
     // A Handle Drags From Where It Was Grabbed, Else Seeks
@@ -158,8 +209,14 @@ window.letsClip = (() => {
         state.grip = handle ? timeAt(event) - state.range[state.drag] : 0;
         state.timeline.setPointerCapture(event.pointerId);
         event.preventDefault();
-        handle?.focus();
-        if (!handle) state.video.currentTime = clamp(timeAt(event));
+        if (!handle) {
+            state.video.currentTime = clamp(timeAt(event));
+            return;
+        }
+        // Focused For Arrow Keys, Ringed Only After A Key
+        handle.dataset.grabbed = "";
+        handle.addEventListener("blur", () => delete handle.dataset.grabbed, { once: true });
+        handle.focus();
     };
 
     const apply = (time) => {
@@ -172,17 +229,11 @@ window.letsClip = (() => {
         state.video.currentTime = state.range[state.drag];
     };
 
+    // Pointer Moves Already Arrive Once Per Frame
     const move = (event) => {
         if (!state?.drag) return;
-        state.pending = timeAt(event) - state.grip;
         state.moved = true;
-        if (state.queued) return;
-        state.queued = true;
-        requestAnimationFrame(() => {
-            if (!state?.drag) return;
-            state.queued = false;
-            apply(state.pending);
-        });
+        apply(timeAt(event) - state.grip);
     };
 
     const up = (event) => {
@@ -192,7 +243,6 @@ window.letsClip = (() => {
             if (state.drag !== "seek") commit(state.range);
         }
         state.drag = null;
-        state.queued = false;
     };
 
     // Play Runs To The End Point, From Start When Outside
@@ -214,12 +264,14 @@ window.letsClip = (() => {
         if (state.stopAt !== null && time >= state.stopAt) state.stopAt = null;
     };
 
-    const setMuted = (muted) => {
-        if (state) state.video.muted = muted;
+    const seek = (time) => {
+        if (state) state.video.currentTime = clamp(time);
     };
 
-    const setVolume = (volume) => {
-        if (state) state.video.volume = volume;
+    const setVolume = (volume, muted) => {
+        if (!state) return;
+        state.video.volume = volume;
+        state.video.muted = muted;
     };
 
     // Full Screen Shows The Clip With The Browser's Controls
@@ -238,29 +290,30 @@ window.letsClip = (() => {
         if (event.key === "Escape" && document.fullscreenElement) document.exitFullscreen().catch(() => {});
     });
 
-    // The Next Key Becomes The Hotkey, Escape Or Hiding Cancels
-    let cancelCapture = () => {};
-    const captureKey = () =>
-        new Promise((resolve) => {
-            const finish = (value) => {
-                window.removeEventListener("keydown", listener, true);
-                document.removeEventListener("visibilitychange", onHidden);
-                cancelCapture = () => {};
-                resolve(value);
-            };
-            const listener = (event) => {
-                if (["Control", "Shift", "Alt", "Meta"].includes(event.key)) return;
-                event.preventDefault();
-                event.stopPropagation();
-                finish(event.key === "Escape" ? null : { code: event.code, control: event.ctrlKey, alt: event.altKey, shift: event.shiftKey, meta: event.metaKey });
-            };
-            const onHidden = () => {
-                if (document.hidden) finish(null);
-            };
-            window.addEventListener("keydown", listener, true);
-            document.addEventListener("visibilitychange", onHidden);
-            cancelCapture = () => finish(null);
-        });
-
-    return { attach, detach, play, pause, nudge, setMuted, setVolume, fullScreen, captureKey, cancelCapture: () => cancelCapture() };
+    // While Picking A Hotkey Every Press Goes To The Page
+    let stopKeys = () => {};
+    const watchKeys = (dotnet) => {
+        stopKeys();
+        const done = (keep) => dotnet.invokeMethodAsync("OnKeysDone", keep).catch(() => {});
+        const listener = (event) => {
+            if (["Control", "Shift", "Alt", "Meta"].includes(event.key)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            const plain = !event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey;
+            if (plain && event.key === "Escape") done(false);
+            else if (plain && event.key === "Enter") done(true);
+            else dotnet.invokeMethodAsync("OnKeys", event.code, event.ctrlKey, event.altKey, event.shiftKey, event.metaKey).catch(() => {});
+        };
+        const onHidden = () => {
+            if (document.hidden) done(false);
+        };
+        window.addEventListener("keydown", listener, true);
+        document.addEventListener("visibilitychange", onHidden);
+        stopKeys = () => {
+            window.removeEventListener("keydown", listener, true);
+            document.removeEventListener("visibilitychange", onHidden);
+            stopKeys = () => {};
+        };
+    };
+    return { transition, attach, detach, play, pause, nudge, seek, setVolume, fullScreen, watchKeys, stopKeys: () => stopKeys() };
 })();

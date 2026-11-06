@@ -1,15 +1,16 @@
 <MudDialog>
 
     <TitleContent>
-        <MudText Typo="Typo.h6">Games</MudText>
+        <DialogTitle Text="Games and Apps"
+                     Dialog="MudDialog" />
     </TitleContent>
     <DialogContent>
         <MudStack Spacing="3">
             <MudText Typo="Typo.body2"
                      Class="mud-text-secondary text-relaxed">
-                Found in your game libraries or added by you. Removed games stay at the bottom, ready to add back
+                Games come from your libraries, apps are added by you. Removed ones stay at the bottom, ready to add back
             </MudText>
-            @if (Controller.GameCount is null)
+            @if (!Controller.GamesScanned)
             {
                 <MudStack Row
                           AlignItems="AlignItems.Center"
@@ -27,7 +28,7 @@
             else if (_games.Count == 0)
             {
                 <EmptyState Icon="@Icons.Material.Rounded.SportsEsports"
-                            Text="No Games Found" />
+                            Text="No Games or Apps Found" />
             }
             else
             {
@@ -44,7 +45,7 @@
                     <RowTemplate>
                         <MudTd>
                             <MudText Typo="Typo.body2"
-                                     Class="@NameClass(context)">
+                                     Class="@(context.IsRemoved ? "mud-text-disabled" : null)">
                                 @context.Name
                             </MudText>
                         </MudTd>
@@ -53,26 +54,20 @@
                             @if (context.IsRemoved)
                             {
                                 @* Add Back Button *@
-                                <Tooltip Text="Add Back"
-                                         RootClass="d-flex justify-center">
-                                    <MudIconButton Icon="@Icons.Material.Rounded.Add"
-                                                   aria-label="Add Back"
-                                                   Color="Color.Info"
-                                                   Size="Size.Small"
-                                                   OnClick="() => Controller.RestoreGame(context.Key)" />
-                                </Tooltip>
+                                <IconButton Icon="@Icons.Material.Rounded.Add"
+                                            Text="Add Back"
+                                            Color="Color.Info"
+                                            RootClass="d-flex justify-center"
+                                            OnClick="() => Controller.SetRemoved(context.Key, false)" />
                             }
                             else
                             {
                                 @* Remove Button *@
-                                <Tooltip Text="Remove"
-                                         RootClass="d-flex justify-center">
-                                    <MudIconButton Icon="@Icons.Material.Rounded.Close"
-                                                   aria-label="Remove"
-                                                   Color="Color.Error"
-                                                   Size="Size.Small"
-                                                   OnClick="() => Controller.RemoveGame(context.Key)" />
-                                </Tooltip>
+                                <IconButton Icon="@Icons.Material.Rounded.Close"
+                                            Text="Remove"
+                                            Color="Color.Error"
+                                            RootClass="d-flex justify-center"
+                                            OnClick="() => Controller.SetRemoved(context.Key, true)" />
                             }
                         </MudTd>
                     </RowTemplate>
@@ -83,7 +78,7 @@
     </DialogContent>
     <DialogActions>
         @* Add Game Menu *@
-        <MudMenu Label="Add Game"
+        <MudMenu Label="Add Game or App"
                  StartIcon="@Icons.Material.Rounded.Add"
                  Variant="Variant.Filled"
                  Color="Color.Info"

@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using LetsClip.Data.ViewModels;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using NLog;
@@ -11,7 +10,7 @@ public sealed class AudioMixer : IDisposable
 {
     // Stereo Float At 48 kHz, The Encoder Reads It Raw
     public const int SampleRate = 48000;
-    public const int Channels = 2;
+    private const int Channels = 2;
 
     // Writes Trail Real Time So Late Packets Still Land
     private const int TrailFrames = SampleRate * 100 / 1000;
@@ -101,7 +100,7 @@ public sealed class AudioMixer : IDisposable
         );
     }
 
-    public long CurrentFrame()
+    private long CurrentFrame()
     {
         return (long)(
             (Stopwatch.GetTimestamp() - _origin) * (double)SampleRate / Stopwatch.Frequency
@@ -208,17 +207,17 @@ public sealed class AudioMixer : IDisposable
 
         public string? Problem { get; private set; }
 
-        public bool FollowsDefault => deviceId.Length == 0;
+        // Automatic, Or A Picked Device That Is Gone For Now
+        public bool FollowsDefault { get; private set; } = deviceId.Length == 0;
 
         public DataFlow Flow => loopback ? DataFlow.Render : DataFlow.Capture;
 
         public bool Wants(string changedId)
         {
-            return Problem is not null
-                && (
-                    FollowsDefault
-                    || string.Equals(changedId, deviceId, StringComparison.OrdinalIgnoreCase)
-                );
+            // The Picked Device Coming Back Takes Over From The Default
+            var isPicked = string.Equals(changedId, deviceId, StringComparison.OrdinalIgnoreCase);
+            return (Problem is not null && (FollowsDefault || isPicked))
+                || (FollowsDefault && isPicked);
         }
 
         public void Connect()
@@ -233,10 +232,11 @@ public sealed class AudioMixer : IDisposable
                 Disconnect();
                 try
                 {
-                    // An Empty Id Follows The Windows Default Device
-                    var endpoint = FollowsDefault
-                        ? mixer._enumerator.GetDefaultAudioEndpoint(Flow, Role.Console)
-                        : mixer._enumerator.GetDevice(deviceId);
+                    // An Empty Id Or Missing Device Follows The Default
+                    var picked = AudioDevices.Find(mixer._enumerator, deviceId);
+                    FollowsDefault = picked is null;
+                    var endpoint =
+                        picked ?? mixer._enumerator.GetDefaultAudioEndpoint(Flow, Role.Console);
                     var builder = new WasapiRecorderBuilder()
                         .WithDevice(endpoint)
                         .WithFormat(WaveFormat.CreateIeeeFloatWaveFormat(SampleRate, Channels))
@@ -298,8 +298,17 @@ public sealed class AudioMixer : IDisposable
         {
             if (eventArgs.Exception is { } exception && !_disposed)
             {
+                // A Picked Device Pulled Out Hands Over To The Default
                 s_logger.Warn($"Lost {kind} {exception.GetType().Name}");
                 Problem = $"{kind} Disconnected";
+                if (!FollowsDefault)
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(1));
+                        Connect();
+                    });
+                }
             }
         }
 

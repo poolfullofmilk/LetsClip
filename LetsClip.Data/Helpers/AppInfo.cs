@@ -5,7 +5,7 @@ namespace LetsClip.Data.Helpers;
 public static class AppInfo
 {
     public const string DisplayName = "LetsClip";
-    public const string Author = "poolfullofmilk";
+    public const string Author = "Poolfullofmilk";
 
     // The Update Check Reads Public GitHub Releases
     public const string RepositoryUrl = "https://github.com/poolfullofmilk/LetsClip";

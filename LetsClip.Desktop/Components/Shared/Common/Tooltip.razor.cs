@@ -4,7 +4,6 @@ namespace LetsClip.Desktop.Components.Shared.Common;
 
 public partial class Tooltip
 {
-    // Parameters
     [Parameter]
     public string? Text { get; set; }
 
@@ -14,6 +13,7 @@ public partial class Tooltip
     [Parameter]
     public bool Disabled { get; set; }
 
+    // Most Tooltips Wrap One Button In A Row
     [Parameter]
-    public string? RootClass { get; set; }
+    public string RootClass { get; set; } = "d-flex";
 }

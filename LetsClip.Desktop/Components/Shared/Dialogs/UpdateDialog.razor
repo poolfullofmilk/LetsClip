@@ -1,7 +1,9 @@
 <MudDialog>
 
     <TitleContent>
-        <MudText Typo="Typo.h6">@($"LetsClip {Release.Tag.TrimStart('v')} Is Out")</MudText>
+        <DialogTitle Text="@Title"
+                     Dialog="MudDialog"
+                     Closable="!_isInstalling" />
     </TitleContent>
     <DialogContent>
         <MudStack Spacing="2">

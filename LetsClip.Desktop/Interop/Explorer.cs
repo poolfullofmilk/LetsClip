@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using LetsClip.Services.Media;
 using Microsoft.VisualBasic.FileIO;
 using NLog;
 
@@ -40,6 +41,19 @@ public static class Explorer
         try
         {
             FileSystem.DeleteFile(path, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
+
+            // A Cut Clip's Hidden Original Goes With It
+            var original = ClipLibrary.OriginalPathOf(path);
+            if (File.Exists(original))
+            {
+                FileSystem.DeleteFile(
+                    original,
+                    UIOption.OnlyErrorDialogs,
+                    RecycleOption.SendToRecycleBin
+                );
+            }
+
+            s_logger.Info($"Moved {Path.GetFileName(path)} To The Recycle Bin");
             return true;
         }
         catch (Exception exception)

@@ -53,58 +53,40 @@ public static class MediaProbe
             stream.CodecType == "video" && stream.Disposition?.AttachedPic != 1
         );
         var audio = streams.FirstOrDefault(stream => stream.CodecType == "audio");
-        // A Missing Duration Reads As N/A, Taken As Zero
+
+        // Average Rate First, Variable Rate Streams Report Their Real Pace
+        var frameRate = RateOf(video?.AvgFrameRate) is > 0 and var average
+            ? average
+            : RateOf(video?.RFrameRate);
+
+        // A Missing Duration Reads As Zero
         return new MediaInfo(
-            double.TryParse(
-                format.Duration,
-                NumberStyles.Float,
-                CultureInfo.InvariantCulture,
-                out var duration
-            )
-                ? duration
-                : 0,
+            format.Duration,
             video?.CodecName,
             video?.PixFmt,
             video?.Width ?? 0,
             video?.Height ?? 0,
-            video is null ? 0 : FrameRateOf(video),
+            frameRate,
             audio?.CodecName
         );
     }
 
-    private static double FrameRateOf(ProbeStream stream)
+    private static double RateOf(string? rate)
     {
-        // Average Rate First, Variable Rate Streams Report Their Real Pace
-        foreach (var rate in new[] { stream.AvgFrameRate, stream.RFrameRate })
-        {
-            if (
-                rate?.Split('/') is [var numerator, var denominator]
-                && double.TryParse(
-                    numerator,
-                    NumberStyles.Float,
-                    CultureInfo.InvariantCulture,
-                    out var top
-                )
-                && double.TryParse(
-                    denominator,
-                    NumberStyles.Float,
-                    CultureInfo.InvariantCulture,
-                    out var bottom
-                )
-                && top > 0
-                && bottom > 0
-            )
-            {
-                return top / bottom;
-            }
-        }
-
-        return 0;
+        // Zero When The Fraction Is Missing Or Unreadable
+        return
+            rate?.Split('/') is [var top, var bottom]
+            && double.TryParse(top, CultureInfo.InvariantCulture, out var numerator)
+            && double.TryParse(bottom, CultureInfo.InvariantCulture, out var denominator)
+            && numerator > 0
+            && denominator > 0
+            ? numerator / denominator
+            : 0;
     }
 
     private sealed record Probe(ProbeFormat? Format, ProbeStream[]? Streams);
 
-    private sealed record ProbeFormat(string? Duration);
+    private sealed record ProbeFormat(double Duration);
 
     private sealed record ProbeStream(
         string? CodecType,

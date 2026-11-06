@@ -11,8 +11,6 @@ public static class Updater
 {
     // Releases Always Carry One Exe Named After Their Tag
     private const string ExecutablePrefix = "LetsClip_v";
-    private const string AssetUrlFormat =
-        AppInfo.RepositoryUrl + "/releases/download/{0}/LetsClip_{0}.exe";
     private const string AfterUpdateArgument = "--after-update";
 
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
@@ -57,15 +55,6 @@ public static class Updater
         }
     }
 
-    private static async Task<JsonDocument> GetJsonAsync(string url)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.UserAgent.ParseAdd(AppInfo.DisplayName);
-        using var response = await s_checkClient.SendAsync(request);
-        response.EnsureSuccessStatusCode();
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-    }
-
     // A Sandboxed Or Renamed Run Never Replaces An Exe
     public static bool CanInstall =>
         AppInfo.SandboxRoot == null
@@ -78,21 +67,19 @@ public static class Updater
     )
     {
         var started = Stopwatch.StartNew();
-        var targetPath = Path.Combine(
-            Path.GetDirectoryName(Environment.ProcessPath)!,
-            $"LetsClip_{release.Tag}.exe"
-        );
+        var asset = $"LetsClip_{release.Tag}.exe";
+        var targetPath = Path.Combine(Path.GetDirectoryName(Environment.ProcessPath)!, asset);
 
         // A Name Only This Attempt Owns, Removed If It Fails
         var partialPath = $"{targetPath}.{Guid.NewGuid():N}.download";
-        var expectedDigest = await ExpectedDigestAsync(release.Tag);
+        var expectedDigest = await ExpectedDigestAsync(release.Tag, asset);
 
         // A Body Stalled For A Minute Is Given Up
         using var stall = new CancellationTokenSource(s_stallTimeout);
         try
         {
             using var response = await s_downloadClient.GetAsync(
-                string.Format(AssetUrlFormat, release.Tag),
+                $"{AppInfo.RepositoryUrl}/releases/download/{release.Tag}/{asset}",
                 HttpCompletionOption.ResponseHeadersRead,
                 stall.Token
             );
@@ -147,21 +134,25 @@ public static class Updater
         }
     }
 
-    private static async Task<string> ExpectedDigestAsync(string tag)
+    private static async Task<string> ExpectedDigestAsync(string tag, string asset)
     {
         // GitHub Hashes Every Release Asset, Its API Lists The Hash
         string? digest = null;
         try
         {
-            using var release = await GetJsonAsync(AppInfo.ReleaseApiUrl + tag);
+            using var request = new HttpRequestMessage(HttpMethod.Get, AppInfo.ReleaseApiUrl + tag);
+            request.Headers.UserAgent.ParseAdd(AppInfo.DisplayName);
+            using var response = await s_checkClient.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+            using var release = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
             if (release.RootElement.TryGetProperty("assets", out var assets))
             {
-                foreach (var asset in assets.EnumerateArray())
+                foreach (var listed in assets.EnumerateArray())
                 {
                     if (
-                        asset.TryGetProperty("name", out var name)
-                        && name.GetString() == $"LetsClip_{tag}.exe"
-                        && asset.TryGetProperty("digest", out var value)
+                        listed.TryGetProperty("name", out var name)
+                        && name.GetString() == asset
+                        && listed.TryGetProperty("digest", out var value)
                     )
                     {
                         digest = value.GetString();

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using LetsClip.Data.Enums;
 using LetsClip.Data.Helpers;
@@ -12,7 +13,8 @@ public sealed record ExportRequest(
     TrimRange Range,
     double Megabytes,
     double FrameRate,
-    bool IncludeAudio,
+    // Zero Leaves The Sound Out
+    double Volume,
     string ExportsFolder
 );
 
@@ -20,7 +22,7 @@ public sealed record ExportProgress(string Phase, double Fraction);
 
 public sealed class ExportException(string message) : Exception(message);
 
-public sealed class ClipExporter
+public static class ClipExporter
 {
     // A Shorter Result Means Part Of The Selection Was Lost
     private const double DurationTolerance = 0.25;
@@ -32,8 +34,6 @@ public sealed class ClipExporter
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
     private static readonly TimeSpan s_timeout = TimeSpan.FromMinutes(30);
     private static readonly TimeSpan s_stall = TimeSpan.FromSeconds(15);
-
-    private readonly SemaphoreSlim _running = new(1, 1);
 
     public const string TooSmallMessage =
         "Too little room for this length, pick a larger size or a shorter selection";
@@ -57,20 +57,26 @@ public sealed class ClipExporter
         return fullFrameRate ? rate : Math.Min(rate, 60);
     }
 
-    public async Task<ExportResult> ExportAsync(
+    public static async Task<string> ExportAsync(
         ExportRequest request,
         IProgress<ExportProgress> progress,
         CancellationToken token
     )
     {
-        if (!await _running.WaitAsync(0, token))
-        {
-            throw new ExportException("An export is already running");
-        }
-
+        // Each Export Writes Its Own Temporary File And Work Folder
         try
         {
             return await RunAsync(request, progress, token);
+        }
+        catch (ExportException exception)
+        {
+            s_logger.Warn($"Failed To Export, {exception.Message}");
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            s_logger.Info("Cancelled An Export");
+            throw;
         }
         catch (UnauthorizedAccessException)
         {
@@ -81,13 +87,9 @@ public sealed class ClipExporter
             s_logger.Warn($"Failed To Export {exception.GetType().Name}");
             throw new ExportException("Export failed, the file could not be written");
         }
-        finally
-        {
-            _running.Release();
-        }
     }
 
-    private static async Task<ExportResult> RunAsync(
+    private static async Task<string> RunAsync(
         ExportRequest request,
         IProgress<ExportProgress> progress,
         CancellationToken token
@@ -111,32 +113,19 @@ public sealed class ClipExporter
 
         // Past The Ceiling Only Bloats, Unlimited Lands There
         var duration = request.Range.Length;
-        var withAudio = request.IncludeAudio && source.HasAudio;
+        var withAudio = request.Volume > 0 && source.HasAudio;
         var (width, height) = OutputSize(source.Width, source.Height);
         var frameRate = request.FrameRate;
         var sourceRate = new FileInfo(request.SourcePath).Length / source.Duration;
+        var clip = new ExportShape(duration, width, height, frameRate, withAudio, sourceRate);
         request = request with
         {
-            Megabytes = Math.Min(
-                request.Megabytes,
-                SizeBudget.CeilingMegabytes(
-                    duration,
-                    width,
-                    height,
-                    frameRate,
-                    withAudio,
-                    sourceRate
-                )
-            ),
+            Megabytes = Math.Min(request.Megabytes, SizeBudget.CeilingMegabytes(clip)),
         };
-        var budget = SizeBudget.Plan(
-            request.Megabytes,
-            duration,
-            withAudio,
-            width,
-            height,
-            frameRate,
-            sourceRate
+        var budget = SizeBudget.Plan(request.Megabytes, clip);
+        var started = Stopwatch.StartNew();
+        s_logger.Info(
+            $"Exporting {Path.GetFileName(request.SourcePath)} From {Formatter.FormatDuration(request.Range.Start)} To {Formatter.FormatDuration(request.Range.End)} At {width} × {height}, {frameRate} FPS, {(withAudio ? $"With Audio At {request.Volume * 100:0}%" : "Without Audio")}, Aiming Under {Formatter.FormatMegabytes(request.Megabytes)}, {budget.Verdict}"
         );
         if (budget.Verdict == BudgetVerdict.TooSmall)
         {
@@ -218,25 +207,21 @@ public sealed class ClipExporter
 
                     if (size <= budget.TargetBytes)
                     {
-                        // Named By The Clip's Shown Date, Never By Its Limit
+                        // Named By The Clip's Name Or Date, Never Its Limit
                         var stem = Path.GetFileNameWithoutExtension(request.SourcePath);
-                        var title = ClipNames.DateOf(stem) is { } date
-                            ? $"{AppInfo.DisplayName} {Formatter.FormatDateTime(date, "HH'h'mm'm'")}"
-                            : stem;
+                        var title =
+                            ClipNames.FileSafe(ClipLibrary.MetadataOf(request.SourcePath)?.Title)
+                            ?? (
+                                ClipNames.DateOf(stem) is { } date
+                                    ? $"{AppInfo.DisplayName} {Formatter.FormatFileDate(date)}"
+                                    : stem
+                            );
                         var finalPath = ClipSaver.UniquePath(request.ExportsFolder, title);
                         File.Move(temporary, finalPath);
                         s_logger.Info(
-                            $"Exported {Path.GetFileName(finalPath)} At {Formatter.FormatSize(size)} With {encoder.Name} In {attempts} Attempts"
+                            $"Exported {Path.GetFileName(finalPath)} At {Formatter.FormatSize(size)} With {encoder.Name} In {attempts} Attempts And {started.Elapsed.TotalSeconds:0.0} s"
                         );
-                        return new ExportResult(
-                            finalPath,
-                            size,
-                            output.Duration,
-                            output.Width,
-                            output.Height,
-                            output.FrameRate,
-                            output.HasAudio
-                        );
+                        return finalPath;
                     }
 
                     // Over The Limit, Retry Lower By The Miss Plus Margin
@@ -296,11 +281,11 @@ public sealed class ClipExporter
             "pipe:2",
             "-nostats",
             "-ss",
-            Seconds(range.Start),
+            FFmpeg.Seconds(range.Start),
             "-i",
             job.Request.SourcePath,
             "-t",
-            Seconds(range.Length),
+            FFmpeg.Seconds(range.Length),
             "-map",
             "0:v:0",
             "-vf",
@@ -325,6 +310,8 @@ public sealed class ClipExporter
             output.AddRange([
                 "-map",
                 "0:a:0",
+                "-af",
+                job.Request.Volume.ToString("'volume='0.#", CultureInfo.InvariantCulture),
                 "-c:a",
                 "aac",
                 "-b:a",
@@ -396,12 +383,10 @@ public sealed class ClipExporter
             "-g",
             group,
         ];
-        return encoder.Codec switch
+        List<string> specific = encoder.Codec switch
         {
             "h264_amf" =>
             [
-                "-c:v",
-                "h264_amf",
                 "-usage",
                 "transcoding",
                 "-quality",
@@ -412,14 +397,9 @@ public sealed class ClipExporter
                 "3",
                 "-preanalysis",
                 "1",
-                "-profile:v",
-                "high",
-                .. rate,
             ],
             "h264_nvenc" =>
             [
-                "-c:v",
-                "h264_nvenc",
                 "-preset",
                 "p6",
                 "-tune",
@@ -432,24 +412,11 @@ public sealed class ClipExporter
                 "1",
                 "-bf",
                 "3",
-                "-profile:v",
-                "high",
-                .. rate,
             ],
-            "h264_qsv" =>
-            [
-                "-c:v",
-                "h264_qsv",
-                "-preset",
-                "slower",
-                "-bf",
-                "3",
-                "-profile:v",
-                "high",
-                .. rate,
-            ],
-            _ => ["-c:v", "libx264", "-preset", "medium", "-profile:v", "high", .. rate],
+            "h264_qsv" => ["-preset", "slower", "-bf", "3"],
+            _ => ["-preset", "medium"],
         };
+        return ["-c:v", encoder.Codec, .. specific, "-profile:v", "high", .. rate];
     }
 
     private static async Task RunPassAsync(
@@ -524,10 +491,5 @@ public sealed class ClipExporter
     private static int EvenUp(double value)
     {
         return Math.Max(2, (int)Math.Ceiling(Math.Round(value, 6) / 2) * 2);
-    }
-
-    private static string Seconds(double value)
-    {
-        return Math.Max(0, value).ToString("0.###", CultureInfo.InvariantCulture);
     }
 }

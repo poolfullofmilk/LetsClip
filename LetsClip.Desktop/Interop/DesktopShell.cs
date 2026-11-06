@@ -1,4 +1,4 @@
-﻿using System.Collections.Specialized;
+using System.Collections.Specialized;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Threading;
@@ -6,6 +6,7 @@ using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
 using Microsoft.Win32;
 using NLog;
+using Forms = System.Windows.Forms;
 
 namespace LetsClip.Desktop.Interop;
 
@@ -77,10 +78,26 @@ public sealed class DesktopShell
         CloseFlash();
         foreach (var monitor in monitors)
         {
-            var overlay = new MonitorOverlay(monitor, monitor.DevicePath == chosen?.DevicePath);
+            // Drawn Unseen, So No Monitor Lights Up Before Another
+            var overlay = new MonitorOverlay(monitor, monitor.DevicePath == chosen?.DevicePath)
+            {
+                Opacity = 0,
+            };
             overlay.Show();
             _overlays.Add(overlay);
         }
+
+        List<MonitorOverlay> drawn = [.. _overlays];
+        _ = Application.Current.Dispatcher.BeginInvoke(
+            DispatcherPriority.Background,
+            () =>
+            {
+                foreach (var overlay in drawn.Where(_overlays.Contains))
+                {
+                    overlay.Opacity = 1;
+                }
+            }
+        );
     }
 
     public void HideMonitors()
@@ -118,10 +135,11 @@ public sealed class DesktopShell
     #endregion
 
     #region Files
-    public static string ClipUrl(string fileName)
+    public static string ClipUrl(string path)
     {
-        // A Checked File Name The Clips Host Serves
-        return $"https://{ClipsHost}/{Uri.EscapeDataString(fileName)}";
+        // Stamped, So A Changed File Never Comes From Cache
+        var stamp = File.GetLastWriteTimeUtc(path).Ticks;
+        return $"https://{ClipsHost}/{Uri.EscapeDataString(Path.GetFileName(path))}?v={stamp}";
     }
 
     public static string ThumbnailUrl(string? path)
@@ -143,36 +161,19 @@ public sealed class DesktopShell
         }
 
         // The File Itself Like Explorer's Copy, Pasting Copies It
-        var data = new DataObject();
+        var data = new Forms.DataObject();
         data.SetFileDropList([path]);
         data.SetData("Preferred DropEffect", new MemoryStream(BitConverter.GetBytes(1)));
-        for (var attempt = 0; attempt < 5; attempt++)
+        try
         {
-            try
-            {
-                Clipboard.SetDataObject(data, true);
-                return true;
-            }
-            catch (COMException)
-            {
-                // Another App Holds The Clipboard For A Moment
-                Thread.Sleep(50);
-            }
+            // Five Tries 50 ms Apart, Another App May Hold It
+            Forms.Clipboard.SetDataObject(data, true, 5, 50);
+            return true;
         }
-
-        return false;
-    }
-
-    public static void DragFile(string path)
-    {
-        if (!File.Exists(path) || Application.Current.MainWindow is not { } window)
+        catch (ExternalException)
         {
-            return;
+            return false;
         }
-
-        var data = new DataObject();
-        data.SetFileDropList([path]);
-        DragDrop.DoDragDrop(window, data, DragDropEffects.Copy);
     }
 
     public static string? PickFolder(string current)
@@ -189,8 +190,8 @@ public sealed class DesktopShell
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Choose a Game to Record",
-            Filter = "Games|*.exe",
+            Title = "Choose a Game or App to Record",
+            Filter = "Apps|*.exe",
         };
         return dialog.ShowDialog(Application.Current.MainWindow) == true ? dialog.FileName : null;
     }

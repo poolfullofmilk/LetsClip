@@ -19,14 +19,101 @@
                     @CountText
                 </MudText>
                 <MudSpacer />
-                @* Open Folder *@
-                <Tooltip Text="Open Clips Folder"
-                         RootClass="d-flex">
-                    <MudIconButton Icon="@Icons.Material.Rounded.FolderOpen"
-                                   aria-label="Open Clips Folder"
+                @* Game Filter Button *@
+                <MudBadge Dot
+                          Color="Color.Info"
+                          Overlap
+                          Visible="@IsFiltered"
+                          Class="d-flex">
+                    <IconButton Icon="@Icons.Material.Rounded.FilterList"
+                                Text="Filter by Game"
+                                Disabled="@(Games.Count < 2 && !IsFiltered)"
+                                OnClick="OpenFilter" />
+                </MudBadge>
+                @* Game Filter Popover *@
+                <MudPopover Open="_filterOpen"
+                            AnchorOrigin="Origin.BottomRight"
+                            TransformOrigin="Origin.TopRight"
+                            Class="filter-popover">
+                    <MudElement HtmlTag="div"
+                                Class="pa-3">
+                        @* Game Search *@
+                        <MudTextField T="string"
+                                      @bind-Value="_search"
+                                      Immediate
+                                      Placeholder="Search"
+                                      Adornment="Adornment.Start"
+                                      AdornmentIcon="@Icons.Material.Rounded.Search"
+                                      Clearable
+                                      ClearIcon="@Icons.Material.Rounded.Clear"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      aria-label="Search Games"
+                                      Class="my-0" />
+                    </MudElement>
+                    <MudElement HtmlTag="div"
+                                Class="filter-list">
+                        @if (string.IsNullOrWhiteSpace(_search))
+                        {
+                            @* All Games Checkbox *@
+                            <MudCheckBox T="bool?"
+                                         Value="AllState"
+                                         ValueChanged="SetAll"
+                                         Color="Color.Info"
+                                         CheckedIcon="@Icons.Material.Rounded.CheckBox"
+                                         UncheckedIcon="@Icons.Material.Rounded.CheckBoxOutlineBlank"
+                                         IndeterminateIcon="@Icons.Material.Rounded.IndeterminateCheckBox"
+                                         Dense>
+                                <MudText Typo="Typo.body2">All</MudText>
+                            </MudCheckBox>
+                        }
+                        @foreach (var game in SearchedGames)
+                        {
+                            @* Game Checkbox *@
+                            <MudCheckBox T="bool"
+                                         Value="@_draft.Contains(game)"
+                                         ValueChanged="@(on => SetGame(game, on))"
+                                         Color="Color.Info"
+                                         CheckedIcon="@Icons.Material.Rounded.CheckBox"
+                                         UncheckedIcon="@Icons.Material.Rounded.CheckBoxOutlineBlank"
+                                         Dense>
+                                <MudText Typo="Typo.body2">
+                                    <MudHighlighter Text="@game"
+                                                    HighlightedText="@_search" />
+                                </MudText>
+                            </MudCheckBox>
+                        }
+                    </MudElement>
+                    <MudStack Row
+                              AlignItems="AlignItems.Center"
+                              Spacing="4"
+                              Class="filter-footer px-3 py-2">
+                        @* Reset Button *@
+                        <MudButton Variant="Variant.Text"
+                                   Color="Color.Error"
                                    Size="Size.Small"
-                                   OnClick="OpenFolder" />
-                </Tooltip>
+                                   OnClick="ResetFilter">
+                            Reset
+                        </MudButton>
+                        <MudSpacer />
+                        @* Apply Button *@
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Info"
+                                   Size="Size.Small"
+                                   Disabled="@(_draft.Count == 0)"
+                                   OnClick="ApplyFilter">
+                            Apply
+                        </MudButton>
+                    </MudStack>
+                </MudPopover>
+                @* Filter Overlay *@
+                <MudOverlay Visible="_filterOpen"
+                            OnClick="CloseFilter"
+                            AutoClose />
+                @* Open Folder *@
+                <IconButton Icon="@Icons.Material.Rounded.FolderOpen"
+                            Text="Open Clips Folder"
+                            OnClick="OpenFolder" />
             </TitleContent>
             <ChildContent>
                 @if (_clips is null)
@@ -70,18 +157,36 @@
                                     Text="No Clips" />
                     </MudPaper>
                 }
+                else if (ShownClips.Count == 0)
+                {
+                    <MudPaper Elevation="4"
+                              Class="rounded-panel">
+                        <EmptyState Icon="@Icons.Material.Rounded.FilterList"
+                                    Color="Color.Default"
+                                    Text="No Clips for These Games">
+                            @* Show All Button *@
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Info"
+                                       Size="Size.Small"
+                                       OnClick="ShowAll">
+                                Show All Clips
+                            </MudButton>
+                        </EmptyState>
+                    </MudPaper>
+                }
                 else
                 {
                     @* Clip Cards *@
                     <MudGrid Spacing="3">
 
-                        @foreach (var clip in _clips)
+                        @foreach (var clip in ShownClips)
                         {
                             <MudItem @key="clip.Path"
                                      xs="12"
                                      sm="6"
                                      lg="4"
-                                     xl="3">
+                                     xl="3"
+                                     Style="@($"view-transition-name:{CardName(clip)}")">
                                 @* Clip Card *@
                                 <MudPaper Elevation="4"
                                           Class="rounded-panel pa-4 hover-card"
@@ -97,6 +202,21 @@
                                             <MudImage Src="@thumbnail"
                                                       Alt="@clip.Title" />
                                         }
+                                        @if (clip.Game is { } game)
+                                        {
+                                            <MudChip T="string"
+                                                     Size="Size.Small"
+                                                     Variant="Variant.Filled"
+                                                     Color="Color.Dark"
+                                                     Class="clip-game ma-0">
+                                                @game
+                                            </MudChip>
+                                        }
+                                        <MediaChips Width="clip.Width"
+                                                    Height="clip.Height"
+                                                    FrameRate="clip.FrameRate"
+                                                    OnImage
+                                                    Class="clip-media" />
                                         <MudChip T="string"
                                                  Size="Size.Small"
                                                  Variant="Variant.Filled"
@@ -124,14 +244,10 @@
                                         @* Delete Button *@
                                         <MudElement HtmlTag="span"
                                                     ClickPropagation="false">
-                                            <Tooltip Text="Delete Clip"
-                                                     RootClass="d-flex">
-                                                <MudIconButton Icon="@Icons.Material.Rounded.Delete"
-                                                               aria-label="Delete Clip"
-                                                               Color="Color.Error"
-                                                               Size="Size.Small"
-                                                               OnClick="() => DeleteAsync(clip)" />
-                                            </Tooltip>
+                                            <IconButton Icon="@Icons.Material.Rounded.Delete"
+                                                        Text="Delete Clip"
+                                                        Color="Color.Error"
+                                                        OnClick="() => DeleteAsync(clip)" />
                                         </MudElement>
                                     </MudStack>
                                 </MudPaper>

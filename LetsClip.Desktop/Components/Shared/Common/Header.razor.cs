@@ -4,7 +4,6 @@ namespace LetsClip.Desktop.Components.Shared.Common;
 
 public partial class Header
 {
-    // Parameters
     [Parameter]
     public required string Title { get; set; }
 

@@ -1,5 +1,3 @@
-using LetsClip.Data.Enums;
-using LetsClip.Data.ViewModels;
 using LetsClip.Services.Capture;
 using Microsoft.AspNetCore.Components;
 using MudBlazor;
@@ -11,7 +9,7 @@ public partial class CaptureChip : IDisposable
     [Inject]
     public required CaptureController Controller { get; set; }
 
-    private bool IsError => Controller.Recorder.Status.State == CaptureState.Error;
+    private bool IsError => Controller.ShowsError;
 
     private string Icon =>
         IsError ? Icons.Material.Rounded.Error

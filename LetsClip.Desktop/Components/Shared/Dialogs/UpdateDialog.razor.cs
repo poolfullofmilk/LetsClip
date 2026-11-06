@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.IO;
 using System.Net.Http;
 using System.Windows;
 using LetsClip.Data.Helpers;
@@ -32,19 +31,12 @@ public partial class UpdateDialog
     private long _total;
     private int _percent;
 
+    private string Title => $"LetsClip {Release.Tag.TrimStart('v')} Is Out";
+
     private string ProgressText =>
         _total > 0 && _received >= _total ? "Starting the new version"
         : _total > 0 ? $"{Formatter.FormatSize(_received)} of {Formatter.FormatSize(_total)}"
         : Formatter.FormatSize(_received);
-
-    public static Task ShowAsync(IDialogService dialogService, ReleaseInfo release)
-    {
-        return dialogService.ShowAsync<UpdateDialog>(
-            null,
-            new DialogParameters<UpdateDialog> { { dialog => dialog.Release, release } },
-            new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true }
-        );
-    }
 
     private async Task InstallAsync()
     {
@@ -118,13 +110,7 @@ public partial class UpdateDialog
 
     private Task SetClosableAsync(bool closable)
     {
-        return MudDialog.SetOptionsAsync(
-            MudDialog.Options with
-            {
-                CloseButton = closable,
-                CloseOnEscapeKey = closable,
-            }
-        );
+        return MudDialog.SetOptionsAsync(MudDialog.Options with { CloseOnEscapeKey = closable });
     }
 
     private void OpenReleasePage()

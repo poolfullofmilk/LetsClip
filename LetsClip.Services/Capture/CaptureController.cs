@@ -5,13 +5,19 @@ using LetsClip.Services.Games;
 using LetsClip.Services.Integration;
 using LetsClip.Services.Media;
 using LetsClip.Services.Storage;
+using NLog;
 
 namespace LetsClip.Services.Capture;
 
 public sealed class CaptureController : IDisposable
 {
+    private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
+
     // A Save Waits This Long For A Start To Finish
     private static readonly TimeSpan s_startWait = TimeSpan.FromSeconds(15);
+
+    // Failures In A Row Wait Longer, At Most A Minute
+    private static readonly int[] s_retrySeconds = [2, 5, 15, 30, 60];
 
     private readonly Lock _gate = new();
 
@@ -20,13 +26,19 @@ public sealed class CaptureController : IDisposable
     private CaptureHolds _holds;
     private string? _lastGame;
     private IReadOnlyDictionary<string, string>? _installedGames;
+    private int _failures;
+    private int _retry;
+    private volatile bool _quietRetry;
+    private readonly Lazy<bool> _hasHardwareEncoder = new(() =>
+        VideoEncoders.Candidates(MonitorCatalog.AdapterVendors()).Any(encoder => encoder.IsHardware)
+    );
 
     public CaptureController()
     {
         Settings = UserSettings.Load();
         Library = new ClipLibrary(Settings.ClipsDirectory);
         Recorder = new ReplayRecorder(Library);
-        Recorder.Dropped += () => _ = RestartAfterDropAsync();
+        Recorder.Failed += ranLong => _ = RetryAsync(ranLong);
         Games.GameChanged += name => _ = OnGameChangedAsync(name);
         RefreshMonitors();
         _ = LoadGamesAsync();
@@ -40,27 +52,20 @@ public sealed class CaptureController : IDisposable
 
     public ClipLibrary Library { get; }
 
-    public ClipExporter Exporter { get; } = new();
-
     public GameWatcher Games { get; } = new();
 
     public IReadOnlyList<MonitorInfo> Monitors { get; private set; } = [];
 
     // Nothing Picked Or Unplugged Means The Primary Monitor
     public MonitorInfo? SelectedMonitor =>
-        Monitors.FirstOrDefault(monitor =>
-            string.Equals(
-                monitor.DevicePath,
-                Settings.MonitorDevicePath,
-                StringComparison.OrdinalIgnoreCase
-            )
-        ) ?? Monitors.FirstOrDefault(monitor => monitor.IsPrimary);
+        MonitorCatalog.Find(Monitors, Settings.MonitorDevicePath)
+        ?? Monitors.FirstOrDefault(monitor => monitor.IsPrimary);
 
-    // Up To The Monitor's Refresh Rate, 30 Always Offered
+    // Up To The Monitor's Rounded Refresh Rate, 30 Always Offered
     public IReadOnlyList<int> FrameRateChoices =>
         [
             .. UserSettings.FrameRateChoices.Where(rate =>
-                rate <= Math.Max(30, (SelectedMonitor?.RefreshRate ?? 60) + 1)
+                rate <= Math.Max(30, SelectedMonitor?.RefreshRate ?? 60)
             ),
         ];
 
@@ -80,34 +85,46 @@ public sealed class CaptureController : IDisposable
 
     public int Resolution => ResolutionChoices.Where(lines => lines <= Settings.Resolution).Max();
 
+    // A Graphics Card Records 1080p60 Lightly, The CPU 720p30
+    public int RecommendedResolution =>
+        ResolutionChoices
+            .Where(lines => lines <= (_hasHardwareEncoder.Value ? 1080 : 720))
+            .DefaultIfEmpty(ResolutionChoices[0])
+            .Max();
+
+    public int RecommendedFrameRate =>
+        FrameRateChoices.Where(rate => rate <= (_hasHardwareEncoder.Value ? 60 : 30)).Max();
+
+    // A Session That Dropped After Running Restarts Out Of Sight
+    public bool ShowsError => Recorder.Status.State == CaptureState.Error && !_quietRetry;
+
     // Starting And A Restart Already Read As Recording
     public bool IsRecording =>
         Recorder.Status.State is CaptureState.Recording or CaptureState.Starting
-        || (Recorder.Status.State == CaptureState.Stopping && _holds == CaptureHolds.None);
+        || (Recorder.Status.State == CaptureState.Stopping && _holds == CaptureHolds.None)
+        || (Recorder.Status.State == CaptureState.Error && _quietRetry);
 
     // Recording Names The Game It Records
     public string StatusText =>
         Recorder.Status switch
         {
             { IsSaving: true } => "Saving Clip",
-            { State: CaptureState.Error } => "Recording Error",
+            _ when ShowsError => "Recording Error",
             _ when IsRecording => Settings.GamesOnly && Games.GameName is { } game
                 ? $"Recording {game}"
                 : "Recording",
-            _ when Settings.GamesOnly => "Waiting for a Game",
+            _ when Settings.GamesOnly => "Waiting for a Game or App",
             _ => "Not Recording",
         };
 
-    public int? GameCount => _installedGames is null ? null : KnownGames().Count;
+    public bool GamesScanned => _installedGames is not null;
 
-    public void RefreshMonitors()
+    private void RefreshMonitors()
     {
-        var monitors = MonitorCatalog.Enumerate();
-        lock (_gate)
-        {
-            Monitors = monitors;
-        }
-
+        Monitors = MonitorCatalog.Enumerate();
+        s_logger.Info(
+            $"Found Monitors {string.Join("; ", Monitors.Select(monitor => $"{monitor.Label} At {monitor.RefreshRate} Hz{(monitor.IsPrimary ? ", Primary" : "")}{(monitor.IsHdr ? ", HDR" : "")}{(monitor.Rotation != 0 ? $", Turned {monitor.Rotation}" : "")}, Adapter {monitor.AdapterIndex} Output {monitor.OutputIndex}"))}"
+        );
         Changed?.Invoke();
     }
 
@@ -124,6 +141,11 @@ public sealed class CaptureController : IDisposable
             updated.Save();
         }
 
+        foreach (var changed in updated.ChangesFrom(before))
+        {
+            s_logger.Info($"Changed Setting {changed}");
+        }
+
         Library.SetFolder(updated.ClipsDirectory);
         if (before.StartWithWindows != updated.StartWithWindows)
         {
@@ -138,7 +160,7 @@ public sealed class CaptureController : IDisposable
     private async Task LoadGamesAsync()
     {
         // The Library Scan Reads Many Folders, Once, Off The Caller
-        _installedGames = await Task.Run(() => GameScanner.InstalledGames);
+        _installedGames = await Task.Run(GameScanner.Scan);
         ApplyGames();
         Changed?.Invoke();
     }
@@ -206,26 +228,17 @@ public sealed class CaptureController : IDisposable
         );
     }
 
-    public void RemoveGame(string key)
+    public void SetRemoved(string key, bool removed)
     {
+        // A Removed Game Stays Listed, Greyed At The Bottom
         UpdateSettings(settings =>
             settings with
             {
                 RemovedGames =
                 [
-                    .. (settings.RemovedGames ?? []).Where(removed => removed != key),
-                    key,
+                    .. (settings.RemovedGames ?? []).Where(entry => entry != key),
+                    .. removed ? [key] : Array.Empty<string>(),
                 ],
-            }
-        );
-    }
-
-    public void RestoreGame(string key)
-    {
-        UpdateSettings(settings =>
-            settings with
-            {
-                RemovedGames = [.. (settings.RemovedGames ?? []).Where(removed => removed != key)],
             }
         );
     }
@@ -245,6 +258,7 @@ public sealed class CaptureController : IDisposable
             (
                 _steps.CurrentCount == 0
                 || Recorder.Status.State is CaptureState.Starting or CaptureState.Stopping
+                || (_quietRetry && Recorder.Status.State == CaptureState.Error)
             )
             && waited.Elapsed < s_startWait
         )
@@ -260,13 +274,7 @@ public sealed class CaptureController : IDisposable
         // The Running Monitor Unplugged Or Changed Ends Its Session
         var running = Recorder.Options?.Monitor;
         RefreshMonitors();
-        var now = Monitors.FirstOrDefault(monitor =>
-            string.Equals(
-                monitor.DevicePath,
-                running?.DevicePath,
-                StringComparison.OrdinalIgnoreCase
-            )
-        );
+        var now = MonitorCatalog.Find(Monitors, running?.DevicePath);
         var reason =
             running is null || now == running ? null
             : now is null
@@ -279,11 +287,13 @@ public sealed class CaptureController : IDisposable
 
     public Task HoldAsync(CaptureHolds hold, string reason)
     {
+        s_logger.Info($"Holding Capture For {hold}, Now {_holds | hold}");
         return StepAsync(() => _holds |= hold, reason);
     }
 
     public Task ReleaseAsync(CaptureHolds hold)
     {
+        s_logger.Info($"Releasing Capture Hold {hold}, Left {_holds & ~hold}");
         return StepAsync(() => _holds &= ~hold);
     }
 
@@ -293,16 +303,34 @@ public sealed class CaptureController : IDisposable
         return game is null
             ? StepAsync(
                 null,
-                $"Stopped because {_lastGame ?? "the game"} closed, history was cleared"
+                $"Stopped because {_lastGame ?? "the app"} closed, history was cleared"
             )
             : StepAsync(() => _lastGame = game);
     }
 
-    private async Task RestartAfterDropAsync()
+    private async Task RetryAsync(bool ranLong)
     {
-        // A Dropped Capture Starts Over By Itself
-        await Task.Delay(TimeSpan.FromSeconds(3));
+        // Every Failure Starts Over By Itself, Set Once And Forget
+        var failures = ranLong ? 1 : _failures + 1;
+        _failures = failures;
+        var retry = Interlocked.Increment(ref _retry);
+        _quietRetry = ranLong;
+        Changed?.Invoke();
+        var seconds = s_retrySeconds[Math.Min(failures, s_retrySeconds.Length) - 1];
+        s_logger.Info(
+            $"Retrying In {seconds} s, Failure {failures} In A Row{(ranLong ? " After A Long Run, Out Of Sight" : "")}"
+        );
+        await Task.Delay(TimeSpan.FromSeconds(seconds));
+        if (retry != Volatile.Read(ref _retry))
+        {
+            return;
+        }
+
         await StepAsync(null);
+        if (retry == Volatile.Read(ref _retry))
+        {
+            _quietRetry = false;
+        }
     }
 
     private async Task StepAsync(Action? change, string? stopReason = null)
@@ -323,6 +351,9 @@ public sealed class CaptureController : IDisposable
                 return;
             }
 
+            s_logger.Debug(
+                $"Step Wants {Describe(wanted)}, Runs {Describe(running)}, Holds {_holds}, State {Recorder.Status.State}"
+            );
             if (running is not null || stopReason is not null || clearsError)
             {
                 // A Running Save Gets Its Last Segments First
@@ -333,6 +364,12 @@ public sealed class CaptureController : IDisposable
             if (wanted is not null && Recorder.Status.CanStart)
             {
                 await Recorder.StartAsync(wanted);
+
+                // The Recorder Names The Monitor, This Names The Game
+                if (wanted.GameWindow != 0 && Recorder.Status.State == CaptureState.Recording)
+                {
+                    s_logger.Info($"Recording {Games.GameName ?? "A Game"}");
+                }
             }
         }
         finally
@@ -341,6 +378,14 @@ public sealed class CaptureController : IDisposable
         }
 
         Changed?.Invoke();
+    }
+
+    private static string Describe(CaptureOptions? options)
+    {
+        // One Line A Log Reader Can Compare Between Steps
+        return options is null
+            ? "Nothing"
+            : $"{(options.GameWindow != 0 ? "A Game Window On " : "")}{options.Monitor.Label}, {options.Seconds} s, {options.Resolution}p, {options.FrameRate} FPS, {options.Quality}, System Audio {options.SystemAudioId switch { null => "Off", "" => "Automatic", _ => "Picked" }}, Microphone {options.MicrophoneId switch { null => "Off", "" => "Automatic", _ => "Picked" }}{(options.CleanMicrophone ? " Cleaned" : "")}";
     }
 
     private CaptureOptions? WantedOptions()

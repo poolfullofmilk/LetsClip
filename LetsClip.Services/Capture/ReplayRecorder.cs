@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using LetsClip.Data.Enums;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
@@ -19,14 +20,9 @@ public sealed record CaptureOptions(
     bool CleanMicrophone,
     nint GameWindow,
     string? GameName
-)
-{
-    public string Label => GameName ?? Monitor.Label;
-}
+);
 
 public sealed record SaveOutcome(ClipInfo? Clip, string? Error);
-
-public sealed class CaptureException(string message) : Exception(message);
 
 public sealed class ReplayRecorder : IDisposable
 {
@@ -38,15 +34,17 @@ public sealed class ReplayRecorder : IDisposable
     private const int MaximumSaves = 3;
 
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
-    private static readonly TimeSpan s_startTimeout = TimeSpan.FromSeconds(12);
-    private static readonly TimeSpan s_stallTimeout = TimeSpan.FromSeconds(8);
+    private static readonly TimeSpan s_saveTimeout = TimeSpan.FromSeconds(8);
     private static readonly TimeSpan s_healthPeriod = TimeSpan.FromSeconds(1);
+
+    // A Disk Froze 9 s Once, Only Longer Is Dead
+    private static readonly TimeSpan s_stallTimeout = TimeSpan.FromSeconds(20);
 
     // A Moving Window Closes Its Segment Within This
     private static readonly TimeSpan s_windowWait = TimeSpan.FromSeconds(1.5);
 
-    // A Session That Ran This Long Restarts When It Drops
-    private static readonly TimeSpan s_restartAfter = TimeSpan.FromSeconds(30);
+    // A Session This Old Had Worked, Its Retry Comes Quick
+    private static readonly TimeSpan s_ranLong = TimeSpan.FromSeconds(30);
 
     private readonly ClipLibrary _library;
     private readonly SemaphoreSlim _transition = new(1, 1);
@@ -77,7 +75,8 @@ public sealed class ReplayRecorder : IDisposable
 
     public event Action<ClipInfo>? ClipSaved;
 
-    public event Action? Dropped;
+    // Every Error, True When The Session Had Run A While
+    public event Action<bool>? Failed;
 
     public CaptureStatus Status { get; private set; }
 
@@ -114,13 +113,14 @@ public sealed class ReplayRecorder : IDisposable
             UpdateStatus(session, CaptureState.Recording);
             _health.Change(s_healthPeriod, s_healthPeriod);
             s_logger.Info(
-                $"Started Recording {session.Options.Label} With {session.Encoder.Name}{(session.Encoder.GpuFrames ? " On The GPU" : "")}"
+                $"Started Recording {(session.Options.GameWindow != 0 ? "A Game Window On " : "")}{session.Options.Monitor.Label} With {session.Encoder.Name}{(session.Encoder.GpuFrames ? " On The GPU" : "")} At {session.Size.Width} × {session.Size.Height}, {session.Options.FrameRate} FPS, {session.Options.Quality}, Keeping {session.Options.Seconds} s"
             );
         }
         catch (Exception exception) when (IsStartFailure(exception))
         {
             // Any Failed Start Shows As An Error
             var message = exception.Message.TrimEnd('.');
+            Failed?.Invoke(false);
             SetStatus(Status with { State = CaptureState.Error, Message = message });
             s_logger.Warn($"Failed To Start Recording {exception.GetType().Name}, {message}");
         }
@@ -199,24 +199,18 @@ public sealed class ReplayRecorder : IDisposable
     {
         if (!FFmpeg.IsAvailable)
         {
-            throw new CaptureException("FFmpeg is missing beside LetsClip, reinstall it");
+            throw new InvalidOperationException("FFmpeg is missing beside LetsClip, reinstall it");
         }
 
         // The Saved Monitor Is Found By Device Path, Never Number
         var monitor =
-            MonitorCatalog
-                .Enumerate()
-                .FirstOrDefault(candidate =>
-                    string.Equals(
-                        candidate.DevicePath,
-                        options.Monitor.DevicePath,
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                )
-            ?? throw new CaptureException($"{options.Monitor.FriendlyName} is not connected");
+            MonitorCatalog.Find(MonitorCatalog.Enumerate(), options.Monitor.DevicePath)
+            ?? throw new InvalidOperationException(
+                $"{options.Monitor.FriendlyName} is not connected"
+            );
         if (monitor.IsHdr)
         {
-            throw new CaptureException(
+            throw new InvalidOperationException(
                 $"HDR is on for {monitor.FriendlyName}, turn it off in Display Settings to record in SDR"
             );
         }
@@ -224,7 +218,7 @@ public sealed class ReplayRecorder : IDisposable
         Directory.CreateDirectory(AppInfo.CacheDirectory);
         if (FreeBytes(AppInfo.CacheDirectory) < MinimumFreeBytes)
         {
-            throw new CaptureException("Less than 2 GB free for the replay cache");
+            throw new InvalidOperationException("Less than 2 GB free for the replay cache");
         }
 
         // A Window Keeps Its Own Shape, No Bars
@@ -265,7 +259,7 @@ public sealed class ReplayRecorder : IDisposable
             );
             try
             {
-                await session.LaunchAsync(s_startTimeout);
+                await session.LaunchAsync();
                 if (skipped.Count > 0)
                 {
                     session.Warning = $"Using {encoder.Name}, {string.Join(", ", skipped)}";
@@ -292,7 +286,7 @@ public sealed class ReplayRecorder : IDisposable
             }
         }
 
-        throw new CaptureException(string.Join(", ", skipped));
+        throw new InvalidOperationException(string.Join(", ", skipped));
     }
 
     private async Task WatchEndAsync(CaptureSession session)
@@ -308,12 +302,7 @@ public sealed class ReplayRecorder : IDisposable
             session.Video?.LastError
             ?? session.Audio?.LastError
             ?? $"the encoder exited with code {exited?.ExitCode}";
-        var ranLong = Stopwatch.GetElapsedTime(session.OriginTimestamp) > s_restartAfter;
         await FailAsync(session, $"Recording stopped, {reason}");
-        if (ranLong)
-        {
-            Dropped?.Invoke();
-        }
     }
 
     private async Task FailAsync(CaptureSession session, string message)
@@ -334,6 +323,9 @@ public sealed class ReplayRecorder : IDisposable
 
             await Task.Run(session.Shutdown);
             _health.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+
+            // The Controller Hears First, A Quick Retry Shows No Error
+            Failed?.Invoke(Stopwatch.GetElapsedTime(session.OriginTimestamp) > s_ranLong);
             SetStatus(Status with { State = CaptureState.Error, Message = message });
             s_logger.Warn($"Stopped Recording With An Error, {message}");
         }
@@ -349,8 +341,9 @@ public sealed class ReplayRecorder : IDisposable
     {
         CaptureSession? session;
         double end;
-        IDisposable pin;
+        double pinned;
         var recordedAt = DateTimeOffset.Now;
+        var pressed = Stopwatch.GetTimestamp();
         lock (_gate)
         {
             session = _session;
@@ -367,7 +360,8 @@ public sealed class ReplayRecorder : IDisposable
             // The Press Ends The Clip, However Long Saving Takes
             _saves++;
             end = session.MediaNow();
-            pin = session.Pin(end - session.Options.Seconds - (CaptureSession.SegmentSeconds * 2));
+            pinned = end - session.Options.Seconds - (CaptureSession.SegmentSeconds * 2);
+            session.Pin(pinned);
         }
 
         try
@@ -381,7 +375,7 @@ public sealed class ReplayRecorder : IDisposable
                 var clip = await SaveFromAsync(session, end, recordedAt);
                 ClipSaved?.Invoke(clip);
                 s_logger.Info(
-                    $"Saved {clip.FileName} Of {Formatter.FormatDuration(clip.Duration)}"
+                    $"Saved {Path.GetFileName(clip.Path)} Of {Formatter.FormatDuration(clip.Duration)}, {Formatter.FormatSize(clip.SizeBytes)}, In {Stopwatch.GetElapsedTime(pressed).TotalSeconds:0.0} s"
                 );
                 return new SaveOutcome(clip, null);
             }
@@ -404,7 +398,7 @@ public sealed class ReplayRecorder : IDisposable
         }
         finally
         {
-            pin.Dispose();
+            session.Unpin(pinned);
             lock (_gate)
             {
                 _saves--;
@@ -425,7 +419,7 @@ public sealed class ReplayRecorder : IDisposable
         var waited = Stopwatch.StartNew();
         while (
             !session.HasEnded
-            && waited.Elapsed < s_stallTimeout
+            && waited.Elapsed < s_saveTimeout
             && (
                 session.AudioEnd < end
                 || (session.VideoEnd < end && !(isWindow && waited.Elapsed > s_windowWait))
@@ -454,7 +448,9 @@ public sealed class ReplayRecorder : IDisposable
 
         if (video.Count == 0)
         {
-            throw new InvalidDataException("Nothing recorded yet");
+            throw new InvalidDataException(
+                isWindow ? "Nothing has moved in the window yet" : "Nothing recorded yet"
+            );
         }
 
         // Exactly The Replay Length, Or All Of A Younger Session
@@ -467,6 +463,7 @@ public sealed class ReplayRecorder : IDisposable
             session.Folder,
             recordedAt,
             session.Options.FrameRate,
+            session.Options.GameName,
             _library
         );
     }
@@ -487,14 +484,15 @@ public sealed class ReplayRecorder : IDisposable
 
     private static bool IsStartFailure(Exception exception)
     {
-        // Slow Tests, Blocked FFmpeg Or Unwritable Cache Fail Starts Too
+        // Slow Tests, Blocked FFmpeg, Cache Or Audio Problems Fail Starts
         return exception
-            is CaptureException
-                or TimeoutException
+            is TimeoutException
                 or IOException
                 or UnauthorizedAccessException
                 or Win32Exception
-                or InvalidOperationException;
+                or InvalidOperationException
+                or COMException
+                or NotSupportedException;
     }
     #endregion
 
@@ -522,6 +520,9 @@ public sealed class ReplayRecorder : IDisposable
         var audioSince = session.Audio?.SinceLastSegment ?? TimeSpan.Zero;
         if ((videoSince > audioSince ? videoSince : audioSince) > s_stallTimeout)
         {
+            s_logger.Warn(
+                $"Stalled, {videoSince.TotalSeconds:0} s Since A Video Segment And {audioSince.TotalSeconds:0} s Since An Audio One"
+            );
             _ = FailAsync(session, "Capture stalled, nothing arrived for several seconds");
             return;
         }
@@ -592,7 +593,7 @@ public sealed class ReplayRecorder : IDisposable
     #endregion
 
     #region Sizing
-    public static (int Width, int Height) OutputSize(MonitorInfo monitor, int resolution)
+    private static (int Width, int Height) OutputSize(MonitorInfo monitor, int resolution)
     {
         // A 16 By 9 Box, Or The Monitor's Own Size
         return resolution >= Math.Min(monitor.Width, monitor.Height)
@@ -600,7 +601,7 @@ public sealed class ReplayRecorder : IDisposable
             : ClipExporter.OutputSize(monitor.Width, monitor.Height, resolution);
     }
 
-    public static (int Width, int Height) FitInside(
+    private static (int Width, int Height) FitInside(
         (int Width, int Height) box,
         (int Width, int Height) source
     )

@@ -2,9 +2,7 @@ using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
 using LetsClip.Desktop.Components.Pages;
 using LetsClip.Desktop.Components.Shared.Dialogs;
-using LetsClip.Desktop.Components.Shared.Media;
 using LetsClip.Desktop.Interop;
-using LetsClip.Services.Capture;
 using LetsClip.Services.Integration;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
@@ -14,9 +12,6 @@ namespace LetsClip.Desktop.Components.Layout;
 
 public partial class MainLayout : IDisposable
 {
-    [Inject]
-    public required CaptureController Controller { get; set; }
-
     [Inject]
     public required DesktopShell Shell { get; set; }
 
@@ -31,9 +26,6 @@ public partial class MainLayout : IDisposable
 
     private ErrorBoundary? _errorBoundary;
     private ReleaseInfo? _availableUpdate;
-
-    // The Dot Leads From Help Down To Check For Updates
-    private string? UpdateDotClass => _availableUpdate is null ? null : "update-dot";
 
     protected override void OnInitialized()
     {
@@ -76,9 +68,14 @@ public partial class MainLayout : IDisposable
             return;
         }
 
+        // The Red Dot Stays On The More Menu Until Restart
         _availableUpdate = latest;
         StateHasChanged();
-        await UpdateDialog.ShowAsync(DialogService, latest);
+        await DialogService.ShowAsync<UpdateDialog>(
+            null,
+            new DialogParameters<UpdateDialog> { { dialog => dialog.Release, latest } },
+            new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true }
+        );
     }
 
     private void OnOpenClipRequested(string path)
@@ -99,11 +96,10 @@ public partial class MainLayout : IDisposable
 
     private async Task ShowAboutAsync()
     {
-        var dialog = await DialogService.ShowAsync<AboutDialog>(
+        await DialogService.ShowAsync<AboutDialog>(
             (string?)null,
             new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true }
         );
-        await dialog.Result;
     }
 
     public void Dispose()

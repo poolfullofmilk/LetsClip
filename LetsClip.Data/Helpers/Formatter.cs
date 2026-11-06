@@ -1,9 +1,10 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace LetsClip.Data.Helpers;
 
-public static class Formatter
+public static partial class Formatter
 {
     private static readonly CultureInfo s_invariant = CultureInfo.InvariantCulture;
 
@@ -39,20 +40,50 @@ public static class Formatter
         return rest > 0 || text.Length == 0 ? text + rest.ToString("0.#", Shown) + "s" : text;
     }
 
-    public static string FormatDateTime(DateTimeOffset time, string clock = "HH:mm")
+    public static string FormatSeconds(double seconds)
     {
-        // 5th of November 2026 at 21:10, File Names Take 21h10m
+        // Plain Seconds To A Tenth, 90,5 For 1m30,5s
+        return Math.Round(Math.Max(0, seconds), 1).ToString("0.#", Shown);
+    }
+
+    public static double? ParseDuration(string? text)
+    {
+        // The Shown Form Or Plain Seconds Read Back
+        var match = DurationText().Match((text ?? "").Replace(" ", "").ToLowerInvariant());
+        if (!match.Success || match.Length == 0)
+        {
+            return null;
+        }
+
+        double Part(string name) =>
+            match.Groups[name].Success
+                ? double.Parse(match.Groups[name].Value.Replace(',', '.'), s_invariant)
+                : 0;
+        return Math.Round((Part("hours") * 3600) + (Part("minutes") * 60) + Part("seconds"), 1);
+    }
+
+    [GeneratedRegex(
+        @"^(?:(?<hours>\d+)h)?(?:(?<minutes>\d+)m)?(?:(?<seconds>\d+(?:[.,]\d*)?)s?)?$"
+    )]
+    private static partial Regex DurationText();
+
+    public static string FormatDateTime(DateTimeOffset time, DateTime? today = null)
+    {
+        // Today And Yesterday By Name, Older Days As 6-11-2026
         var local = time.ToLocalTime();
-        var suffix = local.Day is 11 or 12 or 13
-            ? "th"
-            : (local.Day % 10) switch
-            {
-                1 => "st",
-                2 => "nd",
-                3 => "rd",
-                _ => "th",
-            };
-        return $"{local.Day}{suffix} of {local.ToString("MMMM yyyy", s_invariant)} at {local.ToString(clock, s_invariant)}";
+        var day = ((today ?? DateTime.Today) - local.Date).Days switch
+        {
+            0 => "Today",
+            1 => "Yesterday",
+            _ => local.ToString("d-M-yyyy", s_invariant),
+        };
+        return $"{day} at {local.ToString("H:mm", s_invariant)}";
+    }
+
+    public static string FormatFileDate(DateTimeOffset time)
+    {
+        // Full Date, 8h42 Since A Name Holds No Colon
+        return time.ToLocalTime().ToString("d-M-yyyy 'at' H'h'mm", s_invariant);
     }
 
     public static string FormatMegabytes(double megabytes)
@@ -60,17 +91,37 @@ public static class Formatter
         return megabytes.ToString("0.#", Shown) + " MB";
     }
 
+    public static string FormatResolution(int width, int height)
+    {
+        // The Short Side Names It, Slightly Small Windows Still Count
+        return Math.Min(width, height) switch
+        {
+            >= 1800 => "4K",
+            >= 1260 => "QHD",
+            >= 900 => "FHD",
+            >= 600 => "HD",
+            _ => "SD",
+        };
+    }
+
     private static bool SelfTestPasses()
     {
         var evening = new DateTimeOffset(new DateTime(2026, 11, 4, 22, 43, 5, DateTimeKind.Local));
-        var morning = new DateTimeOffset(new DateTime(2026, 11, 5, 8, 0, 0, DateTimeKind.Local));
-        return FormatDateTime(evening) == "4th of November 2026 at 22:43"
-            && FormatDateTime(morning) == "5th of November 2026 at 08:00"
-            && FormatDateTime(evening, "HH'h'mm'm'") == "4th of November 2026 at 22h43m"
-            && FormatDateTime(morning.AddDays(-4)) == "1st of November 2026 at 08:00"
-            && FormatDateTime(morning.AddDays(6)) == "11th of November 2026 at 08:00"
-            && FormatDateTime(morning.AddDays(17)) == "22nd of November 2026 at 08:00"
-            && FormatDateTime(morning.AddDays(-2)) == "3rd of November 2026 at 08:00"
+        var morning = new DateTimeOffset(new DateTime(2026, 11, 6, 8, 5, 0, DateTimeKind.Local));
+        var today = new DateTime(2026, 11, 6);
+        return FormatDateTime(morning, today) == "Today at 8:05"
+            && FormatDateTime(morning.AddHours(-9), today) == "Yesterday at 23:05"
+            && FormatDateTime(evening, today) == "4-11-2026 at 22:43"
+            && FormatDateTime(morning.AddDays(1), today) == "7-11-2026 at 8:05"
+            && FormatFileDate(morning) == "6-11-2026 at 8h05"
+            && FormatFileDate(evening) == "4-11-2026 at 22h43"
+            && FormatResolution(1920, 1080) == "FHD"
+            && FormatResolution(1080, 1920) == "FHD"
+            && FormatResolution(1916, 1032) == "FHD"
+            && FormatResolution(2560, 1440) == "QHD"
+            && FormatResolution(3840, 2160) == "4K"
+            && FormatResolution(1280, 720) == "HD"
+            && FormatResolution(854, 480) == "SD"
             && FormatSize(20_000_000) == $"20{Point}0 MB"
             && FormatSize(999_499) == "999 KB"
             && FormatSize(1_250_000_000) == $"1{Point}25 GB"
@@ -79,6 +130,17 @@ public static class Formatter
             && FormatDuration(510.54) == $"8m30{Point}5s"
             && FormatDuration(59.96) == "1m"
             && FormatDuration(3725) == "1h2m5s"
-            && FormatDuration(7500) == "2h5m";
+            && FormatDuration(7500) == "2h5m"
+            && ParseDuration("23,5") == 23.5
+            && ParseDuration("23.54s") == 23.5
+            && ParseDuration(" 1m 30,5s") == 90.5
+            && ParseDuration("1m") == 60
+            && ParseDuration("1h2m5s") == 3725
+            && ParseDuration(FormatDuration(510.54)) == 510.5
+            && FormatSeconds(90.54) == $"90{Point}5"
+            && ParseDuration(FormatSeconds(90.54)) == 90.5
+            && ParseDuration("") is null
+            && ParseDuration("abc") is null
+            && ParseDuration("-3") is null;
     }
 }

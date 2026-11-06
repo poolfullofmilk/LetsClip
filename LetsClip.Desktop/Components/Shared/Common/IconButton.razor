@@ -1,11 +1,11 @@
-@* Player Button *@
+@* Icon Button *@
 <Tooltip Text="@Text"
          Disabled="Disabled"
-         RootClass="d-flex">
+         RootClass="@RootClass">
     <MudIconButton Icon="@Icon"
                    aria-label="@Text"
                    Variant="@(Filled ? Variant.Filled : Variant.Text)"
-                   Color="@(Filled ? Color.Info : Color.Default)"
+                   Color="Color"
                    Size="Size.Small"
                    Disabled="Disabled"
                    OnClick="OnClick" />

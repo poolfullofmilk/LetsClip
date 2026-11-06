@@ -1,5 +1,6 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
 using NLog;
@@ -62,6 +63,11 @@ public static partial class FFmpeg
             ?? throw new InvalidOperationException($"Failed To Start {executable}");
         _ = AssignProcessToJobObject(s_job, process.Handle);
         KeepFullSpeed(process.Handle);
+
+        // The Exact Command, So A Run Can Be Repeated
+        s_logger.Debug(
+            $"Started {Path.GetFileName(executable)} {process.Id}: {string.Join(' ', startInfo.ArgumentList.Select(argument => argument.Contains(' ') ? $"\"{argument}\"" : argument))}"
+        );
         return process;
     }
 
@@ -92,6 +98,7 @@ public static partial class FFmpeg
     )
     {
         using var process = Start(executable, arguments, false, workingDirectory);
+        var started = Stopwatch.StartNew();
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(token);
         limit.CancelAfter(timeout);
 
@@ -125,6 +132,9 @@ public static partial class FFmpeg
 
         var output = await outputTask;
         await errorTask;
+        s_logger.Debug(
+            $"{Path.GetFileName(executable)} {process.Id} Exited {process.ExitCode} In {started.ElapsedMilliseconds} ms{(process.ExitCode == 0 ? "" : $", {lastError}")}"
+        );
         return new ProcessResult(process.ExitCode, output, lastError);
     }
 
@@ -147,16 +157,18 @@ public static partial class FFmpeg
                 File.Delete(path);
             }
             catch (Exception exception)
-                when (exception is IOException or UnauthorizedAccessException && attempt < 20)
-            {
-                await Task.Delay(100);
-            }
-            catch (Exception exception)
                 when (exception is IOException or UnauthorizedAccessException)
             {
-                // Its Temporary Name Keeps It Out Of The Library
-                s_logger.Warn($"Failed To Delete An Unfinished File {exception.GetType().Name}");
-                return;
+                if (attempt == 20)
+                {
+                    // Its Temporary Name Keeps It Out Of The Library
+                    s_logger.Warn(
+                        $"Failed To Delete An Unfinished File {exception.GetType().Name}"
+                    );
+                    return;
+                }
+
+                await Task.Delay(100);
             }
         }
     }
@@ -165,16 +177,19 @@ public static partial class FFmpeg
     {
         try
         {
-            // FFmpeg Starts No Children, The Job Covers A Crash
-            if (!process.HasExited)
-            {
-                process.Kill();
-            }
+            // FFmpeg Starts No Children, An Exited One Is Left Alone
+            process.Kill();
         }
         catch (Exception exception) when (exception is InvalidOperationException or Win32Exception)
         {
-            // Already Gone Between The Check And The Kill
+            // Already Disposed, Or Windows Refused While It Was Exiting
         }
+    }
+
+    public static string Seconds(double value)
+    {
+        // Invariant Seconds To The Millisecond, Never Below Zero
+        return Math.Max(0, value).ToString("0.###", CultureInfo.InvariantCulture);
     }
 
     private static bool IsProgress(string line)

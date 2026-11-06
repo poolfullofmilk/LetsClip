@@ -8,4 +8,15 @@
         @Title
     </MudText>
     @ChildContent
+    @if (Switch is { } on)
+    {
+        @* Row Switch *@
+        <MudSwitch T="bool"
+                   Value="on"
+                   ValueChanged="SwitchChanged"
+                   Color="Color.Info"
+                   aria-label="@Title"
+                   Disabled="SwitchDisabled"
+                   Class="ma-0" />
+    }
 </MudStack>

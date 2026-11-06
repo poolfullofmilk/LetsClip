@@ -5,10 +5,8 @@ namespace LetsClip.Data.Helpers;
 
 public readonly record struct Hotkey(HotkeyModifiers Modifiers, int VirtualKey)
 {
-    public static readonly Hotkey Default = new(
-        HotkeyModifiers.Control | HotkeyModifiers.Shift,
-        0x77
-    );
+    // F10 Alone, The Owner's Pick
+    public static readonly Hotkey Default = new(HotkeyModifiers.None, 0x79);
 
     // Virtual Key Codes By The Name Shown For Them
     private static readonly Dictionary<string, int> s_keys = BuildKeys();
@@ -53,11 +51,12 @@ public readonly record struct Hotkey(HotkeyModifiers Modifiers, int VirtualKey)
         );
     }
 
-    public static Hotkey? Parse(string? text)
+    public static Hotkey Parse(string? text)
     {
+        // Anything Unreadable Or Unusable Falls Back To The Default
         if (string.IsNullOrWhiteSpace(text))
         {
-            return null;
+            return Default;
         }
 
         var modifiers = HotkeyModifiers.None;
@@ -76,11 +75,11 @@ public readonly record struct Hotkey(HotkeyModifiers Modifiers, int VirtualKey)
 
         if (modifiers < 0 || !s_keys.TryGetValue(parts[^1], out var virtualKey))
         {
-            return null;
+            return Default;
         }
 
         var hotkey = new Hotkey(modifiers, virtualKey);
-        return hotkey.IsUsable ? hotkey : null;
+        return hotkey.IsUsable ? hotkey : Default;
     }
 
     public static Hotkey? FromBrowser(string code, bool control, bool alt, bool shift, bool meta)
@@ -148,15 +147,18 @@ public readonly record struct Hotkey(HotkeyModifiers Modifiers, int VirtualKey)
 
     private static bool SelfTestPasses()
     {
-        return Default.ToString() == "Ctrl+Shift+F8"
-            && Parse("Ctrl+Shift+F8") == Default
-            && Parse("ctrl + shift + f8") == Default
+        var controlShiftF8 = new Hotkey(HotkeyModifiers.Control | HotkeyModifiers.Shift, 0x77);
+        return Default.ToString() == "F10"
+            && Parse("F10") == Default
+            && Parse("Ctrl+Shift+F8") == controlShiftF8
+            && Parse("ctrl + shift + f8") == controlShiftF8
             && Parse("F9") == new Hotkey(HotkeyModifiers.None, 0x78)
-            && Parse("Shift+A") is null
-            && Parse("A") is null
-            && Parse("Ctrl+Banana") is null
-            && Parse("Hyper+F8") is null
-            && Parse("Alt+1")?.ToString() == "Alt+1"
+            && Parse("Shift+A") == Default
+            && Parse("A") == Default
+            && Parse("Ctrl+Banana") == Default
+            && Parse("Hyper+F8") == Default
+            && Parse("") == Default
+            && Parse("Alt+1").ToString() == "Alt+1"
             && FromBrowser("KeyS", true, true, false, false)?.ToString() == "Ctrl+Alt+S"
             && FromBrowser("Numpad5", true, false, false, false)?.ToString() == "Ctrl+Num5"
             && FromBrowser("ShiftLeft", false, false, true, false) is null;

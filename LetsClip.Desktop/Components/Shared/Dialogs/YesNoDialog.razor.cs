@@ -8,9 +8,6 @@ public partial class YesNoDialog
     [CascadingParameter]
     public required IMudDialogInstance MudDialog { get; set; }
 
-    [Parameter]
-    public required string Message { get; set; }
-
     private void Yes()
     {
         MudDialog.Close(DialogResult.Ok(true));

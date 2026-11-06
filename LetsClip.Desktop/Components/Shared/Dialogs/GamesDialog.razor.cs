@@ -3,11 +3,15 @@ using LetsClip.Desktop.Interop;
 using LetsClip.Services.Capture;
 using LetsClip.Services.Games;
 using Microsoft.AspNetCore.Components;
+using MudBlazor;
 
 namespace LetsClip.Desktop.Components.Shared.Dialogs;
 
 public partial class GamesDialog : IDisposable
 {
+    [CascadingParameter]
+    public required IMudDialogInstance MudDialog { get; set; }
+
     [Inject]
     public required CaptureController Controller { get; set; }
 
@@ -34,11 +38,6 @@ public partial class GamesDialog : IDisposable
             _games = Controller.GameList();
             StateHasChanged();
         });
-    }
-
-    private static string? NameClass(GameEntry game)
-    {
-        return game.IsRemoved ? "mud-text-disabled" : null;
     }
 
     private void BrowseForGame()

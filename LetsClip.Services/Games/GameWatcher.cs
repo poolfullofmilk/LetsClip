@@ -33,7 +33,6 @@ public sealed partial class GameWatcher : IDisposable
     private volatile bool _enabled;
     private int _checking;
     private bool _failing;
-    private int _gameProcessId;
     private Process? _game;
     private volatile IReadOnlyDictionary<string, string> _games = new Dictionary<string, string>();
 
@@ -49,6 +48,31 @@ public sealed partial class GameWatcher : IDisposable
     public void SetGames(IReadOnlyDictionary<string, string> games)
     {
         _games = games;
+
+        // A Game Taken Off The List Stops Being Recorded
+        bool removed;
+        lock (_gate)
+        {
+            removed = _game is { } game && !games.ContainsKey(KeyOf(game));
+        }
+
+        if (removed)
+        {
+            ForgetGame();
+        }
+    }
+
+    private static string KeyOf(Process process)
+    {
+        try
+        {
+            return GameScanner.NormalizeProcessKey(process.ProcessName);
+        }
+        catch (InvalidOperationException)
+        {
+            // Exited Meanwhile, The Next Check Lets It Go
+            return "";
+        }
     }
 
     public void SetEnabled(bool enabled)
@@ -125,16 +149,19 @@ public sealed partial class GameWatcher : IDisposable
 
     public nint GameWindow()
     {
-        // Read Fresh, Games Recreate Their Window On A Mode Change
-        try
+        lock (_gate)
         {
-            using var process = Process.GetProcessById(_gameProcessId);
-            return process.MainWindowHandle;
-        }
-        catch (Exception exception)
-            when (exception is ArgumentException or InvalidOperationException)
-        {
-            return 0;
+            // Read Fresh, Games Recreate Their Window On A Mode Change
+            try
+            {
+                _game?.Refresh();
+                return _game?.MainWindowHandle ?? 0;
+            }
+            catch (InvalidOperationException)
+            {
+                // Gone Meanwhile, No Window To Record
+                return 0;
+            }
         }
     }
 
@@ -190,7 +217,6 @@ public sealed partial class GameWatcher : IDisposable
                         }
 
                         _game = process;
-                        _gameProcessId = process.Id;
                         GameName = name;
                     }
 
@@ -244,7 +270,7 @@ public sealed partial class GameWatcher : IDisposable
                 when (exception is InvalidOperationException or Win32Exception)
             {
                 // A Protected Game Hides Its Handle, Its Id Still Shows
-                return !IsRunning(_gameProcessId);
+                return !IsRunning(game.Id);
             }
         }
     }
@@ -269,7 +295,6 @@ public sealed partial class GameWatcher : IDisposable
             _game?.Dispose();
             _game = null;
             GameName = null;
-            _gameProcessId = 0;
         }
     }
 

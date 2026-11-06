@@ -26,6 +26,7 @@ public sealed class CaptureSession(
         "[0:a]asplit[a][b];[a]pan=stereo|c0=c0|c1=c1[system];[b]pan=stereo|c0=c2|c1=c3,highpass=f=80,afftdn=nr=12:nf=-50:tn=1,agate=threshold=0.003:ratio=3:range=0.1:attack=5:release=200[voice];[system][voice]amix=inputs=2:normalize=0[audio]";
 
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
+    private static readonly TimeSpan s_startTimeout = TimeSpan.FromSeconds(12);
 
     private readonly Lock _pinGate = new();
     private int _pins;
@@ -50,6 +51,8 @@ public sealed class CaptureSession(
         );
 
     public VideoEncoder Encoder { get; } = encoder;
+
+    public (int Width, int Height) Size { get; } = (width, height);
 
     public string Folder { get; } = CacheFolders.NewFolder();
 
@@ -80,7 +83,7 @@ public sealed class CaptureSession(
         return Stopwatch.GetElapsedTime(OriginTimestamp).TotalSeconds + LeadSeconds;
     }
 
-    public async Task LaunchAsync(TimeSpan timeout)
+    public async Task LaunchAsync()
     {
         // The First Audio Sample Defines The Media Clock
         OriginTimestamp = Stopwatch.GetTimestamp();
@@ -113,11 +116,16 @@ public sealed class CaptureSession(
             Folder,
             OnSegmentAdded
         );
-        var ready = Task.WhenAll(Video.FirstSegment, Audio?.FirstSegment ?? Task.CompletedTask);
-        var finished = await Task.WhenAny(ready, Ended, Task.Delay(timeout));
-        if (finished != ready)
+        // A Still Window Sends Nothing, Its Sound Proves The Start
+        var isWindow = Options.GameWindow != 0;
+        var ready =
+            isWindow && Audio is not null
+                ? Audio.FirstSegment
+                : Task.WhenAll(Video.FirstSegment, Audio?.FirstSegment ?? Task.CompletedTask);
+        var finished = await Task.WhenAny(ready, Ended, Task.Delay(s_startTimeout));
+        if (finished != ready && !(isWindow && !HasEnded))
         {
-            throw new CaptureException(
+            throw new InvalidOperationException(
                 Video.LastError ?? Audio?.LastError ?? "The capture did not start in time"
             );
         }
@@ -142,14 +150,31 @@ public sealed class CaptureSession(
             : null;
     }
 
-    public IDisposable Pin(double from)
+    public void Pin(double from)
     {
         lock (_pinGate)
         {
             _pins++;
         }
 
-        return new PinRelease(this, [Video?.Segments.Pin(from), Audio?.Segments.Pin(from)]);
+        Video?.Segments.Pin(from);
+        Audio?.Segments.Pin(from);
+    }
+
+    public void Unpin(double from)
+    {
+        // The Last Save Out Deletes A Stopped Session's Folder
+        Video?.Segments.Unpin(from);
+        Audio?.Segments.Unpin(from);
+        lock (_pinGate)
+        {
+            if (--_pins > 0 || !_deleteWhenUnused)
+            {
+                return;
+            }
+        }
+
+        CacheFolders.Delete(Folder);
     }
 
     private void OnSegmentAdded(SegmentProcess process, Segment segment)
@@ -368,41 +393,6 @@ public sealed class CaptureSession(
         CacheFolders.Delete(Folder);
     }
 
-    private void Release()
-    {
-        lock (_pinGate)
-        {
-            _pins--;
-            if (_pins > 0 || !_deleteWhenUnused)
-            {
-                return;
-            }
-        }
-
-        CacheFolders.Delete(Folder);
-    }
-
-    private sealed class PinRelease(CaptureSession session, IDisposable?[] pins) : IDisposable
-    {
-        private bool _released;
-
-        public void Dispose()
-        {
-            if (_released)
-            {
-                return;
-            }
-
-            _released = true;
-            foreach (var pin in pins)
-            {
-                pin?.Dispose();
-            }
-
-            session.Release();
-        }
-    }
-
     public sealed class SegmentProcess
     {
         private readonly TaskCompletionSource _firstSegment = new(
@@ -417,6 +407,8 @@ public sealed class CaptureSession(
         private readonly Task _readers;
         private long _lastSegmentTimestamp = Stopwatch.GetTimestamp();
         private long _lastFrames;
+        private string? _lastWarning;
+        private int _warningRepeats;
         private long _lastFrameTimestamp;
 
         public SegmentProcess(
@@ -541,10 +533,19 @@ public sealed class CaptureSession(
                         return;
                     }
 
-                    // Warnings Stay Out Of The Reason A Session Ended
+                    // Warnings Never End A Session, Repeats Are Counted
                     if (line.Contains("[warning]", StringComparison.Ordinal))
                     {
-                        s_logger.Debug($"FFmpeg {_name} {line}");
+                        if (line == _lastWarning && ++_warningRepeats % 100 != 0)
+                        {
+                            return;
+                        }
+
+                        s_logger.Debug(
+                            $"FFmpeg {_name} {line}{(line == _lastWarning ? $" ({_warningRepeats} Times)" : "")}"
+                        );
+                        (_lastWarning, _warningRepeats) =
+                            line == _lastWarning ? (_lastWarning, _warningRepeats) : (line, 0);
                         return;
                     }
 

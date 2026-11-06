@@ -1,18 +1,19 @@
 # LetsClip
 
 ## Features
-- Keeps the last 30, 60 or 120 seconds of your game or monitor, ready to save
-- A hotkey saves them as a clip, even in a game
-- Games Only records just the game's window, so chats and notifications stay out
-- Records up to your monitor's resolution and refresh rate, at Normal, High or Max quality
-- Records system audio, plus your microphone with its background noise cleaned out
-- Trim a clip and export it as an MP4, under a size limit when you need one
+- Keeps the last moments of your game, app or monitor, ready to save with one key
+- Games and Apps Only records just that window, so chats and notifications stay out
+- One click picks the recommended quality, or record up to your monitor's own resolution and refresh rate
+- Records system audio, and your microphone with its background noise cleaned out
+- Trim a clip, set its volume and export it as an MP4, under a size limit when you need one
+- Keep just the trimmed part without losing any quality, and bring the full clip back anytime
+- Name your clips and filter them by the game or app they were recorded in
 - Starts with Windows in the tray and updates itself
 
 ## Quick start
 1. Download the exe from the [latest release](https://github.com/poolfullofmilk/LetsClip/releases/latest)
 2. Run it, there is nothing to install
-3. Press Ctrl+Shift+F8 to save a clip, then trim and export it
+3. Press F10 to save a clip, then open it to trim and export
 
 ## ⚠️ Important
 - Nothing leaves your PC, and nothing is kept until you save a clip

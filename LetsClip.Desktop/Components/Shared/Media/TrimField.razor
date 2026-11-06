@@ -1,0 +1,24 @@
+@* Trim Field *@
+<MudStack Row
+          AlignItems="AlignItems.Center"
+          Spacing="2">
+    <MudText Typo="Typo.body2"
+             Class="mud-text-secondary">
+        @Label
+    </MudText>
+    <MudElement HtmlTag="div"
+                Class="trim-field"
+                data-edge="@Label"
+                data-seconds="@Formatter.FormatSeconds(Value)">
+        @* Time Field *@
+        <MudTextField @key="_version"
+                      T="string"
+                      Value="@Formatter.FormatDuration(Value)"
+                      ValueChanged="CommitAsync"
+                      Variant="Variant.Outlined"
+                      Margin="Margin.Dense"
+                      Disabled="Disabled"
+                      aria-label="@Label"
+                      Class="my-0" />
+    </MudElement>
+</MudStack>

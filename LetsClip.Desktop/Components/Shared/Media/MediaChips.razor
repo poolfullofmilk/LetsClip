@@ -1,0 +1,26 @@
+@* Media Chips *@
+<MudStack Row
+          AlignItems="AlignItems.Center"
+          Spacing="1"
+          Class="@Class">
+    @if (Width > 0 && Height > 0)
+    {
+        <MudChip T="string"
+                 Size="Size.Small"
+                 Variant="Variant"
+                 Color="Color"
+                 Class="ma-0">
+            @Formatter.FormatResolution(Width, Height)
+        </MudChip>
+    }
+    @if (FrameRate > 0)
+    {
+        <MudChip T="string"
+                 Size="Size.Small"
+                 Variant="Variant"
+                 Color="Color"
+                 Class="ma-0">
+            @($"{FrameRate:0} FPS")
+        </MudChip>
+    }
+</MudStack>

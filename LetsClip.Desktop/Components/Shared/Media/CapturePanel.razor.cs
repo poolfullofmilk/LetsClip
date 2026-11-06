@@ -20,19 +20,26 @@ public partial class CapturePanel : IDisposable
 
     private CaptureStatus Status => Controller.Recorder.Status;
 
+    private bool IsRecommended =>
+        Controller.Resolution == Controller.RecommendedResolution
+        && Controller.FrameRate == Controller.RecommendedFrameRate
+        && Controller.Settings.Quality == CaptureQuality.Normal;
+
     // One Alert At Most, The Most Pressing First
     private (Severity Severity, string Text)? Alert =>
-        Status.State == CaptureState.Error && Status.Message is { } error ? (Severity.Error, error)
+        Controller.ShowsError && Status.Message is { } error ? (Severity.Error, error)
         : _saveError is { } saveError ? (Severity.Warning, saveError)
         : Shell.HotkeyProblem is { } hotkey ? (Severity.Warning, hotkey)
         : Status is { State: CaptureState.Recording, Warning: { } warning }
             ? (Severity.Warning, warning)
-        : Status.Message is { } message ? (Severity.Info, message)
+        : Status is { State: not CaptureState.Error, Message: { } message }
+            ? (Severity.Info, message)
         : null;
 
     protected override void OnInitialized()
     {
         Controller.Recorder.StatusChanged += OnChanged;
+        Controller.Recorder.ClipSaved += OnClipSaved;
         Controller.Changed += OnChanged;
         Shell.HotkeyChanged += OnChanged;
     }
@@ -42,9 +49,29 @@ public partial class CapturePanel : IDisposable
         _ = InvokeAsync(StateHasChanged);
     }
 
+    private void OnClipSaved(ClipInfo clip)
+    {
+        // Any Later Save Makes An Old Failure Stale
+        _saveError = null;
+        OnChanged();
+    }
+
     private static string MonitorLabel(MonitorInfo? monitor)
     {
         return monitor?.FriendlyName ?? "";
+    }
+
+    private static string? MonitorDetail(MonitorInfo? monitor)
+    {
+        // The Closed Field Shows Its Item's Detail On One Line
+        return monitor is null
+            ? null
+            : $"{monitor.Width} × {monitor.Height} · {monitor.RefreshRate} Hz";
+    }
+
+    private static string? RecommendedText(bool isRecommended)
+    {
+        return isRecommended ? "Recommended" : null;
     }
 
     private static string ReplayLabel(int seconds)
@@ -135,6 +162,23 @@ public partial class CapturePanel : IDisposable
         Controller.UpdateSettings(settings => settings with { FrameRate = rate });
     }
 
+    private void UseRecommended()
+    {
+        // One Change, So Capture Restarts Once
+        var (resolution, rate) = (
+            Controller.RecommendedResolution,
+            Controller.RecommendedFrameRate
+        );
+        Controller.UpdateSettings(settings =>
+            settings with
+            {
+                Resolution = resolution,
+                FrameRate = rate,
+                Quality = CaptureQuality.Normal,
+            }
+        );
+    }
+
     private async Task TryAgainAsync()
     {
         _saveError = null;
@@ -143,6 +187,12 @@ public partial class CapturePanel : IDisposable
 
     private async Task SaveAsync()
     {
+        // A Press While Saving Does Nothing, The Spinner Shows Why
+        if (Status.IsSaving)
+        {
+            return;
+        }
+
         // The Same Save As The Hotkey, Off The Page's Thread
         var outcome = await Task.Run(Controller.SaveAsync);
         _saveError = outcome.Error;
@@ -152,6 +202,7 @@ public partial class CapturePanel : IDisposable
     {
         Shell.HideMonitors();
         Controller.Recorder.StatusChanged -= OnChanged;
+        Controller.Recorder.ClipSaved -= OnClipSaved;
         Controller.Changed -= OnChanged;
         Shell.HotkeyChanged -= OnChanged;
         GC.SuppressFinalize(this);

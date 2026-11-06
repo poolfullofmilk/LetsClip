@@ -5,7 +5,6 @@ namespace LetsClip.Desktop.Components.Shared.Common;
 
 public partial class EmptyState
 {
-    // Parameters
     [Parameter]
     public required string Icon { get; set; }
 

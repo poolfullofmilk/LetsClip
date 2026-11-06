@@ -103,7 +103,7 @@ public partial class MainWindow : Window
 
         // A Tray Start Shows No Panel, So Say It Here
         if (
-            !_shell.ApplyHotkey(Hotkey.Parse(_controller.Settings.Hotkey) ?? Hotkey.Default)
+            !_shell.ApplyHotkey(Hotkey.Parse(_controller.Settings.Hotkey))
             && _shell.HotkeyProblem is { } problem
         )
         {
@@ -185,7 +185,7 @@ public partial class MainWindow : Window
         // A Soft Chime At The Press, Muted Out Of Clips
         if (_controller.Settings.SaveSound)
         {
-            SaveChime.Play(_controller.Recorder);
+            SaveChime.Play(_controller.Recorder, _controller.Settings.SaveSoundVolume);
         }
     }
 
@@ -240,13 +240,12 @@ public partial class MainWindow : Window
         // The Same Words As The Chip
         var status = _controller.Recorder.Status;
         _trayIcon.Icon =
-            status.State == CaptureState.Error ? _problemIcon
+            _controller.ShowsError ? _problemIcon
             : _controller.IsRecording ? _recordingIcon
             : _plainIcon;
-        var text =
-            status.State == CaptureState.Error
-                ? $"{AppInfo.DisplayName}, Error, {status.Message}"
-                : $"{AppInfo.DisplayName}, {_controller.StatusText}";
+        var text = _controller.ShowsError
+            ? $"{AppInfo.DisplayName}, Error, {status.Message}"
+            : $"{AppInfo.DisplayName}, {_controller.StatusText}";
         _trayIcon.Text = text.Length > 127 ? text[..127] : text;
     }
 

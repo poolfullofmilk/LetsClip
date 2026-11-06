@@ -15,9 +15,6 @@ concurrency:
 jobs:
   build:
     runs-on: windows-latest
-    defaults:
-      run:
-        shell: bash
     steps:
       - uses: actions/checkout@v7
 
@@ -27,7 +24,6 @@ jobs:
 
       # The Pinned FFmpeg Is Fetched And Hash Checked, Never Committed
       - name: Fetch FFmpeg
-        shell: pwsh
         run: ./LetsClip.Desktop/FFmpeg/Get-FFmpeg.ps1
 
       - name: Build

@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using System.Runtime.InteropServices;
 using LetsClip.Data.ViewModels;
 
@@ -19,96 +18,68 @@ public static unsafe partial class MonitorCatalog
         // DXGI Knows What Duplication Captures, Display Config Knows Names
         var details = DisplayDetails();
         var monitors = new List<MonitorInfo>();
-        if (CreateDXGIFactory1(s_factoryId, out var factory) < 0)
-        {
-            return monitors;
-        }
-
-        try
-        {
-            for (uint adapterIndex = 0; ; adapterIndex++)
+        ForEachHardwareAdapter(
+            (adapter, adapterIndex, adapterDescription) =>
             {
-                if (Call(factory, 12, adapterIndex, out var adapter) < 0)
+                for (uint outputIndex = 0; ; outputIndex++)
                 {
-                    break;
-                }
-
-                try
-                {
-                    AdapterDescription adapterDescription;
-                    _ = (
-                        (delegate* unmanaged[Stdcall]<nint, AdapterDescription*, int>)Method(
-                            adapter,
-                            10
-                        )
-                    )(adapter, &adapterDescription);
-                    if ((adapterDescription.Flags & SoftwareAdapter) != 0)
+                    if (Call(adapter, 7, outputIndex, out var output) < 0)
                     {
-                        continue;
+                        break;
                     }
 
-                    for (uint outputIndex = 0; ; outputIndex++)
+                    try
                     {
-                        if (Call(adapter, 7, outputIndex, out var output) < 0)
+                        OutputDescription description;
+                        _ = (
+                            (delegate* unmanaged[Stdcall]<nint, OutputDescription*, int>)Method(
+                                output,
+                                7
+                            )
+                        )(output, &description);
+                        var gdiName = new string(description.DeviceName).TrimEnd('\0');
+                        if (description.AttachedToDesktop == 0)
                         {
-                            break;
+                            continue;
                         }
 
-                        try
-                        {
-                            OutputDescription description;
-                            _ = (
-                                (delegate* unmanaged[Stdcall]<nint, OutputDescription*, int>)Method(
-                                    output,
-                                    7
-                                )
-                            )(output, &description);
-                            var gdiName = new string(description.DeviceName).TrimEnd('\0');
-                            if (description.AttachedToDesktop == 0)
-                            {
-                                continue;
-                            }
-
-                            details.TryGetValue(gdiName, out var detail);
-                            var width = description.Right - description.Left;
-                            var height = description.Bottom - description.Top;
-                            monitors.Add(
-                                new MonitorInfo(
-                                    detail?.DevicePath ?? gdiName,
-                                    string.IsNullOrWhiteSpace(detail?.FriendlyName)
-                                        ? $"Display {monitors.Count + 1}"
-                                        : detail.FriendlyName,
-                                    description.Left,
-                                    description.Top,
-                                    width,
-                                    height,
-                                    RotationOf(description.Rotation),
-                                    RefreshRateOf(gdiName),
-                                    description.Left == 0 && description.Top == 0,
-                                    detail?.IsHdr ?? false,
-                                    (int)adapterIndex,
-                                    (int)outputIndex
-                                )
-                            );
-                        }
-                        finally
-                        {
-                            Release(output);
-                        }
+                        details.TryGetValue(gdiName, out var detail);
+                        var width = description.Right - description.Left;
+                        var height = description.Bottom - description.Top;
+                        monitors.Add(
+                            new MonitorInfo(
+                                detail?.DevicePath ?? gdiName,
+                                string.IsNullOrWhiteSpace(detail?.FriendlyName)
+                                    ? $"Display {monitors.Count + 1}"
+                                    : detail.FriendlyName,
+                                description.Left,
+                                description.Top,
+                                width,
+                                height,
+                                RotationOf(description.Rotation),
+                                detail?.RefreshRate ?? 60,
+                                description.Left == 0 && description.Top == 0,
+                                detail?.IsHdr ?? false,
+                                adapterIndex,
+                                (int)outputIndex
+                            )
+                        );
                     }
-                }
-                finally
-                {
-                    Release(adapter);
+                    finally
+                    {
+                        Release(output);
+                    }
                 }
             }
-        }
-        finally
-        {
-            Release(factory);
-        }
-
+        );
         return [.. monitors.OrderBy(monitor => monitor.Left).ThenBy(monitor => monitor.Top)];
+    }
+
+    public static MonitorInfo? Find(IEnumerable<MonitorInfo> monitors, string? devicePath)
+    {
+        return monitors.FirstOrDefault(monitor =>
+            string.Equals(monitor.DevicePath, devicePath, StringComparison.OrdinalIgnoreCase)
+        );
     }
 
     public static MonitorInfo? MonitorOf(IEnumerable<MonitorInfo> monitors, nint window)
@@ -142,52 +113,47 @@ public static unsafe partial class MonitorCatalog
 
     public static IReadOnlyList<int> AdapterVendors()
     {
-        // Hardware Adapters Only, In DXGI Order
         var vendors = new List<int>();
+        ForEachHardwareAdapter((_, _, description) => vendors.Add((int)description.VendorId));
+        return vendors;
+    }
+
+    private static void ForEachHardwareAdapter(Action<nint, int, AdapterDescription> visit)
+    {
+        // Hardware Adapters Only, In DXGI Order Like FFmpeg
         if (CreateDXGIFactory1(s_factoryId, out var factory) < 0)
         {
-            return vendors;
+            return;
         }
 
         try
         {
             for (uint index = 0; Call(factory, 12, index, out var adapter) >= 0; index++)
             {
-                AdapterDescription description;
-                _ = (
-                    (delegate* unmanaged[Stdcall]<nint, AdapterDescription*, int>)Method(
-                        adapter,
-                        10
-                    )
-                )(adapter, &description);
-                if ((description.Flags & SoftwareAdapter) == 0)
+                try
                 {
-                    vendors.Add((int)description.VendorId);
+                    AdapterDescription description;
+                    _ = (
+                        (delegate* unmanaged[Stdcall]<nint, AdapterDescription*, int>)Method(
+                            adapter,
+                            10
+                        )
+                    )(adapter, &description);
+                    if ((description.Flags & SoftwareAdapter) == 0)
+                    {
+                        visit(adapter, (int)index, description);
+                    }
                 }
-
-                Release(adapter);
+                finally
+                {
+                    Release(adapter);
+                }
             }
         }
         finally
         {
             Release(factory);
         }
-
-        return vendors;
-    }
-
-    private static int RefreshRateOf(string gdiName)
-    {
-        // The Current Mode's Refresh Rate From DEVMODE, 60 When Unknown
-        Span<byte> mode = stackalloc byte[DevModeSize];
-        BinaryPrimitives.WriteUInt16LittleEndian(mode[DevModeSizeOffset..], DevModeSize);
-        if (!EnumDisplaySettingsW(gdiName, CurrentSettings, mode))
-        {
-            return 60;
-        }
-
-        var hertz = BinaryPrimitives.ReadUInt32LittleEndian(mode[DisplayFrequencyOffset..]);
-        return hertz > 1 ? (int)hertz : 60;
     }
 
     private static int RotationOf(int dxgiRotation)
@@ -202,7 +168,12 @@ public static unsafe partial class MonitorCatalog
         };
     }
 
-    private sealed record DisplayDetail(string DevicePath, string FriendlyName, bool IsHdr);
+    private sealed record DisplayDetail(
+        string DevicePath,
+        string FriendlyName,
+        bool IsHdr,
+        int RefreshRate
+    );
 
     private static Dictionary<string, DisplayDetail> DisplayDetails()
     {
@@ -271,13 +242,19 @@ public static unsafe partial class MonitorCatalog
                 DisplayConfigGetDeviceInfo(&color) == 0
                 && (color.Value & 0x2) != 0
                 && (color.Value & 0x4) == 0;
+            // The Target's Own Fraction Rounded, 59.94 Hz Reads 60
+            var hertz =
+                path.RefreshDenominator == 0
+                    ? 0
+                    : (int)Math.Round(path.RefreshNumerator / (double)path.RefreshDenominator);
             var gdiName = new string(source.ViewGdiDeviceName).TrimEnd('\0');
             details.TryAdd(
                 gdiName,
                 new DisplayDetail(
                     new string(target.MonitorDevicePath).TrimEnd('\0'),
                     new string(target.MonitorFriendlyDeviceName).TrimEnd('\0'),
-                    isHdr
+                    isHdr,
+                    hertz > 1 ? hertz : 60
                 )
             );
         }
@@ -417,20 +394,6 @@ public static unsafe partial class MonitorCatalog
         public uint ColorEncoding;
         public uint BitsPerColorChannel;
     }
-
-    // DEVMODEW Is Read Raw, Only Its Size And Frequency Matter
-    private const ushort DevModeSize = 220;
-    private const int DevModeSizeOffset = 68;
-    private const int DisplayFrequencyOffset = 184;
-    private const int CurrentSettings = -1;
-
-    [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool EnumDisplaySettingsW(
-        string deviceName,
-        int modeNumber,
-        Span<byte> mode
-    );
 
     [LibraryImport("dxgi.dll")]
     private static partial int CreateDXGIFactory1(in Guid riid, out nint factory);

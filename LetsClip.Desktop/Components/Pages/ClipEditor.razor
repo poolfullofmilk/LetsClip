@@ -22,27 +22,39 @@
 }
 else
 {
-    <MudStack Spacing="6"
+    <MudStack Spacing="2"
               Class="page-fill">
         <MudStack Row
                   AlignItems="AlignItems.Center"
                   Spacing="2"
                   Class="header-row">
             @* Back Button *@
-            <Tooltip Text="All Clips"
-                     RootClass="d-flex">
-                <MudIconButton Icon="@Icons.Material.Rounded.ArrowBack"
-                               aria-label="All Clips"
-                               Variant="Variant.Filled"
-                               Size="Size.Small"
-                               OnClick="Back" />
-            </Tooltip>
+            <IconButton Icon="@Icons.Material.Rounded.ArrowBack"
+                        Text="All Clips"
+                        OnClick="Back" />
             <MudStack Spacing="0"
-                      Class="header-title">
-                <MudText Typo="Typo.h5"
-                         Class="ellipsis">
-                    @Title
-                </MudText>
+                      Class="header-title ml-1">
+                @if (_renaming is not null)
+                {
+                    @* Name Field *@
+                    <MudTextField T="string"
+                                  @bind-Value="_renaming"
+                                  Immediate
+                                  AutoFocus
+                                  Underline="false"
+                                  Placeholder="@DefaultTitle"
+                                  OnKeyDown="RenameKey"
+                                  OnBlur="CommitRename"
+                                  aria-label="Clip Name"
+                                  Class="rename-field my-0" />
+                }
+                else
+                {
+                    <MudText Typo="Typo.h5"
+                             Class="ellipsis">
+                        @Title
+                    </MudText>
+                }
                 @if (Subtitle is { } subtitle)
                 {
                     <MudText Typo="Typo.body2"
@@ -51,28 +63,33 @@ else
                     </MudText>
                 }
             </MudStack>
+            @* Rename Button *@
+            <IconButton Icon="@Icons.Material.Rounded.Edit"
+                        Text="Rename Clip"
+                        Disabled="@(_clip is null || _renaming is not null)"
+                        OnClick="StartRename" />
             <MudSpacer />
+            @if (_clip?.HasOriginal == true)
+            {
+                @* Restore Button *@
+                <IconButton Icon="@Icons.Material.Rounded.Restore"
+                            Text="Restore Original"
+                            OnClick="RestoreOriginalAsync" />
+            }
             @* Show In Folder Button *@
-            <Tooltip Text="Show in Folder"
-                     RootClass="d-flex">
-                <MudIconButton Icon="@Icons.Material.Rounded.FolderOpen"
-                               aria-label="Show in Folder"
-                               Size="Size.Small"
-                               OnClick="ShowInFolder" />
-            </Tooltip>
+            <IconButton Icon="@Icons.Material.Rounded.FolderOpen"
+                        Text="Show in Folder"
+                        OnClick="ShowInFolder" />
             @* Delete Button *@
-            <Tooltip Text="Delete Clip"
-                     RootClass="d-flex">
-                <MudIconButton Icon="@Icons.Material.Rounded.Delete"
-                               aria-label="Delete Clip"
-                               Color="Color.Error"
-                               Size="Size.Small"
-                               OnClick="DeleteAsync" />
-            </Tooltip>
+            <IconButton Icon="@Icons.Material.Rounded.Delete"
+                        Text="Delete Clip"
+                        Color="Color.Error"
+                        OnClick="DeleteAsync" />
         </MudStack>
 
         <MudElement HtmlTag="div"
-                    Class="split fill">
+                    Class="split fill editor"
+                    Style="@($"--clip-aspect:{Exact(ClipAspect)}")">
             <MudElement HtmlTag="div"
                         Class="main-panel fill-column">
                 <MudPaper Elevation="4"
@@ -94,7 +111,20 @@ else
                                         src="@VideoUrl"
                                         preload="auto"
                                         playsinline
+                                        controlslist="nodownload noplaybackrate noremoteplayback"
+                                        disablepictureinpicture
                                         aria-label="Clip Preview" />
+                            @if (_volumeShown > 0)
+                            {
+                                @* Volume Overlay *@
+                                <MudElement @key="_volumeShown"
+                                            HtmlTag="div"
+                                            Class="player-overlay"
+                                            aria-hidden="true">
+                                    <MudIcon Icon="@VolumeButton.IconOf(_muted ? 0 : _volume)" />
+                                    <MudText Typo="Typo.h6">@VolumeText</MudText>
+                                </MudElement>
+                            }
                         </MudElement>
 
                         @if (_playError)
@@ -114,82 +144,54 @@ else
                                       Justify="Justify.Center"
                                       Spacing="1">
                                 @* Set Start Button *@
-                                <PlayerButton Icon="@Icons.Material.Rounded.FirstPage"
-                                              Text="Set Start Here"
-                                              Disabled="@(!_ready)"
-                                              OnClick="SetStartAtPlayhead" />
+                                <IconButton Icon="@Icons.Material.Rounded.FirstPage"
+                                            Text="Set Start Here"
+                                            Disabled="@(!_ready)"
+                                            OnClick="SetStartAtPlayhead" />
                                 @* Back Button *@
-                                <PlayerButton Icon="@Icons.Material.Rounded.Replay5"
-                                              Text="Back 5 Seconds"
-                                              Disabled="@(!_ready)"
-                                              OnClick="() => NudgeAsync(-SeekStep)" />
+                                <IconButton Icon="@Icons.Material.Rounded.Replay5"
+                                            Text="Back 5 Seconds"
+                                            Disabled="@(!_ready)"
+                                            OnClick="() => NudgeAsync(-SeekStep)" />
                                 @* Play Button *@
-                                <PlayerButton Icon="@(_paused ? Icons.Material.Rounded.PlayArrow : Icons.Material.Rounded.Pause)"
-                                              Text="@PlayTip"
-                                              Filled
-                                              Disabled="@(!_ready)"
-                                              OnClick="TogglePlayAsync" />
+                                <IconButton Icon="@(_paused ? Icons.Material.Rounded.PlayArrow : Icons.Material.Rounded.Pause)"
+                                            Text="@PlayTip"
+                                            Color="Color.Info"
+                                            Filled
+                                            Disabled="@(!_ready)"
+                                            OnClick="TogglePlayAsync" />
                                 @* Forward Button *@
-                                <PlayerButton Icon="@Icons.Material.Rounded.Forward5"
-                                              Text="Forward 5 Seconds"
-                                              Disabled="@(!_ready)"
-                                              OnClick="() => NudgeAsync(SeekStep)" />
+                                <IconButton Icon="@Icons.Material.Rounded.Forward5"
+                                            Text="Forward 5 Seconds"
+                                            Disabled="@(!_ready)"
+                                            OnClick="() => NudgeAsync(SeekStep)" />
                                 @* Set End Button *@
-                                <PlayerButton Icon="@Icons.Material.Rounded.LastPage"
-                                              Text="Set End Here"
-                                              Disabled="@(!_ready)"
-                                              OnClick="SetEndAtPlayhead" />
+                                <IconButton Icon="@Icons.Material.Rounded.LastPage"
+                                            Text="Set End Here"
+                                            Disabled="@(!_ready)"
+                                            OnClick="SetEndAtPlayhead" />
                             </MudStack>
                             <MudStack Row
                                       AlignItems="AlignItems.Center"
                                       Justify="Justify.FlexEnd"
                                       Spacing="1">
-                                @* Reset Button *@
-                                <PlayerButton Icon="@Icons.Material.Rounded.Refresh"
-                                              Text="Reset Trim"
-                                              Disabled="@(!_ready || _range == DefaultRange)"
-                                              OnClick="ResetTrim" />
-                                <MudElement HtmlTag="div"
-                                            Class="volume">
-                                    @* Mute Button *@
-                                    <PlayerButton Icon="@(_muted ? Icons.Material.Rounded.VolumeOff : Icons.Material.Rounded.VolumeUp)"
-                                                  Text="@MuteTip"
-                                                  Disabled="@(!_ready)"
-                                                  OnClick="ToggleMuteAsync" />
-                                    @if (_ready)
-                                    {
-                                        <MudElement HtmlTag="div"
-                                                    Class="volume-pop">
-                                            <MudPaper Elevation="4"
-                                                      Class="volume-paper rounded-inner">
-                                                @* Volume Slider *@
-                                                <MudSlider T="double"
-                                                           Value="@(_muted ? 0 : _volume)"
-                                                           ValueChanged="SetVolumeAsync"
-                                                           Min="0"
-                                                           Max="1"
-                                                           Step="0.05"
-                                                           Vertical
-                                                           Color="Color.Info"
-                                                           Size="Size.Medium"
-                                                           Variant="Variant.Filled"
-                                                           Immediate
-                                                           aria-label="Volume" />
-                                            </MudPaper>
-                                        </MudElement>
-                                    }
-                                </MudElement>
-                                @* Full Screen Button *@
-                                <PlayerButton Icon="@Icons.Material.Rounded.Fullscreen"
-                                              Text="Full Screen"
+                                @* Mute Button *@
+                                <VolumeButton Text="@MuteTip"
                                               Disabled="@(!_ready)"
-                                              OnClick="FullScreenAsync" />
+                                              OnClick="ToggleMuteAsync"
+                                              Value="@(_muted ? 0 : _volume)"
+                                              ValueChanged="SetVolumeAsync" />
+                                @* Full Screen Button *@
+                                <IconButton Icon="@Icons.Material.Rounded.Fullscreen"
+                                            Text="Full Screen"
+                                            Disabled="@(!_ready)"
+                                            OnClick="FullScreenAsync" />
                             </MudStack>
                         </MudElement>
 
                         @* Timeline *@
                         <MudElement HtmlTag="div"
-                                    Class="timeline">
+                                    Class="@(_ready ? "timeline" : "timeline loading")">
                             @if (_stripUrl is { } strip)
                             {
                                 <MudImage Src="@strip"
@@ -223,8 +225,8 @@ else
                                             data-time="@Exact(_range.Start)"
                                             aria-label="Trim Start"
                                             aria-valuemin="0"
-                                            aria-valuemax="@Number(_range.End)"
-                                            aria-valuenow="@Number(_range.Start)"
+                                            aria-valuemax="@Exact(_range.End)"
+                                            aria-valuenow="@Exact(_range.Start)"
                                             aria-valuetext="@Formatter.FormatDuration(_range.Start)" />
                                 @* End Handle *@
                                 <MudElement HtmlTag="div"
@@ -235,22 +237,38 @@ else
                                             data-handle="end"
                                             data-time="@Exact(_range.End)"
                                             aria-label="Trim End"
-                                            aria-valuemin="@Number(_range.Start)"
-                                            aria-valuemax="@Number(_duration)"
-                                            aria-valuenow="@Number(_range.End)"
+                                            aria-valuemin="@Exact(_range.Start)"
+                                            aria-valuemax="@Exact(_duration)"
+                                            aria-valuenow="@Exact(_range.End)"
                                             aria-valuetext="@Formatter.FormatDuration(_range.End)" />
                             </MudElement>
                         </MudElement>
 
                         <MudStack Row
                                   AlignItems="AlignItems.Center"
-                                  Spacing="5">
-                            <TrimValue Label="Start"
-                                       Value="@Formatter.FormatDuration(_range.Start)" />
-                            <TrimValue Label="End"
-                                       Value="@Formatter.FormatDuration(_range.End)" />
-                            <TrimValue Label="Length"
-                                       Value="@Formatter.FormatDuration(_range.Length)" />
+                                  Spacing="5"
+                                  Class="trim-row">
+                            <TrimField Label="Start"
+                                       Value="_range.Start"
+                                       Disabled="@(!_ready)"
+                                       OnCommit="SetStartAsync" />
+                            <TrimField Label="End"
+                                       Value="_range.End"
+                                       Disabled="@(!_ready)"
+                                       OnCommit="SetEndAsync" />
+                            <MudSpacer />
+                            @* Selection Length *@
+                            <MudText Typo="Typo.body2"
+                                     Class="selectable-text player-time">
+                                <MudElement HtmlTag="span"
+                                            Class="mud-text-secondary mr-2">
+                                    Length
+                                </MudElement>
+                                <MudElement HtmlTag="span"
+                                            data-length>
+                                    @Formatter.FormatDuration(_range.Length)
+                                </MudElement>
+                            </MudText>
                         </MudStack>
                     </MudStack>
                 </MudPaper>
@@ -262,6 +280,7 @@ else
                 {
                     <ExportPanel @key="clip.Path"
                                  Clip="clip"
+                                 OnSaveCut="SaveCutAsync"
                                  Range="_range"
                                  Media="media" />
                 }

@@ -3,245 +3,235 @@
 <PageTitle>Settings</PageTitle>
 
 <Header Title="Settings">
-    <ChildContent>
-        <MudStack Spacing="6">
-            @* Recording Settings *@
-            <MudPaper Elevation="4"
-                      Class="rounded-panel px-6 py-2">
-                <MudText Typo="Typo.h6"
-                         Class="pt-2">
-                    Recording
-                </MudText>
-                <SettingRow Title="Games Only">
-                    @* Games Link *@
-                    <MudLink Typo="Typo.body2"
-                             Color="Color.Info"
-                             OnClick="ShowGamesAsync">
-                        @GamesLinkText
-                    </MudLink>
-                    @* Games Only Switch *@
-                    <MudSwitch T="bool"
-                               Value="Controller.Settings.GamesOnly"
-                               ValueChanged="SetGamesOnly"
-                               Color="Color.Info"
-                               aria-label="Games Only"
-                               Disabled="@GamesOnlyUnavailable"
-                               Class="ma-0" />
-                </SettingRow>
-                <MudDivider />
-                <SettingRow Title="Start with Windows">
-                    @* Start With Windows Switch *@
-                    <MudSwitch T="bool"
-                               Value="Controller.Settings.StartWithWindows"
-                               ValueChanged="SetStartWithWindows"
-                               Color="Color.Info"
-                               aria-label="Start with Windows"
-                               Class="ma-0" />
-                </SettingRow>
-            </MudPaper>
+    <MudStack Spacing="6">
+        @* Recording Settings *@
+        <MudPaper Elevation="4"
+                  Class="rounded-panel px-6 py-2">
+            <MudText Typo="Typo.h6"
+                     Class="pt-2">
+                Recording
+            </MudText>
+            <SettingRow Title="Games and Apps Only"
+                        Switch="Controller.Settings.GamesOnly"
+                        SwitchChanged="SetGamesOnly">
+                @* Edit Games Chip *@
+                <MudChip T="string"
+                         Icon="@Icons.Material.Rounded.SportsEsports"
+                         Color="Color.Info"
+                         Size="Size.Small"
+                         Variant="Variant.Text"
+                         OnClick="ShowGamesAsync"
+                         Class="ma-0">
+                    Edit Games and Apps
+                </MudChip>
+            </SettingRow>
+            <MudDivider />
+            <SettingRow Title="Start with Windows"
+                        Switch="Controller.Settings.StartWithWindows"
+                        SwitchChanged="SetStartWithWindows" />
+        </MudPaper>
 
-            @* Saving Settings *@
-            <MudPaper Elevation="4"
-                      Class="rounded-panel px-6 py-2">
-                <MudText Typo="Typo.h6"
-                         Class="pt-2">
-                    Saving
-                </MudText>
-                <SettingRow Title="Save Hotkey">
-                    @if (_capturingKey)
-                    {
-                        <MudText Typo="Typo.body2"
-                                 Class="mud-info-text">
-                            Press the new keys, Escape cancels
-                        </MudText>
-                    }
-                    else
-                    {
-                        <MudChip T="string"
-                                 Size="Size.Small"
-                                 Variant="Variant.Text">
-                            @Shell.HotkeyText
-                        </MudChip>
-                        @* Change Hotkey Button *@
-                        <MudButton Variant="Variant.Filled"
-                                   Color="Color.Info"
-                                   Size="Size.Small"
-                                   OnClick="CaptureKeyAsync">
-                            Change
-                        </MudButton>
-                    }
-                </SettingRow>
-                @if (HotkeyMessage() is { } hotkeyProblem)
+        @* Saving Settings *@
+        <MudPaper Elevation="4"
+                  Class="rounded-panel px-6 py-2">
+            <MudText Typo="Typo.h6"
+                     Class="pt-2">
+                Saving
+            </MudText>
+            <SettingRow Title="Save Hotkey">
+                @if (_capturingKey)
                 {
-                    <Notice Text="@hotkeyProblem"
-                            Class="mb-3" />
-                }
-                <MudDivider />
-                <SettingRow Title="Save Sound">
-                    @* Play Sound Button *@
-                    <Tooltip Text="Play Sound"
-                             RootClass="d-flex">
-                        <MudIconButton Icon="@Icons.Material.Rounded.VolumeUp"
-                                       aria-label="Play Sound"
-                                       Size="Size.Small"
-                                       OnClick="() => SaveChime.Play(Controller.Recorder)" />
-                    </Tooltip>
-                    @* Save Sound Switch *@
-                    <MudSwitch T="bool"
-                               Value="Controller.Settings.SaveSound"
-                               ValueChanged="SetSaveSound"
-                               Color="Color.Info"
-                               aria-label="Save Sound"
-                               Class="ma-0" />
-                </SettingRow>
-            </MudPaper>
-
-            @* Audio Settings *@
-            <MudPaper Elevation="4"
-                      Class="rounded-panel px-6 py-2">
-                <MudText Typo="Typo.h6"
-                         Class="pt-2">
-                    Audio
-                </MudText>
-                <SettingRow Title="System Audio">
-                    @if (Controller.Settings.SystemAudio)
-                    {
-                        @* Playback Device Select *@
-                        <MudElement HtmlTag="div"
-                                    Class="fixed-width">
-                            <MudSelect T="string"
-                                       Value="Controller.Settings.SystemAudioDeviceId"
-                                       ValueChanged="SetPlaybackDevice"
-                                       ToStringFunc="PlaybackLabel"
-                                       aria-label="Playback Device"
-                                       Variant="Variant.Outlined"
-                                       Margin="Margin.Dense"
-                                       Dense
-                                       Class="my-0">
-                                <MudSelectItem T="string"
-                                               Value="@AudioDevices.AutomaticId"
-                                               Class="divided">
-                                    <DeviceLabel Text="Automatic"
-                                                 Detail="@DefaultName(_playback)" />
-                                </MudSelectItem>
-                                @foreach (var device in _playback)
-                                {
-                                    <MudSelectItem T="string"
-                                                   Value="device.Id">
-                                        <DeviceLabel Text="@device.Name" />
-                                    </MudSelectItem>
-                                }
-                            </MudSelect>
-                        </MudElement>
-                    }
-                    @* System Audio Switch *@
-                    <MudSwitch T="bool"
-                               Value="Controller.Settings.SystemAudio"
-                               ValueChanged="SetSystemAudio"
-                               Color="Color.Info"
-                               aria-label="System Audio"
-                               Disabled="@(!Controller.Settings.SystemAudio && _playback.Count == 0)"
-                               Class="ma-0" />
-                </SettingRow>
-                <MudDivider />
-                <SettingRow Title="Microphone">
-                    @if (Controller.Settings.Microphone)
-                    {
-                        @* Microphone Select *@
-                        <MudElement HtmlTag="div"
-                                    Class="fixed-width">
-                            <MudSelect T="string"
-                                       Value="Controller.Settings.MicrophoneDeviceId"
-                                       ValueChanged="SetMicrophoneDevice"
-                                       ToStringFunc="MicrophoneLabel"
-                                       aria-label="Microphone Device"
-                                       Variant="Variant.Outlined"
-                                       Margin="Margin.Dense"
-                                       Dense
-                                       Class="my-0">
-                                <MudSelectItem T="string"
-                                               Value="@AudioDevices.AutomaticId"
-                                               Class="divided">
-                                    <DeviceLabel Text="Automatic"
-                                                 Detail="@DefaultName(_microphones)" />
-                                </MudSelectItem>
-                                @foreach (var device in _microphones)
-                                {
-                                    <MudSelectItem T="string"
-                                                   Value="device.Id">
-                                        <DeviceLabel Text="@device.Name" />
-                                    </MudSelectItem>
-                                }
-                            </MudSelect>
-                        </MudElement>
-                    }
-                    @* Microphone Switch *@
-                    <MudSwitch T="bool"
-                               Value="Controller.Settings.Microphone"
-                               ValueChanged="SetMicrophone"
-                               Color="Color.Info"
-                               aria-label="Microphone"
-                               Disabled="@(!Controller.Settings.Microphone && _microphones.Count == 0)"
-                               Class="ma-0" />
-                </SettingRow>
-                @if (Controller.Settings.Microphone)
-                {
-                    <MudDivider />
-                    <SettingRow Title="Noise Cancellation">
-                        @* Noise Cancellation Switch *@
-                        <MudSwitch T="bool"
-                                   Value="Controller.Settings.NoiseCancellation"
-                                   ValueChanged="SetNoiseCancellation"
-                                   Color="Color.Info"
-                                   aria-label="Noise Cancellation"
-                                   Class="ma-0" />
-                    </SettingRow>
-                }
-            </MudPaper>
-
-            @* Storage Settings *@
-            <MudPaper Elevation="4"
-                      Class="rounded-panel px-6 py-2">
-                <MudText Typo="Typo.h6"
-                         Class="pt-2">
-                    Storage
-                </MudText>
-                <SettingRow Title="Clips Folder">
-                    <MudText Typo="Typo.body2"
-                             Class="mud-text-secondary ellipsis">
-                        @ClipsFolderText
-                    </MudText>
-                    @* Change Folder Button *@
+                    @* Cancel Keys Button *@
+                    <MudButton Variant="Variant.Text"
+                               Color="Color.Error"
+                               Size="Size.Small"
+                               OnClick="CancelKeysAsync">
+                        Cancel
+                    </MudButton>
+                    @* Keep Keys Button *@
                     <MudButton Variant="Variant.Filled"
                                Color="Color.Info"
                                Size="Size.Small"
-                               OnClick="PickFolder">
-                        Change
+                               Disabled="@(_pendingKey is not { IsUsable: true })"
+                               OnClick="ConfirmKeysAsync">
+                        OK
                     </MudButton>
-                    @if (Controller.Settings.ClipsFolder is not null)
-                    {
-                        @* Default Folder Button *@
-                        <MudButton Variant="Variant.Text"
-                                   Size="Size.Small"
-                                   OnClick="UseDefaultFolder">
-                            Use Default
-                        </MudButton>
-                    }
-                    @* Open Folder Button *@
-                    <Tooltip Text="Open Clips Folder"
-                             RootClass="d-flex">
-                        <MudIconButton Icon="@Icons.Material.Rounded.FolderOpen"
-                                       aria-label="Open Clips Folder"
-                                       Size="Size.Small"
-                                       OnClick="OpenFolder" />
-                    </Tooltip>
-                </SettingRow>
-                @if (_folderError is { } folderError)
-                {
-                    <Notice Text="@folderError"
-                            Class="mb-3" />
                 }
-            </MudPaper>
-        </MudStack>
-    </ChildContent>
+                @* Hotkey Button *@
+                <Tooltip Text="Change Hotkey"
+                         Disabled="_capturingKey">
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Info"
+                               Size="Size.Small"
+                               Class="@(_capturingKey ? "waiting" : null)"
+                               OnClick="StartKeysAsync">
+                        @HotkeyButtonText
+                    </MudButton>
+                </Tooltip>
+            </SettingRow>
+            @if ((_hotkeyError ?? Shell.HotkeyProblem) is { } hotkeyProblem)
+            {
+                <Notice Text="@hotkeyProblem"
+                        Class="mb-3" />
+            }
+            <MudDivider />
+            <SettingRow Title="Save Sound"
+                        Switch="Controller.Settings.SaveSound"
+                        SwitchChanged="SetSaveSound">
+                @* Save Sound Volume *@
+                <VolumeButton Text="Play Sound"
+                              OnClick="PlaySaveSound"
+                              Value="Controller.Settings.SaveSoundVolume"
+                              ValueChanged="SetSaveSoundVolume"
+                              Min="VolumeButton.Step" />
+            </SettingRow>
+        </MudPaper>
+
+        @* Audio Settings *@
+        <MudPaper Elevation="4"
+                  Class="rounded-panel px-6 py-2">
+            <MudText Typo="Typo.h6"
+                     Class="pt-2">
+                Audio
+            </MudText>
+            <SettingRow Title="System Audio"
+                        Switch="Controller.Settings.SystemAudio"
+                        SwitchChanged="SetSystemAudio"
+                        SwitchDisabled="@(!Controller.Settings.SystemAudio && _playback.Count == 0)">
+                @* Playback Device Select *@
+                <FieldDetail Class="fixed-width"
+                             Detail="@DetailOf(_playback, Controller.Settings.SystemAudioDeviceId)">
+                    <MudSelect T="string"
+                               OpenIcon="@Icons.Material.Rounded.ArrowDropDown"
+                               CloseIcon="@Icons.Material.Rounded.ArrowDropUp"
+                               Value="ShownDevice(_playback, Controller.Settings.SystemAudioDeviceId)"
+                               ValueChanged="SetPlaybackDevice"
+                               ToStringFunc="@(id => LabelOf(_playback, id))"
+                               aria-label="Playback Device"
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Dense"
+                               Dense
+                               Disabled="@(!Controller.Settings.SystemAudio)"
+                               Class="my-0">
+                        <MudSelectItem T="string"
+                                       Value="@AudioDevices.AutomaticId"
+                                       Class="divided">
+                            <ItemLabel Text="Automatic"
+                                       Detail="@DefaultName(_playback)" />
+                        </MudSelectItem>
+                        @foreach (var device in _playback)
+                        {
+                            <MudSelectItem T="string"
+                                           Value="device.Id">
+                                <ItemLabel Text="@device.Name"
+                                           Detail="@device.Adapter" />
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+                </FieldDetail>
+            </SettingRow>
+            <MudDivider />
+            <SettingRow Title="Microphone"
+                        Switch="Controller.Settings.Microphone"
+                        SwitchChanged="SetMicrophone"
+                        SwitchDisabled="@(!Controller.Settings.Microphone && _microphones.Count == 0)">
+                @* Test Microphone Button *@
+                <IconButton Icon="@(_meter is null ? Icons.Material.Rounded.Mic : Icons.Material.Rounded.Stop)"
+                            Text="@(_meter is null ? "Test Microphone" : "Stop Test")"
+                            Color="@(_meter is null ? Color.Default : Color.Info)"
+                            Filled
+                            Disabled="@(!Controller.Settings.Microphone)"
+                            OnClick="ToggleMicrophoneTestAsync" />
+                @* Microphone Select *@
+                <FieldDetail Class="fixed-width"
+                             Detail="@DetailOf(_microphones, Controller.Settings.MicrophoneDeviceId)">
+                    <MudSelect T="string"
+                               OpenIcon="@Icons.Material.Rounded.ArrowDropDown"
+                               CloseIcon="@Icons.Material.Rounded.ArrowDropUp"
+                               Value="ShownDevice(_microphones, Controller.Settings.MicrophoneDeviceId)"
+                               ValueChanged="SetMicrophoneDevice"
+                               ToStringFunc="@(id => LabelOf(_microphones, id))"
+                               aria-label="Microphone Device"
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Dense"
+                               Dense
+                               Disabled="@(!Controller.Settings.Microphone)"
+                               Class="my-0">
+                        <MudSelectItem T="string"
+                                       Value="@AudioDevices.AutomaticId"
+                                       Class="divided">
+                            <ItemLabel Text="Automatic"
+                                       Detail="@DefaultName(_microphones)" />
+                        </MudSelectItem>
+                        @foreach (var device in _microphones)
+                        {
+                            <MudSelectItem T="string"
+                                           Value="device.Id">
+                                <ItemLabel Text="@device.Name"
+                                           Detail="@device.Adapter" />
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+                    @if (_meter is { } meter)
+                    {
+                        <LevelMeter Read="meter.ReadLevel" />
+                    }
+                </FieldDetail>
+            </SettingRow>
+            @if (_microphoneError is { } microphoneError)
+            {
+                <Notice Text="@microphoneError"
+                        Class="mb-3" />
+            }
+            <MudDivider />
+            <SettingRow Title="Noise Cancellation"
+                        Switch="Controller.Settings.NoiseCancellation"
+                        SwitchChanged="SetNoiseCancellation"
+                        SwitchDisabled="@(!Controller.Settings.Microphone)" />
+        </MudPaper>
+
+        @* Storage Settings *@
+        <MudPaper Elevation="4"
+                  Class="rounded-panel px-6 py-2">
+            <MudText Typo="Typo.h6"
+                     Class="pt-2">
+                Storage
+            </MudText>
+            <SettingRow Title="Clips Folder">
+                @if (Controller.Settings.ClipsFolder is not null)
+                {
+                    @* Default Folder Button *@
+                    <IconButton Icon="@Icons.Material.Rounded.Refresh"
+                                Text="Use Default Folder"
+                                Filled
+                                OnClick="UseDefaultFolder" />
+                }
+                @* Open Folder Button *@
+                <Tooltip Text="Open Clips Folder"
+                         RootClass="d-flex path-button">
+                    <MudButton Variant="Variant.Filled"
+                               Size="Size.Small"
+                               StartIcon="@Icons.Material.Rounded.FolderOpen"
+                               OnClick="OpenFolder">
+                        <MudElement HtmlTag="span"
+                                    Class="ellipsis">
+                            @ClipsFolderText
+                        </MudElement>
+                    </MudButton>
+                </Tooltip>
+                @* Change Folder Button *@
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Info"
+                           Size="Size.Small"
+                           OnClick="PickFolder">
+                    Change
+                </MudButton>
+            </SettingRow>
+            @if (_folderError is { } folderError)
+            {
+                <Notice Text="@folderError"
+                        Class="mb-3" />
+            }
+        </MudPaper>
+    </MudStack>
 </Header>

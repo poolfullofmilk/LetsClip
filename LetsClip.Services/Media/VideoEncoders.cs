@@ -97,8 +97,6 @@ public static class VideoEncoders
         {
             "h264_amf" =>
             [
-                "-c:v",
-                "h264_amf",
                 "-usage",
                 "transcoding",
                 "-quality",
@@ -118,8 +116,6 @@ public static class VideoEncoders
             ],
             "h264_nvenc" =>
             [
-                "-c:v",
-                "h264_nvenc",
                 "-preset",
                 "p4",
                 "-tune",
@@ -139,8 +135,6 @@ public static class VideoEncoders
             ],
             "h264_qsv" =>
             [
-                "-c:v",
-                "h264_qsv",
                 "-preset",
                 "medium",
                 "-global_quality",
@@ -151,21 +145,9 @@ public static class VideoEncoders
                 "-forced_idr",
                 "1",
             ],
-            _ =>
-            [
-                "-c:v",
-                "libx264",
-                "-preset",
-                "veryfast",
-                "-crf",
-                level,
-                "-maxrate",
-                peak,
-                "-bufsize",
-                peak,
-            ],
+            _ => ["-preset", "veryfast", "-crf", level, "-maxrate", peak, "-bufsize", peak],
         };
-        return [.. specific, .. shared];
+        return ["-c:v", encoder.Codec, .. specific, .. shared];
     }
 
     public static async Task<bool> WorksAsync(
@@ -178,9 +160,9 @@ public static class VideoEncoders
     {
         // Encodes A Few Real Frames, A Listed Encoder Proves Nothing
         var key = $"{encoder.Codec} {width}x{height} {frameRate}";
-        if (s_tested.TryGetValue(key, out var known))
+        if (s_tested.ContainsKey(key))
         {
-            return known;
+            return true;
         }
 
         var size = string.Create(CultureInfo.InvariantCulture, $"{width}x{height}");
@@ -218,15 +200,15 @@ public static class VideoEncoders
             return false;
         }
 
-        if (!result.Succeeded)
-        {
-            s_logger.Info($"Skipped {encoder.Name}, {result.LastError}");
-        }
-
         // Only A Pass Is Remembered, Failures Get Tested Again
         if (result.Succeeded)
         {
             s_tested[key] = true;
+            s_logger.Info($"Tested {encoder.Name} At {key}, It Works");
+        }
+        else
+        {
+            s_logger.Info($"Skipped {encoder.Name}, {result.LastError}");
         }
 
         return result.Succeeded;

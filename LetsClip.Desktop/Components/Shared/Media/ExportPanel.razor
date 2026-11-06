@@ -18,6 +18,8 @@
                       Info="The exported file stays under this size. Unlimited keeps all the quality the clip has">
             @* Size Limit Select *@
             <MudSelect T="double"
+                       OpenIcon="@Icons.Material.Rounded.ArrowDropDown"
+                       CloseIcon="@Icons.Material.Rounded.ArrowDropUp"
                        Value="Limit"
                        ValueChanged="SetLimit"
                        ToStringFunc="LimitLabel"
@@ -43,6 +45,8 @@
         <SettingField Title="Frame Rate">
             @* Frame Rate Select *@
             <MudSelect T="bool"
+                       OpenIcon="@Icons.Material.Rounded.ArrowDropDown"
+                       CloseIcon="@Icons.Material.Rounded.ArrowDropUp"
                        Value="Controller.Settings.ExportFullFrameRate"
                        ValueChanged="SetFullFrameRate"
                        ToStringFunc="FrameRateLabel"
@@ -67,22 +71,23 @@
     @if (Media.HasAudio)
     {
         <SettingRow Title="Audio">
-            @* Audio Switch *@
-            <MudSwitch T="bool"
-                       Value="Controller.Settings.ExportAudio"
-                       ValueChanged="SetAudio"
-                       Color="Color.Info"
-                       Disabled="@IsExporting"
-                       aria-label="Include Audio"
-                       Class="ma-0" />
+            <MudText Typo="Typo.body2"
+                     Class="mud-text-secondary">
+                @VolumeText
+            </MudText>
+            @* Audio Volume Button *@
+            <VolumeButton Text="@(WithAudio ? "Mute Audio" : "Unmute Audio")"
+                          Disabled="@IsExporting"
+                          OnClick="ToggleAudio"
+                          Value="@(WithAudio ? Controller.Settings.ExportVolume : 0)"
+                          ValueChanged="SetVolume" />
         </SettingRow>
         <MudDivider />
     }
     <SettingRow Title="Output">
-        <MudText Typo="Typo.body2"
-                 Class="mud-text-secondary ellipsis">
-            @OutputText
-        </MudText>
+        <MediaChips Width="OutputSize.Width"
+                    Height="OutputSize.Height"
+                    FrameRate="FrameRate" />
     </SettingRow>
     <MudDivider />
     <SettingRow Title="Bitrate">
@@ -101,7 +106,7 @@
     <MudDivider />
 
     <MudStack Spacing="3"
-              Class="py-3">
+              Class="pt-3 pb-4">
         @if (VerdictHint is { } hint)
         {
             <MudText Typo="Typo.caption"
@@ -112,7 +117,8 @@
 
         @if (_progress is { } progress)
         {
-            <MudStack Spacing="2">
+            <MudStack Spacing="2"
+                      Class="appear">
                 <MudStack Row
                           Justify="Justify.SpaceBetween">
                     <MudText Typo="Typo.body2">@progress.Phase</MudText>
@@ -123,7 +129,8 @@
                 </MudStack>
                 <MudProgressLinear Color="Color.Info"
                                    Value="@(progress.Fraction * 100)"
-                                   Size="Size.Small" />
+                                   Rounded
+                                   Size="Size.Medium" />
                 @* Cancel Button *@
                 <MudButton Variant="Variant.Text"
                            Color="Color.Error"
@@ -143,7 +150,7 @@
                        Disabled="@(!CanExport)"
                        FullWidth
                        OnClick="ExportAsync">
-                @ExportLabel
+                @(IsCut ? "Export and Save" : "Export")
             </MudButton>
         }
 
@@ -152,10 +159,10 @@
             <Notice Text="@error" />
         }
 
-        @if (_result is { } result && File.Exists(result.Path))
+        @if (_result is { } result && File.Exists(result))
         {
             <MudPaper Elevation="0"
-                      Class="inset rounded-inner pa-3">
+                      Class="inset rounded-inner pa-3 appear">
                 <MudStack Spacing="2">
                     <MudStack Row
                               AlignItems="AlignItems.Center"
@@ -163,17 +170,10 @@
                         <MudIcon Icon="@Icons.Material.Rounded.CheckCircle"
                                  Color="Color.Success"
                                  Size="Size.Small" />
-                        <MudStack Spacing="0"
-                                  Style="min-width:0">
-                            <MudText Typo="Typo.subtitle2"
-                                     Class="ellipsis">
-                                @Path.GetFileName(result.Path)
-                            </MudText>
-                            <MudText Typo="Typo.caption"
-                                     Class="mud-text-secondary">
-                                @ResultText(result)
-                            </MudText>
-                        </MudStack>
+                        <MudText Typo="Typo.subtitle2"
+                                 Class="ellipsis">
+                            @Path.GetFileName(result)
+                        </MudText>
                     </MudStack>
                     <MudStack Row
                               Spacing="2">
@@ -187,24 +187,9 @@
                             Copy File
                         </MudButton>
                         @* Show In Folder Button *@
-                        <Tooltip Text="Show in Folder"
-                                 RootClass="d-flex">
-                            <MudIconButton Icon="@Icons.Material.Rounded.FolderOpen"
-                                           aria-label="Show in Folder"
-                                           Size="Size.Small"
-                                           OnClick="() => Explorer.ShowFile(result.Path)" />
-                        </Tooltip>
-                        @* Drag Handle *@
-                        <Tooltip Text="Drag to Another App"
-                                 RootClass="d-flex">
-                            <MudElement HtmlTag="span"
-                                        Class="drag-handle d-flex align-center pa-1"
-                                        aria-label="Drag to Another App"
-                                        @onmousedown="() => DesktopShell.DragFile(result.Path)">
-                                <MudIcon Icon="@Icons.Material.Rounded.DragIndicator"
-                                         Size="Size.Small" />
-                            </MudElement>
-                        </Tooltip>
+                        <IconButton Icon="@Icons.Material.Rounded.FolderOpen"
+                                    Text="Show in Folder"
+                                    OnClick="() => Explorer.ShowFile(result)" />
                     </MudStack>
                 </MudStack>
             </MudPaper>

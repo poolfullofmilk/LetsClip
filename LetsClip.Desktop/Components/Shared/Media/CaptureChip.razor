@@ -4,6 +4,7 @@
          IconColor="@IconColor"
          Color="@ChipColor"
          Size="Size.Small"
-         Variant="Variant.Text">
+         Variant="Variant.Text"
+         Class="@(Controller.IsRecording && !IsError ? "recording" : null)">
     @Controller.StatusText
 </MudChip>

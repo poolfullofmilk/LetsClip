@@ -1,0 +1,16 @@
+@* Dialog Title *@
+<MudStack Row
+          AlignItems="AlignItems.Center"
+          Spacing="2">
+    <MudText Typo="Typo.h6"
+             Class="flex-grow-1">
+        @Text
+    </MudText>
+    @if (Closable)
+    {
+        @* Close Button *@
+        <IconButton Icon="@Icons.Material.Rounded.Close"
+                    Text="Close"
+                    OnClick="() => Dialog.Cancel()" />
+    }
+</MudStack>

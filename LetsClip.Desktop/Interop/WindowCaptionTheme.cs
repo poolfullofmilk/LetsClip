@@ -14,10 +14,8 @@ public static partial class WindowCaptionTheme
 
     public static void Apply(Window window)
     {
+        // Called From SourceInitialized, So The Handle Exists
         var handle = new WindowInteropHelper(window).Handle;
-        if (handle == 0)
-            return;
-
         var enabled = 1;
         _ = DwmSetWindowAttribute(handle, UseImmersiveDarkMode, ref enabled, sizeof(int));
 

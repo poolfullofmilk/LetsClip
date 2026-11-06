@@ -43,49 +43,66 @@ public static partial class CacheFolders
 
     public static void Delete(string folder)
     {
-        try
+        // Only A Guid Folder Under The Cache, Never Through Links
+        if (!IsOwnedFolder(folder, AppInfo.CacheDirectory))
         {
-            // Only A Guid Folder Under The Cache, Never Through Links
-            if (!IsOwnedFolder(folder, AppInfo.CacheDirectory))
-            {
-                s_logger.Warn($"Refused To Delete {folder}");
-                return;
-            }
-
-            var directory = new DirectoryInfo(folder);
-            if (!directory.Exists || directory.Attributes.HasFlag(FileAttributes.ReparsePoint))
-            {
-                return;
-            }
-
-            foreach (var file in directory.EnumerateFiles())
-            {
-                if (IsOwnedFile(file.Name) && !file.Attributes.HasFlag(FileAttributes.ReparsePoint))
-                {
-                    file.Delete();
-                }
-            }
-
-            if (!directory.EnumerateFileSystemInfos().Any())
-            {
-                directory.Delete();
-            }
+            s_logger.Warn($"Refused To Delete {folder}");
+            return;
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+
+        // A Killed Encoder Holds Its Last File A Moment
+        for (var attempt = 1; ; attempt++)
         {
-            // A Locked Leftover Waits For The Next Start
-            s_logger.Warn($"Failed To Clean Cache {exception.GetType().Name}");
+            try
+            {
+                DeleteOwnedFiles(new DirectoryInfo(folder));
+                return;
+            }
+            catch (Exception exception)
+                when (exception is IOException or UnauthorizedAccessException && attempt < 10)
+            {
+                Thread.Sleep(200);
+            }
+            catch (Exception exception)
+                when (exception is IOException or UnauthorizedAccessException)
+            {
+                // A Locked Leftover Waits For The Next Start
+                s_logger.Warn($"Failed To Clean Cache {exception.GetType().Name}");
+                return;
+            }
         }
     }
 
-    public static bool IsOwnedFolder(string folder, string cacheRoot)
+    private static void DeleteOwnedFiles(DirectoryInfo directory)
+    {
+        directory.Refresh();
+        if (!directory.Exists || directory.Attributes.HasFlag(FileAttributes.ReparsePoint))
+        {
+            return;
+        }
+
+        foreach (var file in directory.EnumerateFiles())
+        {
+            if (IsOwnedFile(file.Name) && !file.Attributes.HasFlag(FileAttributes.ReparsePoint))
+            {
+                file.Delete();
+            }
+        }
+
+        if (!directory.EnumerateFileSystemInfos().Any())
+        {
+            directory.Delete();
+        }
+    }
+
+    private static bool IsOwnedFolder(string folder, string cacheRoot)
     {
         var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder));
         return FilePaths.AreSame(Path.GetDirectoryName(full), cacheRoot)
             && Guid.TryParseExact(Path.GetFileName(full), "N", out _);
     }
 
-    public static bool IsOwnedFile(string name)
+    private static bool IsOwnedFile(string name)
     {
         return OwnedFileName().IsMatch(name);
     }

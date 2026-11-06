@@ -61,21 +61,14 @@ internal static partial class GameScanner
 
     private static readonly string[] s_commonGameRoots = [@"C:\Games", @"D:\Games", @"E:\Games"];
 
-    // A Failed Scan Is Retried Instead Of Cached
-    private static readonly Lazy<Dictionary<string, string>> s_cache = new(
-        Scan,
-        LazyThreadSafetyMode.PublicationOnly
-    );
-
     static GameScanner()
     {
         Debug.Assert(SelfTestPasses(), "GameScanner SelfTest Failed");
     }
 
-    public static IReadOnlyDictionary<string, string> InstalledGames => s_cache.Value;
-
     #region Scan
-    private static Dictionary<string, string> Scan()
+    // Reads Many Folders, Its One Caller Keeps The Result
+    public static IReadOnlyDictionary<string, string> Scan()
     {
         Dictionary<string, string> installedGames = new(StringComparer.OrdinalIgnoreCase);
 
@@ -180,9 +173,7 @@ internal static partial class GameScanner
 
     public static string NormalizeProcessKey(string name)
     {
-        var cleaned = (
-            name.Contains('_') || name.Contains('-') ? name.Replace("_", "").Replace("-", "") : name
-        ).ToLowerInvariant();
+        var cleaned = name.Replace("_", "").Replace("-", "").ToLowerInvariant();
 
         // Games Shipping Under Many Executable Names
         if (cleaned is "acs" or "acsx86" || cleaned.Contains("assettocorsa"))

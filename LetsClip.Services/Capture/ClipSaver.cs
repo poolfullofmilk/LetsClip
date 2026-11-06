@@ -18,6 +18,7 @@ public static class ClipSaver
         string sessionFolder,
         DateTimeOffset recordedAt,
         int frameRate,
+        string? game,
         ClipLibrary library
     )
     {
@@ -33,6 +34,20 @@ public static class ClipSaver
         try
         {
             // Stream Copy To The Press, The Replay Start Becomes Zero
+            IReadOnlyList<string> audioInput =
+                audio.Count > 0
+                    ?
+                    [
+                        "-itsoffset",
+                        Seconds(-from),
+                        "-i",
+                        ConcatOf(audio),
+                        "-map",
+                        "0:v",
+                        "-map",
+                        "1:a",
+                    ]
+                    : ["-map", "0:v"];
             List<string> arguments =
             [
                 "-hide_banner",
@@ -45,26 +60,7 @@ public static class ClipSaver
                 Seconds(videoOffset - from),
                 "-i",
                 ConcatOf(video),
-            ];
-            if (audio.Count > 0)
-            {
-                arguments.AddRange([
-                    "-itsoffset",
-                    Seconds(-from),
-                    "-i",
-                    ConcatOf(audio),
-                    "-map",
-                    "0:v",
-                    "-map",
-                    "1:a",
-                ]);
-            }
-            else
-            {
-                arguments.AddRange(["-map", "0:v"]);
-            }
-
-            arguments.AddRange([
+                .. audioInput,
                 "-c",
                 "copy",
                 "-to",
@@ -74,7 +70,7 @@ public static class ClipSaver
                 "-f",
                 "mp4",
                 temporary,
-            ]);
+            ];
             var result = await FFmpeg.RunAsync(
                 FFmpeg.FFmpegPath,
                 arguments,
@@ -95,10 +91,22 @@ public static class ClipSaver
 
             var finalPath = UniquePath(clipsFolder, ClipNames.For(recordedAt));
             File.Move(temporary, finalPath);
-            // The Capture Rate Is Kept, The Thumbnail Comes Later
+            // The Capture Rate And Game Are Kept, Thumbnails Come Later
             ClipLibrary.WriteMetadata(
                 finalPath,
-                new ClipMetadata(recordedAt, media.Duration, null, null, 0, default, frameRate)
+                new ClipMetadata(
+                    recordedAt,
+                    media.Duration,
+                    null,
+                    null,
+                    0,
+                    default,
+                    frameRate,
+                    media.Width,
+                    media.Height,
+                    null,
+                    game
+                )
             );
             return await library.GetAsync(finalPath, CancellationToken.None)
                 ?? throw new InvalidDataException("The saved clip did not read back");

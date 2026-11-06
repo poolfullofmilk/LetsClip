@@ -1,0 +1,30 @@
+@* Volume Button *@
+<MudElement HtmlTag="div"
+            Class="volume">
+    <IconButton Icon="@IconOf(Value)"
+                Text="@Text"
+                Disabled="Disabled"
+                OnClick="OnClick" />
+    @if (!Disabled)
+    {
+        <MudElement HtmlTag="div"
+                    Class="volume-pop">
+            <MudPaper Elevation="4"
+                      Class="volume-paper rounded-inner">
+                @* Volume Slider *@
+                <MudSlider T="double"
+                           Value="Value"
+                           ValueChanged="SlideAsync"
+                           Min="Min"
+                           Max="1"
+                           Step="Step"
+                           Vertical
+                           Color="Color.Info"
+                           Size="Size.Medium"
+                           Variant="Variant.Filled"
+                           Immediate
+                           aria-label="Volume" />
+            </MudPaper>
+        </MudElement>
+    }
+</MudElement>

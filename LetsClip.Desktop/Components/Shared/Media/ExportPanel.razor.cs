@@ -1,7 +1,7 @@
-using System.Globalization;
 using LetsClip.Data.Enums;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
+using LetsClip.Desktop.Components.Shared.Common;
 using LetsClip.Desktop.Interop;
 using LetsClip.Services.Capture;
 using LetsClip.Services.Media;
@@ -24,6 +24,10 @@ public partial class ExportPanel : IDisposable
     [Parameter]
     public required MediaInfo Media { get; set; }
 
+    // A Shorter Selection Is Also Cut Into The Clip
+    [Parameter]
+    public EventCallback<TrimRange> OnSaveCut { get; set; }
+
     [Inject]
     public required CaptureController Controller { get; set; }
 
@@ -32,25 +36,11 @@ public partial class ExportPanel : IDisposable
 
     private CancellationTokenSource? _cancel;
     private ExportProgress? _progress;
-    private ExportResult? _result;
+    private string? _result;
     private string? _error;
 
     // Limits This Selection Would Feel, Then Unlimited
-    private IReadOnlyList<double> Limits
-    {
-        get
-        {
-            var (width, height) = OutputSize;
-            return SizeBudget.LimitsFor(
-                Range.Length,
-                width,
-                height,
-                FrameRate,
-                WithAudio,
-                SourceBytesPerSecond
-            );
-        }
-    }
+    private IReadOnlyList<double> Limits => SizeBudget.LimitsFor(Shape);
 
     // The Saved Limit, Or The Nearest Offered Below It
     private double Limit
@@ -66,21 +56,18 @@ public partial class ExportPanel : IDisposable
     }
 
     // Past This More Size Adds Nothing, So Unlimited Aims Here
-    private double Ceiling
-    {
-        get
-        {
-            var (width, height) = OutputSize;
-            return SizeBudget.CeilingMegabytes(
-                Range.Length,
-                width,
-                height,
-                FrameRate,
-                WithAudio,
-                SourceBytesPerSecond
-            );
-        }
-    }
+    private double Ceiling => SizeBudget.CeilingMegabytes(Shape);
+
+    // The Selection As The Size Budget Reads It
+    private ExportShape Shape =>
+        new(
+            Range.Length,
+            OutputSize.Width,
+            OutputSize.Height,
+            FrameRate,
+            WithAudio,
+            SourceBytesPerSecond
+        );
 
     private double Megabytes => Math.Min(Limit, Ceiling);
 
@@ -89,6 +76,8 @@ public partial class ExportPanel : IDisposable
     private double SourceBytesPerSecond => Clip.SizeBytes / Media.Duration;
 
     private bool IsExporting => _progress is not null;
+
+    private bool IsCut => Range.Length < Media.Duration - TrimRange.Step / 2;
 
     private bool CanExport =>
         !IsExporting
@@ -103,43 +92,14 @@ public partial class ExportPanel : IDisposable
     private double FrameRate =>
         ClipExporter.FrameRateOf(Media.FrameRate, Controller.Settings.ExportFullFrameRate);
 
-    private ExportBudget Budget
-    {
-        get
-        {
-            var (width, height) = OutputSize;
-            return SizeBudget.Plan(
-                Megabytes,
-                Range.Length,
-                WithAudio,
-                width,
-                height,
-                FrameRate,
-                SourceBytesPerSecond
-            );
-        }
-    }
+    private ExportBudget Budget => SizeBudget.Plan(Megabytes, Shape);
 
-    private string OutputText
-    {
-        get
-        {
-            var (width, height) = OutputSize;
-            return string.Create(
-                CultureInfo.CurrentCulture,
-                $"{width} × {height} · {FrameRate:0} FPS"
-            );
-        }
-    }
+    private string VolumeText =>
+        WithAudio ? $"{Controller.Settings.ExportVolume * 100:0}%" : "Muted";
 
     // The Most Video Gets, Still Scenes Come Out Smaller
     private string BitrateText =>
-        Budget.VideoBitsPerSecond > 0
-            ? string.Create(
-                CultureInfo.CurrentCulture,
-                $"{Budget.VideoBitsPerSecond / 1e6:0.0} Mbps"
-            )
-            : "-";
+        Budget.VideoBitsPerSecond > 0 ? $"{Budget.VideoBitsPerSecond / 1e6:0.0} Mbps" : "-";
 
     private string VerdictText =>
         Budget.Verdict == BudgetVerdict.TooSmall ? "Too Small" : Budget.Verdict.ToString();
@@ -165,18 +125,13 @@ public partial class ExportPanel : IDisposable
     private string VerdictHintClass =>
         Budget.Verdict == BudgetVerdict.TooSmall ? "mud-error-text" : "mud-text-secondary";
 
-    private string ExportLabel =>
-        Limit < SizeBudget.MaximumMegabytes
-            ? $"Export {Formatter.FormatDuration(Range.Length)} Under {LimitLabel(Limit)}"
-            : $"Export {Formatter.FormatDuration(Range.Length)}";
-
     private ExportRequest Request =>
         new(
             Clip.Path,
             Range,
             Megabytes,
             FrameRate,
-            WithAudio,
+            WithAudio ? Controller.Settings.ExportVolume : 0,
             Controller.Settings.ExportsDirectory
         );
 
@@ -195,15 +150,29 @@ public partial class ExportPanel : IDisposable
 
     private string FrameRateLabel(bool full)
     {
-        return string.Create(
-            CultureInfo.CurrentCulture,
-            $"{ClipExporter.FrameRateOf(Media.FrameRate, full):0} FPS"
-        );
+        return $"{ClipExporter.FrameRateOf(Media.FrameRate, full):0} FPS";
     }
 
-    private void SetAudio(bool include)
+    private void ToggleAudio()
     {
-        Controller.UpdateSettings(settings => settings with { ExportAudio = include });
+        Controller.UpdateSettings(settings => settings with { ExportAudio = !WithAudio });
+    }
+
+    private void SetVolume(double level)
+    {
+        // Zero Mutes, The Last Level Stays For Unmuting
+        Controller.UpdateSettings(settings =>
+            level > 0
+                ? settings with
+                {
+                    ExportAudio = true,
+                    ExportVolume = level,
+                }
+                : settings with
+                {
+                    ExportAudio = false,
+                }
+        );
     }
 
     private void SetFullFrameRate(bool full)
@@ -232,9 +201,14 @@ public partial class ExportPanel : IDisposable
             var request = Request;
             var token = _cancel.Token;
             _result = await Task.Run(
-                () => Controller.Exporter.ExportAsync(request, progress, token),
+                () => ClipExporter.ExportAsync(request, progress, token),
                 token
             );
+            if (IsCut)
+            {
+                _progress = new ExportProgress("Saving the Cut", 1);
+                await OnSaveCut.InvokeAsync(request.Range);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -262,7 +236,7 @@ public partial class ExportPanel : IDisposable
     {
         if (_result is { } result)
         {
-            var copied = DesktopShell.CopyFile(result.Path);
+            var copied = DesktopShell.CopyFile(result);
             Snackbar.Add(
                 copied
                     ? "Copied, paste it anywhere with Ctrl+V"
@@ -270,14 +244,6 @@ public partial class ExportPanel : IDisposable
                 copied ? Severity.Success : Severity.Warning
             );
         }
-    }
-
-    private static string ResultText(ExportResult result)
-    {
-        return string.Create(
-            CultureInfo.CurrentCulture,
-            $"{Formatter.FormatSize(result.SizeBytes)} · {Formatter.FormatDuration(result.Duration)} · {result.Width} × {result.Height} at {result.FrameRate:0} FPS{(result.HasAudio ? "" : " · No Audio")}"
-        );
     }
 
     public void Dispose()

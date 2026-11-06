@@ -15,6 +15,16 @@ public partial class Notice
     [Parameter]
     public string? Class { get; set; }
 
+    // MudBlazor Defaults To Outlined Icons, LetsClip Uses Rounded
+    private string Icon =>
+        Severity switch
+        {
+            Severity.Error => Icons.Material.Rounded.Error,
+            Severity.Success => Icons.Material.Rounded.CheckCircle,
+            Severity.Info or Severity.Normal => Icons.Material.Rounded.Info,
+            _ => Icons.Material.Rounded.Warning,
+        };
+
     // Warnings Read In Their Own Colour
     private string ClassName =>
         $"rounded-panel {(Severity == Severity.Warning ? "mud-warning-text" : "")} {Class}";

@@ -20,21 +20,25 @@ public sealed record UserSettings(
     AddedGame[]? AddedGames = null,
     bool StartWithWindows = true,
     bool SaveSound = true,
+    double SaveSoundVolume = 1,
     bool SystemAudio = true,
     string SystemAudioDeviceId = "",
     bool Microphone = false,
     string MicrophoneDeviceId = "",
     bool NoiseCancellation = true,
-    string Hotkey = "Ctrl+Shift+F8",
+    string Hotkey = "F10",
     string? ClipsFolder = null,
     double ExportMegabytes = 20,
     bool ExportFullFrameRate = false,
     bool ExportAudio = true,
-    bool PreviewMuted = true,
-    double PreviewVolume = 1,
-    bool HasSeenTrayHint = false
+    double ExportVolume = 1,
+    bool HasSeenTrayHint = false,
+    int DefaultsVersion = UserSettings.CurrentDefaults
 )
 {
+    // Raised When New Defaults Reach Existing Users Once
+    public const int CurrentDefaults = 1;
+
     public static readonly int[] ReplayChoices = [30, 60, 120];
     public static readonly int[] FrameRateChoices = [30, 60, 120, 144, 165, 240];
 
@@ -67,18 +71,55 @@ public sealed record UserSettings(
             var settings = JsonSerializer.Deserialize<UserSettings>(json) ?? new UserSettings();
 
             // Ponytail: Old Full Size Becomes 2160, 8K Gets 4K
-            if (JsonSerializer.Deserialize<LegacySettings>(json) is { FullResolution: true })
+            var legacy = JsonSerializer.Deserialize<LegacySettings>(json);
+            if (legacy is { FullResolution: true })
             {
                 settings = settings with { Resolution = ResolutionChoices[^1] };
             }
 
-            return settings.Normalized();
+            // Version 1 Gives Everyone F10 And Automatic Audio, Once
+            if ((legacy?.DefaultsVersion ?? 0) >= CurrentDefaults)
+            {
+                return settings.Normalized();
+            }
+
+            var defaults = new UserSettings();
+            var updated = (
+                settings with
+                {
+                    Hotkey = defaults.Hotkey,
+                    SystemAudioDeviceId = defaults.SystemAudioDeviceId,
+                    MicrophoneDeviceId = defaults.MicrophoneDeviceId,
+                    DefaultsVersion = CurrentDefaults,
+                }
+            ).Normalized();
+            updated.Save();
+            return updated;
         }
         catch (Exception exception)
             when (exception is IOException or UnauthorizedAccessException or JsonException)
         {
             // A Missing Or Damaged File Means Defaults
             return new UserSettings();
+        }
+    }
+
+    public IEnumerable<string> ChangesFrom(UserSettings before)
+    {
+        // Each Saved Value That Moved, Old Then New
+        foreach (var property in typeof(UserSettings).GetProperties())
+        {
+            if (property.IsDefined(typeof(JsonIgnoreAttribute), true))
+            {
+                continue;
+            }
+
+            var old = JsonSerializer.Serialize(property.GetValue(before), property.PropertyType);
+            var now = JsonSerializer.Serialize(property.GetValue(this), property.PropertyType);
+            if (old != now)
+            {
+                yield return $"{property.Name} {old} -> {now}";
+            }
         }
     }
 
@@ -118,17 +159,18 @@ public sealed record UserSettings(
             AddedGames = AddedGames?.OfType<AddedGame>().ToArray() ?? [],
             SystemAudioDeviceId = SystemAudioDeviceId ?? "",
             MicrophoneDeviceId = MicrophoneDeviceId ?? "",
-            Hotkey = HotkeyGesture.Parse(Hotkey)?.ToString() ?? HotkeyGesture.Default.ToString(),
-            ClipsFolder = IsUsableFolder(ClipsFolder) ? ClipsFolder : null,
+            Hotkey = HotkeyGesture.Parse(Hotkey).ToString(),
+            ClipsFolder = Path.IsPathFullyQualified(ClipsFolder ?? "") ? ClipsFolder : null,
             ExportMegabytes = SizeBudget.IsValidTarget(ExportMegabytes) ? ExportMegabytes : 20,
-            PreviewVolume = double.IsFinite(PreviewVolume) ? Math.Clamp(PreviewVolume, 0, 1) : 1,
+            SaveSoundVolume = double.IsFinite(SaveSoundVolume)
+                ? Math.Clamp(Math.Round(SaveSoundVolume, 1), 0.1, 1)
+                : 1,
+            ExportVolume = double.IsFinite(ExportVolume)
+                ? Math.Clamp(Math.Round(ExportVolume, 1), 0.1, 1)
+                : 1,
         };
     }
 
-    private static bool IsUsableFolder(string? folder)
-    {
-        return !string.IsNullOrWhiteSpace(folder) && Path.IsPathFullyQualified(folder);
-    }
-
-    private sealed record LegacySettings(bool FullResolution);
+    // A File Without The Version Predates It
+    private sealed record LegacySettings(bool FullResolution, int? DefaultsVersion);
 }

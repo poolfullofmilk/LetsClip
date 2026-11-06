@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using System.Windows;
 using LetsClip.Data.Enums;
@@ -32,7 +32,7 @@ public partial class App : Application
             .LoadConfiguration(configuration =>
                 configuration
                     .ForLogger()
-                    .FilterMinLevel(NLog.LogLevel.Info)
+                    .FilterMinLevel(NLog.LogLevel.Debug)
                     // A Month Of Daily Logs, Older Ones Go
                     .WriteToFile(
                         Path.Combine(AppInfo.LogsDirectory, "log-${shortdate}.txt"),
@@ -94,6 +94,12 @@ public partial class App : Application
             Path.Combine(AppInfo.DataDirectory, "WebView2")
         );
 
+        // Clips From The Tray Balloon Play With Sound Unclicked
+        Environment.SetEnvironmentVariable(
+            "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+            $"{Environment.GetEnvironmentVariable("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS")} --autoplay-policy=no-user-gesture-required".Trim()
+        );
+
         // A Crash Leaves Cache Behind, Cleared Off The Startup Path
         _ = Task.Run(CacheFolders.DeleteLeftovers);
 
@@ -109,7 +115,12 @@ public partial class App : Application
             exceptionArgs.SetObserved();
         };
 
+        // Every Log Starts With What Ran Where And Its Settings
+        s_logger.Info(
+            $"Started {AppInfo.DisplayName} v{AppInfo.VersionText}{(startsInTray ? " In The Tray" : "")} On {System.Runtime.InteropServices.RuntimeInformation.OSDescription}, .NET {Environment.Version}, {Environment.ProcessorCount} Threads{(AppInfo.SandboxRoot is null ? "" : ", Sandboxed")}"
+        );
         var controller = new CaptureController();
+        s_logger.Info($"Settings {System.Text.Json.JsonSerializer.Serialize(controller.Settings)}");
         StartupRegistration.Apply(controller.Settings.StartWithWindows);
         var shell = new DesktopShell();
         var services = new ServiceCollection();
@@ -119,7 +130,8 @@ public partial class App : Application
 #endif
         services.AddMudServices(configuration =>
         {
-            // Snackbars Default To Outlined Icons, Every Other Icon Is Rounded
+            // Snackbar Defaults Are Not Rounded, LetsClip Uses Rounded
+            configuration.SnackbarConfiguration.ShowCloseIcon = false;
             configuration.SnackbarConfiguration.SuccessIcon = Icons.Material.Rounded.CheckCircle;
             configuration.SnackbarConfiguration.WarningIcon = Icons.Material.Rounded.Warning;
             configuration.SnackbarConfiguration.InfoIcon = Icons.Material.Rounded.Info;

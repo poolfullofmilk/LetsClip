@@ -61,35 +61,19 @@ public sealed class SegmentCache
         }
     }
 
-    public IDisposable Pin(double from)
+    public void Pin(double from)
     {
         lock (_gate)
         {
             _pins.Add(from);
         }
-
-        return new PinRelease(this, from);
     }
 
-    private void Unpin(double from)
+    public void Unpin(double from)
     {
         lock (_gate)
         {
             _pins.Remove(from);
-        }
-    }
-
-    private sealed class PinRelease(SegmentCache cache, double from) : IDisposable
-    {
-        private bool _released;
-
-        public void Dispose()
-        {
-            if (!_released)
-            {
-                _released = true;
-                cache.Unpin(from);
-            }
         }
     }
 
@@ -103,7 +87,7 @@ public sealed class SegmentCache
         }
 
         var byAge = cache.Covering(0, 100);
-        var pin = cache.Pin(20);
+        cache.Pin(20);
         var pinnedEvictions = new List<Segment>();
         for (var second = 70; second < 100; second++)
         {
@@ -113,7 +97,7 @@ public sealed class SegmentCache
         }
 
         var keptWhilePinned = cache.Covering(20, 21).Count == 1;
-        pin.Dispose();
+        cache.Unpin(20);
         var released = cache.Add(new Segment("100", 100, 101, 100), 60, long.MaxValue);
 
         // Bytes Bound Too, A Pin Still Wins
