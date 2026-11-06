@@ -184,29 +184,40 @@ public static class VideoEncoders
         }
 
         var size = string.Create(CultureInfo.InvariantCulture, $"{width}x{height}");
-        var result = await FFmpeg.RunAsync(
-            FFmpeg.FFmpegPath,
-            [
-                "-hide_banner",
-                "-nostdin",
-                "-loglevel",
-                "error",
-                "-f",
-                "lavfi",
-                "-i",
-                $"testsrc2=size={size}:rate={frameRate}",
-                "-frames:v",
-                "12",
-                "-vf",
-                "format=nv12",
-                .. CaptureArguments(encoder, frameRate, width, height, CaptureQuality.Normal),
-                "-f",
-                "null",
-                "-",
-            ],
-            TimeSpan.FromSeconds(20),
-            token
-        );
+        ProcessResult result;
+        try
+        {
+            result = await FFmpeg.RunAsync(
+                FFmpeg.FFmpegPath,
+                [
+                    "-hide_banner",
+                    "-nostdin",
+                    "-loglevel",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    $"testsrc2=size={size}:rate={frameRate}",
+                    "-frames:v",
+                    "12",
+                    "-vf",
+                    "format=nv12",
+                    .. CaptureArguments(encoder, frameRate, width, height, CaptureQuality.Normal),
+                    "-f",
+                    "null",
+                    "-",
+                ],
+                TimeSpan.FromSeconds(20),
+                token
+            );
+        }
+        catch (TimeoutException)
+        {
+            // A Hung Driver Counts As A Failed Test
+            s_logger.Info($"Skipped {encoder.Name}, Timed Out");
+            return false;
+        }
+
         if (!result.Succeeded)
         {
             s_logger.Info($"Skipped {encoder.Name}, {result.LastError}");

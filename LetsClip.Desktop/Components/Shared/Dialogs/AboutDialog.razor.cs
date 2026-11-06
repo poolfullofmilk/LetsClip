@@ -9,9 +9,4 @@ public partial class AboutDialog
         // The Single File Unpacks Notices Beside The App
         Explorer.Open(Path.Combine(AppContext.BaseDirectory, "THIRD-PARTY-NOTICES.txt"));
     }
-
-    private static void OpenFFmpegLicence()
-    {
-        Explorer.Open(Path.Combine(AppContext.BaseDirectory, "FFmpeg", "LICENSE.txt"));
-    }
 }

@@ -5,10 +5,10 @@
              Class="pt-2">
         Export
     </MudText>
-    <SettingRow Title="Clip">
+    <SettingRow Title="Original Size">
         <MudText Typo="Typo.body2"
                  Class="mud-text-secondary ellipsis">
-            @ClipText
+            @Formatter.FormatSize(Clip.SizeBytes)
         </MudText>
     </SettingRow>
     <MudDivider />
@@ -26,8 +26,6 @@
                        Dense
                        Disabled="@IsExporting"
                        aria-label="Size Limit"
-                       AnchorOrigin="Origin.BottomLeft"
-                       TransformOrigin="Origin.TopLeft"
                        Class="my-0">
                 @foreach (var limit in limits)
                 {
@@ -53,8 +51,6 @@
                        Dense
                        Disabled="@IsExporting"
                        aria-label="Frame Rate"
-                       AnchorOrigin="Origin.BottomLeft"
-                       TransformOrigin="Origin.TopLeft"
                        Class="my-0">
                 <MudSelectItem T="bool"
                                Value="false">

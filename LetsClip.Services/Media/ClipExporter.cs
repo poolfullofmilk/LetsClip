@@ -31,6 +31,7 @@ public sealed class ClipExporter
 
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
     private static readonly TimeSpan s_timeout = TimeSpan.FromMinutes(30);
+    private static readonly TimeSpan s_stall = TimeSpan.FromSeconds(15);
 
     private readonly SemaphoreSlim _running = new(1, 1);
 
@@ -206,7 +207,7 @@ public sealed class ClipExporter
                     {
                         if (encoder.IsHardware)
                         {
-                            s_logger.Warn($"Export from {encoder.Name} did not check out");
+                            s_logger.Warn($"Rejected Export From {encoder.Name}");
                             break;
                         }
 
@@ -220,7 +221,7 @@ public sealed class ClipExporter
                         // Named By The Clip's Shown Date, Never By Its Limit
                         var stem = Path.GetFileNameWithoutExtension(request.SourcePath);
                         var title = ClipNames.DateOf(stem) is { } date
-                            ? $"{AppInfo.DisplayName} {Formatter.FormatDateTime(date)}"
+                            ? $"{AppInfo.DisplayName} {Formatter.FormatDateTime(date, "HH'h'mm'm'")}"
                             : stem;
                         var finalPath = ClipSaver.UniquePath(request.ExportsFolder, title);
                         File.Move(temporary, finalPath);
@@ -463,35 +464,53 @@ public sealed class ClipExporter
     {
         // Progress Arrives As out_time_us Lines, Throttled To Whole Percents
         var lastPercent = -1;
-        var result = await FFmpeg.RunAsync(
-            FFmpeg.FFmpegPath,
-            arguments,
-            s_timeout,
-            token,
-            line =>
-            {
-                if (
-                    !line.StartsWith("out_time_us=", StringComparison.Ordinal)
-                    || !long.TryParse(
-                        line[12..],
-                        NumberStyles.Integer,
-                        CultureInfo.InvariantCulture,
-                        out var microseconds
+        var lastMicroseconds = -1L;
+        // Never Disposed, The Pipe Reader Can Outlive A Killed Pass
+        var stall = CancellationTokenSource.CreateLinkedTokenSource(token);
+        stall.CancelAfter(s_stall);
+        ProcessResult result;
+        try
+        {
+            result = await FFmpeg.RunAsync(
+                FFmpeg.FFmpegPath,
+                arguments,
+                s_timeout,
+                stall.Token,
+                line =>
+                {
+                    if (
+                        !line.StartsWith("out_time_us=", StringComparison.Ordinal)
+                        || !long.TryParse(
+                            line[12..],
+                            NumberStyles.Integer,
+                            CultureInfo.InvariantCulture,
+                            out var microseconds
+                        )
+                        || microseconds <= lastMicroseconds
                     )
-                )
-                {
-                    return;
-                }
+                    {
+                        return;
+                    }
 
-                var fraction = Math.Clamp(microseconds / 1e6 / duration, 0, 1);
-                var percent = (int)(fraction * 100);
-                if (percent != lastPercent)
-                {
-                    lastPercent = percent;
-                    progress.Report(new ExportProgress(phase, offset + (fraction * share)));
+                    // Only Real Progress Keeps A Pass Alive
+                    lastMicroseconds = microseconds;
+                    stall.CancelAfter(s_stall);
+                    var fraction = Math.Clamp(microseconds / 1e6 / duration, 0, 1);
+                    var percent = (int)(fraction * 100);
+                    if (percent != lastPercent)
+                    {
+                        lastPercent = percent;
+                        progress.Report(new ExportProgress(phase, offset + (fraction * share)));
+                    }
                 }
-            }
-        );
+            );
+        }
+        catch (OperationCanceledException) when (!token.IsCancellationRequested)
+        {
+            // A Hung Driver Hands Over Like A Failed Encode
+            throw new ExportException("The encoder stopped responding, try again");
+        }
+
         if (!result.Succeeded)
         {
             throw new ExportException(

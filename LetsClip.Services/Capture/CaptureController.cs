@@ -362,6 +362,7 @@ public sealed class CaptureController : IDisposable
             settings.Quality,
             settings.SystemAudio ? settings.SystemAudioDeviceId : null,
             settings.Microphone ? settings.MicrophoneDeviceId : null,
+            settings.Microphone && settings.NoiseCancellation,
             window,
             window != 0 ? Games.GameName : null
         );

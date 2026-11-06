@@ -37,8 +37,6 @@
                                Margin="Margin.Dense"
                                Dense
                                aria-label="Monitor"
-                               AnchorOrigin="Origin.BottomLeft"
-                               TransformOrigin="Origin.TopLeft"
                                Class="my-0">
                         @foreach (var monitor in Controller.Monitors)
                         {
@@ -77,8 +75,6 @@
                            Margin="Margin.Dense"
                            Dense
                            aria-label="Replay Length"
-                           AnchorOrigin="Origin.BottomLeft"
-                           TransformOrigin="Origin.TopLeft"
                            Class="my-0">
                     @foreach (var seconds in UserSettings.ReplayChoices)
                     {
@@ -100,8 +96,6 @@
                            Margin="Margin.Dense"
                            Dense
                            aria-label="Resolution"
-                           AnchorOrigin="Origin.BottomLeft"
-                           TransformOrigin="Origin.TopLeft"
                            Class="my-0">
                     @foreach (var lines in Controller.ResolutionChoices)
                     {
@@ -126,8 +120,6 @@
                            Margin="Margin.Dense"
                            Dense
                            aria-label="Quality"
-                           AnchorOrigin="Origin.BottomLeft"
-                           TransformOrigin="Origin.TopLeft"
                            Class="my-0">
                     @foreach (var quality in Enum.GetValues<CaptureQuality>())
                     {
@@ -152,8 +144,6 @@
                            Margin="Margin.Dense"
                            Dense
                            aria-label="Frame Rate"
-                           AnchorOrigin="Origin.BottomLeft"
-                           TransformOrigin="Origin.TopLeft"
                            Class="my-0">
                     @foreach (var rate in Controller.FrameRateChoices)
                     {

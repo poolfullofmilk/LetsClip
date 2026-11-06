@@ -21,6 +21,10 @@ public sealed class CaptureSession(
     private const double KeepMarginSeconds = 3;
     private const long CacheByteFloor = 1_500_000_000;
 
+    // Rumble Cut, Steady Noise Reduced, Quiet Gaps Gated
+    private const string MicrophoneCleaning =
+        "[0:a]asplit[a][b];[a]pan=stereo|c0=c0|c1=c1[system];[b]pan=stereo|c0=c2|c1=c3,highpass=f=80,afftdn=nr=12:nf=-50:tn=1,agate=threshold=0.003:ratio=3:range=0.1:attack=5:release=200[voice];[system][voice]amix=inputs=2:normalize=0[audio]";
+
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
 
     private readonly Lock _pinGate = new();
@@ -85,8 +89,19 @@ public sealed class CaptureSession(
             ((originWall - DateTime.UnixEpoch).Ticks / 10) - (long)(LeadSeconds * 1_000_000);
         if (Options.SystemAudioId is not null || Options.MicrophoneId is not null)
         {
-            Mixer = new AudioMixer(OriginTimestamp, Options.SystemAudioId, Options.MicrophoneId);
-            Audio = new SegmentProcess("Audio", AudioArguments(), true, Folder, OnSegmentAdded);
+            Mixer = new AudioMixer(
+                OriginTimestamp,
+                Options.SystemAudioId,
+                Options.MicrophoneId,
+                Options.CleanMicrophone
+            );
+            Audio = new SegmentProcess(
+                "Audio",
+                AudioArguments(Options.CleanMicrophone),
+                true,
+                Folder,
+                OnSegmentAdded
+            );
             Mixer.Attach(Audio.Process.StandardInput.BaseStream);
         }
 
@@ -116,16 +131,6 @@ public sealed class CaptureSession(
         Video?.Stop();
         Audio?.Stop();
         DeleteFolderWhenUnused();
-    }
-
-    public IReadOnlyList<Segment> VideoCovering(double from, double to)
-    {
-        return Video?.Segments.Covering(from, to) ?? [];
-    }
-
-    public IReadOnlyList<Segment> AudioCovering(double from, double to)
-    {
-        return Audio?.Segments.Covering(from, to) ?? [];
     }
 
     public Segment? OpenVideoSegment()
@@ -271,8 +276,9 @@ public sealed class CaptureSession(
             // A Keyframe Each Second, Game Windows Send Frames Unevenly
             "-force_key_frames",
             "expr:gte(t,n_forced)",
+            // A Second Frame In One Slot Drops, Never Doubles Up
             "-fps_mode",
-            "passthrough",
+            "vfr",
             "-colorspace",
             "bt709",
             "-color_primaries",
@@ -288,8 +294,15 @@ public sealed class CaptureSession(
         ];
     }
 
-    private static List<string> AudioArguments()
+    private static List<string> AudioArguments(bool cleanMicrophone)
     {
+        // The Cleaned Microphone Arrives On Channels Three And Four
+        IReadOnlyList<string> layout = cleanMicrophone
+            ? ["-ac", "4", "-ch_layout", "4.0"]
+            : ["-ac", "2", "-ch_layout", "stereo"];
+        IReadOnlyList<string> cleaning = cleanMicrophone
+            ? ["-filter_complex", MicrophoneCleaning, "-map", "[audio]"]
+            : [];
         return
         [
             "-hide_banner",
@@ -302,12 +315,10 @@ public sealed class CaptureSession(
             "f32le",
             "-ar",
             AudioMixer.SampleRate.ToString(CultureInfo.InvariantCulture),
-            "-ac",
-            AudioMixer.Channels.ToString(CultureInfo.InvariantCulture),
-            "-ch_layout",
-            "stereo",
+            .. layout,
             "-i",
             "pipe:0",
+            .. cleaning,
             "-c:a",
             "aac",
             "-b:a",

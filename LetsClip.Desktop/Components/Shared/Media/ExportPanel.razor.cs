@@ -120,9 +120,6 @@ public partial class ExportPanel : IDisposable
         }
     }
 
-    private string ClipText =>
-        $"{Media.Width} × {Media.Height} · {Formatter.FormatSize(Clip.SizeBytes)}";
-
     private string OutputText
     {
         get

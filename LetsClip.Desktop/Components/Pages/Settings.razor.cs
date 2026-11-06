@@ -134,6 +134,11 @@ public partial class Settings : IDisposable
         Controller.UpdateSettings(settings => settings with { Microphone = enabled });
     }
 
+    private void SetNoiseCancellation(bool enabled)
+    {
+        Controller.UpdateSettings(settings => settings with { NoiseCancellation = enabled });
+    }
+
     private void SetMicrophoneDevice(string id)
     {
         Controller.UpdateSettings(settings => settings with { MicrophoneDeviceId = id });

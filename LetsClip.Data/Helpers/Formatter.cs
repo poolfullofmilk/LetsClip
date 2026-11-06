@@ -39,12 +39,20 @@ public static class Formatter
         return rest > 0 || text.Length == 0 ? text + rest.ToString("0.#", Shown) + "s" : text;
     }
 
-    public static string FormatDateTime(DateTimeOffset time)
+    public static string FormatDateTime(DateTimeOffset time, string clock = "HH:mm")
     {
-        // Day First, No Leading Zero, 05-11-2026 8h30
+        // 5th of November 2026 at 21:10, File Names Take 21h10m
         var local = time.ToLocalTime();
-        var minutes = local.Minute > 0 ? local.Minute.ToString(s_invariant) : "";
-        return local.ToString("dd-MM-yyyy H'h'", s_invariant) + minutes;
+        var suffix = local.Day is 11 or 12 or 13
+            ? "th"
+            : (local.Day % 10) switch
+            {
+                1 => "st",
+                2 => "nd",
+                3 => "rd",
+                _ => "th",
+            };
+        return $"{local.Day}{suffix} of {local.ToString("MMMM yyyy", s_invariant)} at {local.ToString(clock, s_invariant)}";
     }
 
     public static string FormatMegabytes(double megabytes)
@@ -56,9 +64,13 @@ public static class Formatter
     {
         var evening = new DateTimeOffset(new DateTime(2026, 11, 4, 22, 43, 5, DateTimeKind.Local));
         var morning = new DateTimeOffset(new DateTime(2026, 11, 5, 8, 0, 0, DateTimeKind.Local));
-        return FormatDateTime(evening) == "04-11-2026 22h43"
-            && FormatDateTime(morning) == "05-11-2026 8h"
-            && FormatDateTime(morning.AddMinutes(5)) == "05-11-2026 8h5"
+        return FormatDateTime(evening) == "4th of November 2026 at 22:43"
+            && FormatDateTime(morning) == "5th of November 2026 at 08:00"
+            && FormatDateTime(evening, "HH'h'mm'm'") == "4th of November 2026 at 22h43m"
+            && FormatDateTime(morning.AddDays(-4)) == "1st of November 2026 at 08:00"
+            && FormatDateTime(morning.AddDays(6)) == "11th of November 2026 at 08:00"
+            && FormatDateTime(morning.AddDays(17)) == "22nd of November 2026 at 08:00"
+            && FormatDateTime(morning.AddDays(-2)) == "3rd of November 2026 at 08:00"
             && FormatSize(20_000_000) == $"20{Point}0 MB"
             && FormatSize(999_499) == "999 KB"
             && FormatSize(1_250_000_000) == $"1{Point}25 GB"

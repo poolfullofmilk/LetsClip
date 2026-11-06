@@ -25,22 +25,38 @@ public sealed class AudioMixer : IDisposable
     private readonly MMDeviceEnumerator _enumerator = new();
     private readonly MMDeviceNotificationClient _notifications;
     private readonly List<AudioSource> _sources = [];
+    private readonly int _outputChannels;
     private Thread? _writer;
     private volatile bool _stopping;
     private long _emittedFrames;
     private long _muteUntilFrame = long.MinValue;
 
-    public AudioMixer(long originTimestamp, string? systemId, string? microphoneId)
+    public AudioMixer(
+        long originTimestamp,
+        string? systemId,
+        string? microphoneId,
+        bool separateMicrophone
+    )
     {
+        // A Cleaned Microphone Gets Its Own Two Channels
         _origin = originTimestamp;
+        _outputChannels = separateMicrophone ? Channels * 2 : Channels;
         if (systemId is not null)
         {
-            _sources.Add(new AudioSource(this, "System Audio", systemId, true));
+            _sources.Add(new AudioSource(this, "System Audio", systemId, true, 0));
         }
 
         if (microphoneId is not null)
         {
-            _sources.Add(new AudioSource(this, "Microphone", microphoneId, false));
+            _sources.Add(
+                new AudioSource(
+                    this,
+                    "Microphone",
+                    microphoneId,
+                    false,
+                    separateMicrophone ? Channels : 0
+                )
+            );
         }
 
         _notifications = _enumerator.CreateNotificationClient(useSynchronizationContext: false);
@@ -119,7 +135,7 @@ public sealed class AudioMixer : IDisposable
 
     private void WriteLoop(Stream output)
     {
-        var mix = new float[ChunkFrames * Channels];
+        var mix = new float[ChunkFrames * _outputChannels];
         try
         {
             while (!_stopping)
@@ -133,7 +149,7 @@ public sealed class AudioMixer : IDisposable
                 Array.Clear(mix);
                 foreach (var source in _sources)
                 {
-                    source.Drain(_emittedFrames, mix);
+                    source.Drain(_emittedFrames, mix, _outputChannels);
                 }
 
                 for (var index = 0; index < mix.Length; index++)
@@ -165,8 +181,13 @@ public sealed class AudioMixer : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    private sealed class AudioSource(AudioMixer mixer, string kind, string deviceId, bool loopback)
-        : IDisposable
+    private sealed class AudioSource(
+        AudioMixer mixer,
+        string kind,
+        string deviceId,
+        bool loopback,
+        int channelOffset
+    ) : IDisposable
     {
         // Eight Seconds Of Room While The Encoder Starts Reading
         private const int RingFrames = SampleRate * 8;
@@ -352,16 +373,17 @@ public sealed class AudioMixer : IDisposable
             _lateReported = Stopwatch.GetTimestamp();
         }
 
-        public void Drain(long fromFrame, float[] mix)
+        public void Drain(long fromFrame, float[] mix, int stride)
         {
             lock (_gate)
             {
-                var frames = mix.Length / Channels;
+                var frames = mix.Length / stride;
                 for (var index = 0; index < frames; index++)
                 {
                     var slot = (int)((fromFrame + index) % RingFrames) * Channels;
-                    mix[index * Channels] += _ring[slot];
-                    mix[(index * Channels) + 1] += _ring[slot + 1];
+                    var target = (index * stride) + channelOffset;
+                    mix[target] += _ring[slot];
+                    mix[target + 1] += _ring[slot + 1];
                     _ring[slot] = 0;
                     _ring[slot + 1] = 0;
                 }

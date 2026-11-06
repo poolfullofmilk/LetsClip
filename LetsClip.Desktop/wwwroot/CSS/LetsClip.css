@@ -439,6 +439,11 @@ html, body {
     line-height: var(--mud-typography-body2-lineheight);
 }
 
+    /* The Icon Sits Centred Beside Text Of Any Length */
+    .mud-alert .mud-alert-position {
+        align-items: center;
+    }
+
 /* Fields Sit Inset, Blue Edge On Focus */
 .mud-input.mud-input-outlined {
     border-radius: var(--mud-default-borderradius);
@@ -557,6 +562,7 @@ html, body {
 .timeline {
     --handle-width: 14px;
     height: 64px;
+    position: relative;
     padding: 0 var(--handle-width);
     border-radius: var(--radius-inner);
     overflow: hidden;
@@ -588,6 +594,17 @@ html, body {
     pointer-events: none;
 }
 
+    /* Shades Stretch Under The Handles Like The Strip */
+    .timeline-shade.before {
+        box-sizing: content-box;
+        margin-left: calc(-1 * var(--handle-width));
+        padding-left: var(--handle-width);
+    }
+
+    .timeline-shade.after {
+        margin-right: calc(-1 * var(--handle-width));
+    }
+
 .timeline-selection {
     position: absolute;
     top: 0;
@@ -607,13 +624,16 @@ html, body {
     cursor: ew-resize;
 }
 
+    /* A Pixel Of Shadow Covers A Fractional Seam */
     .timeline-handle[data-handle="start"] {
         margin-left: calc(-1 * var(--handle-width));
         border-radius: var(--radius-thumb) 0 0 var(--radius-thumb);
+        box-shadow: 1px 0 0 var(--mud-palette-info);
     }
 
     .timeline-handle[data-handle="end"] {
         border-radius: 0 var(--radius-thumb) var(--radius-thumb) 0;
+        box-shadow: -1px 0 0 var(--mud-palette-info);
     }
 
     /* Centred By Layout, So The Line Snaps To Pixels */

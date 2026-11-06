@@ -190,21 +190,21 @@ else
                         @* Timeline *@
                         <MudElement HtmlTag="div"
                                     Class="timeline">
+                            @if (_stripUrl is { } strip)
+                            {
+                                <MudImage Src="@strip"
+                                          Alt=""
+                                          Class="timeline-strip" />
+                            }
                             <MudElement @bind-Ref="_timeline"
                                         HtmlTag="div"
                                         Class="timeline-track"
                                         aria-label="Trim Timeline">
-                                @if (_stripUrl is { } strip)
-                                {
-                                    <MudImage Src="@strip"
-                                              Alt=""
-                                              Class="timeline-strip" />
-                                }
                                 <MudElement HtmlTag="div"
-                                            Class="timeline-shade"
+                                            Class="timeline-shade before"
                                             Style="@($"left:0; width:{Percent(_range.Start)}")" />
                                 <MudElement HtmlTag="div"
-                                            Class="timeline-shade"
+                                            Class="timeline-shade after"
                                             Style="@($"left:{Percent(_range.End)}; right:0")" />
                                 <MudElement HtmlTag="div"
                                             Class="timeline-selection"

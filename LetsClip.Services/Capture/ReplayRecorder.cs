@@ -16,6 +16,7 @@ public sealed record CaptureOptions(
     CaptureQuality Quality,
     string? SystemAudioId,
     string? MicrophoneId,
+    bool CleanMicrophone,
     nint GameWindow,
     string? GameName
 )
@@ -168,7 +169,7 @@ public sealed class ReplayRecorder : IDisposable
                     Warning = null,
                 }
             );
-            s_logger.Info(reason is null ? "Stopped Recording" : $"Stopped Recording, {reason}");
+            s_logger.Info(reason ?? "Stopped Recording");
         }
         finally
         {
@@ -247,7 +248,7 @@ public sealed class ReplayRecorder : IDisposable
             {
                 if (!encoder.GpuFrames)
                 {
-                    skipped.Add($"{encoder.Name} Unavailable");
+                    skipped.Add($"{encoder.Name} unavailable");
                 }
 
                 continue;
@@ -277,7 +278,7 @@ public sealed class ReplayRecorder : IDisposable
                 // A GPU Route Falling Back Is No News
                 if (!encoder.GpuFrames)
                 {
-                    skipped.Add($"{encoder.Name} Failed");
+                    skipped.Add($"{encoder.Name} failed");
                 }
 
                 s_logger.Warn(
@@ -435,7 +436,7 @@ public sealed class ReplayRecorder : IDisposable
         }
 
         var from = end - session.Options.Seconds;
-        var video = session.VideoCovering(from, end);
+        var video = session.Video?.Segments.Covering(from, end) ?? [];
         var to = Math.Min(end, session.NewestEnd);
         var videoOffset = 0.0;
         if (
@@ -459,7 +460,7 @@ public sealed class ReplayRecorder : IDisposable
         // Exactly The Replay Length, Or All Of A Younger Session
         return await ClipSaver.SaveAsync(
             video,
-            session.AudioCovering(from, end),
+            session.Audio?.Segments.Covering(from, end) ?? [],
             Math.Max(from, CaptureSession.LeadSeconds),
             to,
             videoOffset,

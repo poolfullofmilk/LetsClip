@@ -102,7 +102,8 @@ public static partial class FFmpeg
             process.StandardError,
             line =>
             {
-                if (!string.IsNullOrWhiteSpace(line))
+                // Progress Pairs Like progress=continue Are Never The Error
+                if (!string.IsNullOrWhiteSpace(line) && !IsProgress(line))
                 {
                     lastError = line.Trim();
                 }
@@ -174,6 +175,13 @@ public static partial class FFmpeg
         {
             // Already Gone Between The Check And The Kill
         }
+    }
+
+    private static bool IsProgress(string line)
+    {
+        // One Pair With No Spaces, Like out_time_us=1000
+        var trimmed = line.Trim();
+        return trimmed.Contains('=') && !trimmed.Contains(' ');
     }
 
     private static nint CreateKillOnCloseJob()
