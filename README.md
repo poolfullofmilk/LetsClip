@@ -7,7 +7,7 @@
 - Records system audio, and your microphone with its background noise cleaned out
 - Trim a clip to the exact frame and export it as an MP4, with or without sound, under a size limit when you need one
 - Keep just the trimmed part without losing any quality, and bring the full clip back anytime
-- Clips are named after their game or app, rename them and filter them by game
+- Clips are named after their game or app and show their resolution, bitrate and size, rename them and filter them by game
 - Starts with Windows in the tray and updates itself
 
 ## Quick start

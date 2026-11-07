@@ -95,14 +95,18 @@ public partial class Settings : IDisposable
     private static string? DetailOf(IReadOnlyList<AudioDeviceInfo> devices, string id)
     {
         // The Closed Field Reads Like Its Item
-        return devices.FirstOrDefault(device => device.Id == id) is { } device
-            ? device.Adapter
-            : DefaultName(devices);
+        return devices.FirstOrDefault(device => device.Id == id)?.Adapter;
     }
 
-    private static string? DefaultName(IReadOnlyList<AudioDeviceInfo> devices)
+    private static bool IsChecked(IReadOnlyList<AudioDeviceInfo> devices, string savedId, string id)
     {
-        return devices.FirstOrDefault(device => device.IsDefault)?.Name;
+        // Automatic Also Checks The Device It Follows
+        var shown = ShownDevice(devices, savedId);
+        return id == shown
+            || (
+                shown == AudioDevices.AutomaticId
+                && devices.Any(device => device.Id == id && device.IsDefault)
+            );
     }
 
     private void SetSystemAudio(bool enabled)

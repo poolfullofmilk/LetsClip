@@ -91,6 +91,11 @@ public static partial class Formatter
         return megabytes.ToString("0.#", Shown) + " MB";
     }
 
+    public static string FormatBitrate(double bitsPerSecond)
+    {
+        return (bitsPerSecond / 1e6).ToString("0.0", Shown) + " Mbps";
+    }
+
     private static bool SelfTestPasses()
     {
         var evening = new DateTimeOffset(new DateTime(2026, 11, 4, 22, 43, 5, DateTimeKind.Local));
@@ -105,6 +110,7 @@ public static partial class Formatter
             && FormatSize(20_000_000) == $"20{Point}0 MB"
             && FormatSize(999_499) == "999 KB"
             && FormatSize(1_250_000_000) == $"1{Point}25 GB"
+            && FormatBitrate(11_570_000) == $"11{Point}6 Mbps"
             && FormatDuration(0) == "0s"
             && FormatDuration(30.3) == $"30{Point}3s"
             && FormatDuration(510.54) == $"8m30{Point}5s"

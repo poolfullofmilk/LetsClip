@@ -224,9 +224,13 @@ public sealed class CaptureSession(
             $"if(eq(N,0),st(0,(RTCTIME-{baseMicroseconds})/1000000/TB-PTS);st(1,PTS));"
         );
 
-        // A Late Grab Keeps Its Own Slot, Real Drift Re-Anchors
+        // Window Frames Take The Next Free Slot, Monitors Count Frames
         var clock = isWindow
-            ? start + "PTS+ld(0)"
+            ? start
+                + string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"st(4,round((PTS+ld(0))*{rate}*TB));st(3,if(gt(ld(4),ld(3)),ld(4),if(eq(ld(4),ld(3)),ld(3)+1,ld(3))));ld(3)/({rate}*TB)"
+                )
             : start
                 + "st(2,ld(1)+N/(FR*TB));if(gt(abs(PTS-ld(2)),1.5/(FR*TB)),st(1,PTS-N/(FR*TB));st(2,PTS));ld(2)+ld(0)";
         var scaledWidth = rotated ? height : width;

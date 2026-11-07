@@ -15,4 +15,8 @@ public partial class ItemLabel
     // Greyed On The Right, Shortened Before The Text
     [Parameter]
     public string? Detail { get; set; }
+
+    // Null Leaves No Room For A Check Mark
+    [Parameter]
+    public bool? Checked { get; set; }
 }

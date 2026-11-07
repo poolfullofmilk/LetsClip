@@ -3,7 +3,8 @@
 <PageTitle>Settings</PageTitle>
 
 <Header Title="Settings">
-    <MudStack Spacing="6">
+    <MudElement HtmlTag="div"
+                Class="settings-grid">
         @* Recording Settings *@
         <MudPaper Elevation="4"
                   Class="rounded-panel px-6 py-2">
@@ -109,14 +110,15 @@
                                        Value="@AudioDevices.AutomaticId"
                                        Class="divided">
                             <ItemLabel Text="Automatic"
-                                       Detail="@DefaultName(_playback)" />
+                                       Checked="@IsChecked(_playback, Controller.Settings.SystemAudioDeviceId, AudioDevices.AutomaticId)" />
                         </MudSelectItem>
                         @foreach (var device in _playback)
                         {
                             <MudSelectItem T="string"
                                            Value="device.Id">
                                 <ItemLabel Text="@device.Name"
-                                           Detail="@device.Adapter" />
+                                           Detail="@device.Adapter"
+                                           Checked="@IsChecked(_playback, Controller.Settings.SystemAudioDeviceId, device.Id)" />
                             </MudSelectItem>
                         }
                     </ChoiceSelect>
@@ -147,14 +149,15 @@
                                        Value="@AudioDevices.AutomaticId"
                                        Class="divided">
                             <ItemLabel Text="Automatic"
-                                       Detail="@DefaultName(_microphones)" />
+                                       Checked="@IsChecked(_microphones, Controller.Settings.MicrophoneDeviceId, AudioDevices.AutomaticId)" />
                         </MudSelectItem>
                         @foreach (var device in _microphones)
                         {
                             <MudSelectItem T="string"
                                            Value="device.Id">
                                 <ItemLabel Text="@device.Name"
-                                           Detail="@device.Adapter" />
+                                           Detail="@device.Adapter"
+                                           Checked="@IsChecked(_microphones, Controller.Settings.MicrophoneDeviceId, device.Id)" />
                             </MudSelectItem>
                         }
                     </ChoiceSelect>
@@ -219,5 +222,5 @@
                         Class="mb-3" />
             }
         </MudPaper>
-    </MudStack>
+    </MudElement>
 </Header>

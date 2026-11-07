@@ -146,7 +146,11 @@ public sealed class ClipLibrary : IDisposable
             return null;
         }
 
-        var metadata = ReadMetadata(file) ?? await ProbeMetadataAsync(file, token);
+        var metadata = ReadMetadata(file) is { } known
+            ? known.Width > 0
+                ? known
+                : await AddSizeAsync(file, known, token)
+            : await ProbeMetadataAsync(file, token);
         if (metadata is null)
         {
             return null;
@@ -162,7 +166,9 @@ public sealed class ClipLibrary : IDisposable
             File.Exists(thumbnail) ? thumbnail : null,
             metadata.Title,
             metadata.Game,
-            File.Exists(OriginalPathOf(path))
+            File.Exists(OriginalPathOf(path)),
+            metadata.Width,
+            metadata.Height
         );
     }
 
@@ -384,39 +390,58 @@ public sealed class ClipLibrary : IDisposable
     private async Task<ClipMetadata?> ProbeMetadataAsync(FileInfo file, CancellationToken token)
     {
         // A Clip Without Metadata Gets It From The File, Once
+        if (await ProbeOnceAsync(file, token) is not { } media)
+        {
+            return null;
+        }
+
+        // Generated Names Know Their Recording Time, Copies Do Not
+        var metadata = new ClipMetadata(
+            ClipNames.DateOf(Path.GetFileNameWithoutExtension(file.Name))
+                ?? new DateTimeOffset(file.CreationTimeUtc, TimeSpan.Zero),
+            media.Duration,
+            null,
+            null,
+            file.Length,
+            file.LastWriteTimeUtc,
+            (int)Math.Round(media.FrameRate),
+            Width: media.Width,
+            Height: media.Height
+        );
+        WriteMetadata(file.FullName, metadata);
+        return metadata;
+    }
+
+    private async Task<ClipMetadata> AddSizeAsync(
+        FileInfo file,
+        ClipMetadata metadata,
+        CancellationToken token
+    )
+    {
+        // Metadata From Before Sizes Were Kept Gets Them Once
+        if (await ProbeOnceAsync(file, token) is not { } media)
+        {
+            return metadata;
+        }
+
+        var sized = metadata with { Width = media.Width, Height = media.Height };
+        WriteMetadata(file.FullName, sized);
+        return sized;
+    }
+
+    private async Task<MediaInfo?> ProbeOnceAsync(FileInfo file, CancellationToken token)
+    {
         await _probing.WaitAsync(token);
         try
         {
-            MediaInfo? media;
-            try
-            {
-                media = await MediaProbe.ProbeAsync(file.FullName, token);
-            }
-            catch (Exception exception) when (exception is TimeoutException or Win32Exception)
-            {
-                // A Stuck Probe Leaves Out One New Clip, Never All
-                s_logger.Warn($"Failed To Probe A Clip {exception.GetType().Name}");
-                return null;
-            }
-
-            if (media is not { HasVideo: true, Duration: > 0 })
-            {
-                return null;
-            }
-
-            // Generated Names Know Their Recording Time, Copies Do Not
-            var metadata = new ClipMetadata(
-                ClipNames.DateOf(Path.GetFileNameWithoutExtension(file.Name))
-                    ?? new DateTimeOffset(file.CreationTimeUtc, TimeSpan.Zero),
-                media.Duration,
-                null,
-                null,
-                file.Length,
-                file.LastWriteTimeUtc,
-                (int)Math.Round(media.FrameRate)
-            );
-            WriteMetadata(file.FullName, metadata);
-            return metadata;
+            var media = await MediaProbe.ProbeAsync(file.FullName, token);
+            return media is { HasVideo: true, Duration: > 0 } ? media : null;
+        }
+        catch (Exception exception) when (exception is TimeoutException or Win32Exception)
+        {
+            // A Stuck Probe Leaves Out One New Clip, Never All
+            s_logger.Warn($"Failed To Probe A Clip {exception.GetType().Name}");
+            return null;
         }
         finally
         {

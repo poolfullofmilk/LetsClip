@@ -103,7 +103,9 @@ public static class ClipSaver
                     default,
                     frameRate,
                     null,
-                    game
+                    game,
+                    media.Width,
+                    media.Height
                 )
             );
             return await library.GetAsync(finalPath, CancellationToken.None)

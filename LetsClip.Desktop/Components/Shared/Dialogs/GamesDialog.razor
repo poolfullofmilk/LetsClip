@@ -6,19 +6,40 @@
     </TitleContent>
     <DialogContent>
         <MudStack Spacing="3">
-            @* Game Search *@
-            <MudTextField T="string"
-                          @bind-Value="_search"
-                          Immediate
-                          Placeholder="Search"
-                          Adornment="Adornment.Start"
-                          AdornmentIcon="@Icons.Material.Rounded.Search"
-                          Clearable
-                          ClearIcon="@Icons.Material.Rounded.Clear"
-                          Variant="Variant.Outlined"
-                          Margin="Margin.Dense"
-                          aria-label="Search Games and Apps"
-                          Class="my-0" />
+            <MudStack Row
+                      Spacing="3">
+                @* Games Or Apps Group *@
+                <MudButtonGroup OverrideStyles="false"
+                                Class="inset">
+                    @* Games Button *@
+                    <MudButton Variant="@(_showApps ? Variant.Text : Variant.Filled)"
+                               Color="@(_showApps ? Color.Default : Color.Info)"
+                               Class="px-4"
+                               OnClick="() => _showApps = false">
+                        Games
+                    </MudButton>
+                    @* Apps Button *@
+                    <MudButton Variant="@(_showApps ? Variant.Filled : Variant.Text)"
+                               Color="@(_showApps ? Color.Info : Color.Default)"
+                               Class="px-4"
+                               OnClick="() => _showApps = true">
+                        Apps
+                    </MudButton>
+                </MudButtonGroup>
+                @* Game Search *@
+                <MudTextField T="string"
+                              @bind-Value="_search"
+                              Immediate
+                              Placeholder="Search"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Rounded.Search"
+                              Clearable
+                              ClearIcon="@Icons.Material.Rounded.Clear"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              aria-label="Search Games and Apps"
+                              Class="my-0" />
+            </MudStack>
             @if (IsLoading)
             {
                 <Loading />
@@ -26,7 +47,7 @@
             else if (ShownRows.Count == 0)
             {
                 <EmptyState Icon="@Icons.Material.Rounded.SearchOff"
-                            Text="No Games or Apps Found" />
+                            Text="@(_showApps ? "No Apps Found" : "No Games Found")" />
             }
             else
             {

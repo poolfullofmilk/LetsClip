@@ -106,7 +106,7 @@
                 </FieldDetail>
                 @* Quality Select *@
                 <FieldDetail Color="@QualityColor(Controller.Settings.Quality)"
-                             Detail="@RecommendedText(Controller.Settings.Quality == CaptureQuality.Normal)">
+                             Detail="@RecommendedText(Controller.Settings.Quality == CaptureController.RecommendedQuality)">
                     <ChoiceSelect T="CaptureQuality"
                                   Label="Quality"
                                   Value="Controller.Settings.Quality"
@@ -118,7 +118,7 @@
                                            Value="quality">
                                 <ItemLabel Text="@QualityLabel(quality)"
                                            Color="@QualityColor(quality)"
-                                           Detail="@RecommendedText(quality == CaptureQuality.Normal)" />
+                                           Detail="@RecommendedText(quality == CaptureController.RecommendedQuality)" />
                             </MudSelectItem>
                         }
                     </ChoiceSelect>

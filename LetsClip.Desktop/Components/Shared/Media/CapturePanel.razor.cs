@@ -23,7 +23,7 @@ public partial class CapturePanel : IDisposable
     private bool IsRecommended =>
         Controller.Resolution == Controller.RecommendedResolution
         && Controller.FrameRate == Controller.RecommendedFrameRate
-        && Controller.Settings.Quality == CaptureQuality.Normal;
+        && Controller.Settings.Quality == CaptureController.RecommendedQuality;
 
     // One Alert At Most, The Most Pressing First
     private (Severity Severity, string Text)? Alert =>
@@ -174,7 +174,7 @@ public partial class CapturePanel : IDisposable
             {
                 Resolution = resolution,
                 FrameRate = rate,
-                Quality = CaptureQuality.Normal,
+                Quality = CaptureController.RecommendedQuality,
             }
         );
     }

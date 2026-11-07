@@ -105,7 +105,7 @@ public partial class ExportPanel : IDisposable
 
     // The Most Video Gets, Still Scenes Come Out Smaller
     private string BitrateText =>
-        Budget.VideoBitsPerSecond > 0 ? $"{Budget.VideoBitsPerSecond / 1e6:0.0} Mbps" : "-";
+        Budget.VideoBitsPerSecond > 0 ? Formatter.FormatBitrate(Budget.VideoBitsPerSecond) : "-";
 
     private string VerdictText =>
         Budget.Verdict == BudgetVerdict.TooSmall ? "Too Small" : Budget.Verdict.ToString();

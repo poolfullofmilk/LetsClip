@@ -83,8 +83,10 @@ window.letsClip = (() => {
     };
 
     // Each Clip Opens Playing Its Kept Part With Sound
-    const attach = (video, playhead, timeline, dotnet, length, start, end, volume, separator, frames) => {
+    const attach = (video, source, playhead, timeline, dotnet, length, start, end, volume, separator, frames) => {
         detach();
+        // Detach Removed The Source Behind Blazor's Back
+        if (video.getAttribute("src") !== source) video.setAttribute("src", source);
         // Frame Starts, Then The Clip's End
         const bounds = [...new Set(frames.map((time) => Math.max(0, time)).filter((time) => time < length)), length].sort((first, second) => first - second);
         // One Signal Takes Every Listener Off On Detach

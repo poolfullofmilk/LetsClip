@@ -11,7 +11,9 @@ public sealed record ClipInfo(
     string? ThumbnailPath,
     string? CustomTitle,
     string? Game,
-    bool HasOriginal
+    bool HasOriginal,
+    int Width,
+    int Height
 )
 {
     // Clips Without A Game Recorded The Monitor
@@ -20,7 +22,4 @@ public sealed record ClipInfo(
     // A Given Name, Else The Game, Else Monitor
     public string Title =>
         CustomTitle ?? Game ?? (ClipNames.DateOf(Name) is null ? Name : MonitorTitle);
-
-    public string Details =>
-        $"{Formatter.FormatDateTime(RecordedAt)} · {Formatter.FormatSize(SizeBytes)}";
 }

@@ -21,18 +21,21 @@ public partial class GamesDialog : IDisposable
     private Dictionary<string, GameEntry> _listed = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _icons = new(StringComparer.OrdinalIgnoreCase);
     private string? _search;
+    private bool _showApps;
 
     private bool IsLoading => _apps is null || !Controller.GamesScanned;
 
+    // Library Games Under Games, Everything Else Under Apps
     private IReadOnlyList<AddedGame> ShownRows =>
-        string.IsNullOrWhiteSpace(_search)
-            ? _rows
-            :
-            [
-                .. _rows.Where(row =>
-                    row.Name.Contains(_search.Trim(), StringComparison.CurrentCultureIgnoreCase)
-                ),
-            ];
+        [
+            .. _rows.Where(row =>
+                IsInstalledGame(row) != _showApps
+                && (
+                    string.IsNullOrWhiteSpace(_search)
+                    || row.Name.Contains(_search.Trim(), StringComparison.CurrentCultureIgnoreCase)
+                )
+            ),
+        ];
 
     protected override async Task OnInitializedAsync()
     {
@@ -99,6 +102,11 @@ public partial class GamesDialog : IDisposable
         return _listed.TryGetValue(row.Key, out var game) && !game.IsRemoved;
     }
 
+    private bool IsInstalledGame(AddedGame row)
+    {
+        return _listed.TryGetValue(row.Key, out var game) && game.IsInstalledGame;
+    }
+
     private void SetRecorded(AddedGame row, bool on)
     {
         // Listed Ones Switch In Place, An App Joins The List
@@ -114,10 +122,15 @@ public partial class GamesDialog : IDisposable
 
     private void BrowseForGame()
     {
-        if (DesktopShell.PickGame() is { } path)
+        if (DesktopShell.PickGame() is not { } path)
         {
-            Controller.AddGame(GameWatcher.GameOf(path));
+            return;
         }
+
+        // The Added Exe Shows Where It Lands
+        var game = GameWatcher.GameOf(path);
+        _showApps = !IsInstalledGame(game);
+        Controller.AddGame(game);
     }
 
     public void Dispose()

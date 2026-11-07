@@ -1,3 +1,4 @@
+using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
 using LetsClip.Desktop.Components.Shared.Dialogs;
 using LetsClip.Desktop.Interop;
@@ -152,6 +153,19 @@ public partial class Clips : IDisposable
     {
         // Its Own Name, So The Card Moves Rather Than Fades
         return $"clip-{(uint)clip.Path.GetHashCode(StringComparison.OrdinalIgnoreCase)}";
+    }
+
+    private static IEnumerable<string> FactsOf(ClipInfo clip)
+    {
+        // Stacked From The Bottom Left, The Date Last
+        if (clip.Width > 0)
+        {
+            yield return $"{clip.Width} × {clip.Height}";
+        }
+
+        yield return Formatter.FormatBitrate(clip.SizeBytes * 8 / clip.Duration);
+        yield return Formatter.FormatSize(clip.SizeBytes);
+        yield return Formatter.FormatDateTime(clip.RecordedAt);
     }
 
     #region Game Filter

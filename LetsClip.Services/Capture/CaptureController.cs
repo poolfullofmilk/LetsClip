@@ -92,6 +92,8 @@ public sealed class CaptureController : IDisposable
             .DefaultIfEmpty(ResolutionChoices[0])
             .Max();
 
+    public const CaptureQuality RecommendedQuality = CaptureQuality.Normal;
+
     public int RecommendedFrameRate =>
         FrameRateChoices.Where(rate => rate <= (_hasHardwareEncoder.Value ? 60 : 30)).Max();
 
@@ -207,7 +209,8 @@ public sealed class CaptureController : IDisposable
                 game.Key,
                 game.Name,
                 game.Path,
-                removed.Contains(game.Key)
+                removed.Contains(game.Key),
+                _installedGames?.ContainsKey(game.Key) == true
             )),
         ];
     }

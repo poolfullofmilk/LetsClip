@@ -194,12 +194,16 @@ public sealed class AudioMixer : IDisposable
         // A Packet Within 20 ms Of The Last Continues It
         private const int ContinuityFrames = SampleRate / 50;
 
+        // Drift Past 2 ms Slews One Frame Per Packet
+        private const int DriftFrames = SampleRate / 500;
+
         private readonly float[] _ring = new float[RingFrames * Channels];
         private readonly Lock _gate = new();
         private readonly Lock _connection = new();
         private WasapiRecorder? _recorder;
         private long? _expectedFrame;
         private long _drainedFrame;
+        private long _slewedFrames;
 
         private bool _disposed;
         private long _lateFrames;
@@ -342,7 +346,19 @@ public sealed class AudioMixer : IDisposable
                     && !flags.HasFlag(AudioClientBufferFlags.DataDiscontinuity)
                 )
                 {
-                    frame = expected;
+                    // A Repeated Frame Is Inaudible, Jumps Left 20 ms Gaps
+                    var step =
+                        Math.Abs(frame - expected) > DriftFrames ? Math.Sign(frame - expected) : 0;
+                    if (step > 0 && expected - 1 >= _drainedFrame)
+                    {
+                        var gap = (int)(expected % RingFrames) * Channels;
+                        var previous = (int)((expected - 1) % RingFrames) * Channels;
+                        _ring[gap] = _ring[previous];
+                        _ring[gap + 1] = _ring[previous + 1];
+                    }
+
+                    _slewedFrames += step;
+                    frame = expected + step;
                 }
 
                 _expectedFrame = frame + frames;
@@ -408,6 +424,9 @@ public sealed class AudioMixer : IDisposable
                 _disposed = true;
                 Disconnect();
             }
+
+            // How Far The Device Clock Ran From The System's
+            s_logger.Debug($"Slewed {kind} By {_slewedFrames} Frames");
         }
     }
 }

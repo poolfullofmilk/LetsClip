@@ -34,6 +34,9 @@ public static class ClipExporter
     private static readonly TimeSpan s_timeout = TimeSpan.FromMinutes(30);
     private static readonly TimeSpan s_stall = TimeSpan.FromSeconds(15);
 
+    // AMF Shows Progress Within A Second, A Silent Start Hung
+    private static readonly TimeSpan s_hardwareStart = TimeSpan.FromSeconds(5);
+
     public const string TooSmallMessage =
         "Too little room for this length, pick a larger size or a shorter selection";
 
@@ -167,6 +170,7 @@ public static class ClipExporter
             foreach (var encoder in encoders)
             {
                 var bitrate = budget.VideoBitsPerSecond * (encoder.IsHardware ? HardwareAim : 1);
+                var restarted = false;
                 for (var attempt = 1; attempt <= AttemptsPerEncoder; attempt++)
                 {
                     attempts++;
@@ -174,9 +178,17 @@ public static class ClipExporter
                     {
                         await EncodeAsync(job, encoder, bitrate, attempts, progress, token);
                     }
+                    catch (ExportException exception) when (encoder.IsHardware && !restarted)
+                    {
+                        // AMF Can Fail Starting Right After Another Session
+                        s_logger.Warn($"Restarted Export With {encoder.Name}, {exception.Message}");
+                        restarted = true;
+                        attempt--;
+                        continue;
+                    }
                     catch (ExportException exception) when (encoder.IsHardware)
                     {
-                        // A Hardware Encoder That Fails Hands Over To x264
+                        // Failing Twice Hands Over To x264
                         s_logger.Warn($"Failed To Export With {encoder.Name}, {exception.Message}");
                         break;
                     }
@@ -333,7 +345,8 @@ public static class ClipExporter
                 0,
                 1,
                 progress,
-                token
+                token,
+                s_hardwareStart
             );
             return;
         }
@@ -425,7 +438,8 @@ public static class ClipExporter
         double offset,
         double share,
         IProgress<ExportProgress> progress,
-        CancellationToken token
+        CancellationToken token,
+        TimeSpan? firstProgress = null
     )
     {
         // Progress Arrives As out_time_us Lines, Throttled To Whole Percents
@@ -433,7 +447,7 @@ public static class ClipExporter
         var lastMicroseconds = -1L;
         // Never Disposed, The Pipe Reader Can Outlive A Killed Pass
         var stall = CancellationTokenSource.CreateLinkedTokenSource(token);
-        stall.CancelAfter(s_stall);
+        stall.CancelAfter(firstProgress ?? s_stall);
         ProcessResult result;
         try
         {

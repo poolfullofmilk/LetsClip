@@ -297,6 +297,16 @@ public sealed class ReplayRecorder : IDisposable
             return;
         }
 
+        // A Closed Game Ends Its Capture First, No Error
+        if (
+            session.Options.GameWindow != 0
+            && MonitorCatalog.ClientSizeOf(session.Options.GameWindow) is null
+        )
+        {
+            await FailAsync(session, "Recording stopped, the window closed", quiet: true);
+            return;
+        }
+
         var exited = session.Video is { HasExited: true } video ? video : session.Audio;
         var reason =
             session.Video?.LastError
@@ -305,7 +315,7 @@ public sealed class ReplayRecorder : IDisposable
         await FailAsync(session, $"Recording stopped, {reason}");
     }
 
-    private async Task FailAsync(CaptureSession session, string message)
+    private async Task FailAsync(CaptureSession session, string message, bool quiet = false)
     {
         // A Broken Session Ends Whole, Its History Untrusted
         await _transition.WaitAsync();
@@ -325,9 +335,16 @@ public sealed class ReplayRecorder : IDisposable
             _health.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
 
             // The Controller Hears First, A Quick Retry Shows No Error
-            Failed?.Invoke(Stopwatch.GetElapsedTime(session.OriginTimestamp) > s_ranLong);
+            Failed?.Invoke(quiet || Stopwatch.GetElapsedTime(session.OriginTimestamp) > s_ranLong);
             SetStatus(Status with { State = CaptureState.Error, Message = message });
-            s_logger.Warn($"Stopped Recording With An Error, {message}");
+            if (quiet)
+            {
+                s_logger.Info("Stopped Recording, The Window Closed");
+            }
+            else
+            {
+                s_logger.Warn($"Stopped Recording With An Error, {message}");
+            }
         }
         finally
         {

@@ -174,6 +174,7 @@ public partial class ClipEditor : IAsyncDisposable
         await JavaScript.InvokeVoidAsync(
             "letsClip.attach",
             _video,
+            VideoUrl,
             _playhead,
             _timeline,
             _reference,

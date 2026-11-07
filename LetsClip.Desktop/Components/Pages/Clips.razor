@@ -149,69 +149,69 @@
                 else
                 {
                     @* Clip Cards *@
-                    <MudGrid Spacing="3">
-
+                    <MudElement HtmlTag="div"
+                                Class="clip-grid">
                         @foreach (var clip in ShownClips)
                         {
-                            <MudItem @key="clip.Path"
-                                     xs="12"
-                                     sm="6"
-                                     lg="4"
-                                     xl="3"
-                                     Style="@($"view-transition-name:{CardName(clip)}")">
-                                @* Clip Card *@
-                                <MudPaper Elevation="4"
-                                          Class="rounded-panel pa-4 hover-card"
-                                          role="button"
-                                          tabindex="0"
-                                          data-keyclick
-                                          aria-label="@($"Open {clip.Title}")"
-                                          @onclick="() => Open(clip)">
-                                    <MudElement HtmlTag="div"
-                                                Class="clip-thumb rounded-inner">
-                                        @if (DesktopShell.ThumbnailUrl(clip.ThumbnailPath) is { Length: > 0 } thumbnail)
+                            @* Clip Card *@
+                            <MudPaper @key="clip.Path"
+                                      Elevation="4"
+                                      Class="rounded-panel pa-4 hover-card"
+                                      role="button"
+                                      tabindex="0"
+                                      data-keyclick
+                                      aria-label="@($"Open {clip.Title}")"
+                                      Style="@($"view-transition-name:{CardName(clip)}")"
+                                      @onclick="() => Open(clip)">
+                                <MudElement HtmlTag="div"
+                                            Class="clip-thumb rounded-inner">
+                                    @if (DesktopShell.ThumbnailUrl(clip.ThumbnailPath) is { Length: > 0 } thumbnail)
+                                    {
+                                        <MudImage Src="@thumbnail"
+                                                  Alt="@clip.Title" />
+                                    }
+                                    <MudStack Spacing="1"
+                                              AlignItems="AlignItems.Start"
+                                              Class="clip-facts">
+                                        @foreach (var fact in FactsOf(clip))
                                         {
-                                            <MudImage Src="@thumbnail"
-                                                      Alt="@clip.Title" />
+                                            <MudChip T="string"
+                                                     Size="Size.Small"
+                                                     Variant="Variant.Filled"
+                                                     Color="Color.Dark"
+                                                     Class="ma-0">
+                                                @fact
+                                            </MudChip>
                                         }
-                                        <MudChip T="string"
-                                                 Size="Size.Small"
-                                                 Variant="Variant.Filled"
-                                                 Color="Color.Dark"
-                                                 Class="clip-duration ma-0">
-                                            @Formatter.FormatDuration(clip.Duration)
-                                        </MudChip>
-                                    </MudElement>
-                                    <MudStack Row
-                                              AlignItems="AlignItems.Center"
-                                              Spacing="1"
-                                              Class="mt-2">
-                                        <MudStack Spacing="0"
-                                                  Class="flex-grow-1"
-                                                  Style="min-width:0">
-                                            <MudText Typo="Typo.subtitle2"
-                                                     Class="ellipsis">
-                                                @clip.Title
-                                            </MudText>
-                                            <MudText Typo="Typo.caption"
-                                                     Class="mud-text-secondary ellipsis">
-                                                @clip.Details
-                                            </MudText>
-                                        </MudStack>
-                                        @* Delete Button *@
-                                        <MudElement HtmlTag="span"
-                                                    ClickPropagation="false">
-                                            <IconButton Icon="@Icons.Material.Rounded.Delete"
-                                                        Text="Delete Clip"
-                                                        Color="Color.Error"
-                                                        OnClick="() => DeleteAsync(clip)" />
-                                        </MudElement>
                                     </MudStack>
-                                </MudPaper>
-                            </MudItem>
+                                    <MudChip T="string"
+                                             Size="Size.Small"
+                                             Variant="Variant.Filled"
+                                             Color="Color.Dark"
+                                             Class="clip-duration ma-0">
+                                        @Formatter.FormatDuration(clip.Duration)
+                                    </MudChip>
+                                </MudElement>
+                                <MudStack Row
+                                          AlignItems="AlignItems.Center"
+                                          Spacing="1"
+                                          Class="mt-2">
+                                    <MudText Typo="Typo.h6"
+                                             Class="ellipsis flex-grow-1">
+                                        @clip.Title
+                                    </MudText>
+                                    @* Delete Button *@
+                                    <MudElement HtmlTag="span"
+                                                ClickPropagation="false">
+                                        <IconButton Icon="@Icons.Material.Rounded.Delete"
+                                                    Text="Delete Clip"
+                                                    Color="Color.Error"
+                                                    OnClick="() => DeleteAsync(clip)" />
+                                    </MudElement>
+                                </MudStack>
+                            </MudPaper>
                         }
-
-                    </MudGrid>
+                    </MudElement>
                 }
             </ChildContent>
         </Header>

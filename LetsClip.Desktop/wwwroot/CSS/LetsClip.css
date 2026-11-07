@@ -232,6 +232,14 @@
     max-width: 100%;
 }
 
+/* Settings Fill Rows, Two Once Both Fit Microphone's 640 Px */
+.settings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(656px, 1fr));
+    align-items: start;
+    gap: 24px;
+}
+
 /* Panel Selects Hold Short Values Like 20 MB */
 .short-width {
     flex: none !important;
@@ -265,7 +273,7 @@
         margin-inline: -9px;
     }
 
-/* Two Columns Side By Side, Stacked Once The Window Narrows */
+/* Two Columns Side By Side At Every Window Width */
 .split {
     display: flex;
     align-items: flex-start;
@@ -282,56 +290,12 @@
     min-width: 0;
 }
 
-@media (max-width: 1100px) {
-    .split {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .side-panel {
-        width: auto;
-    }
-
-    /* Stacked, Boxes Fit Their Content, The Player Stays 16:9 */
-    .page-fill {
-        height: auto;
-    }
-
-    .fill,
-    .main-panel {
-        flex: none;
-    }
-
-    .loading-state.page-loading {
-        height: auto;
-    }
-
-    .player {
-        aspect-ratio: 16 / 9;
-    }
-}
-
 /* The Navigation Panel Stays Beside The Page While It Scrolls */
 .nav-panel {
     position: sticky;
     top: var(--page-top);
     width: var(--nav-width);
     flex-shrink: 0;
-}
-
-/* Narrow Windows Keep Only Icons, Names Stay For Readers */
-@media (max-width: 900px) {
-    .nav-panel {
-        width: auto;
-    }
-
-    .nav-panel .mud-nav-link-text {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-    }
 }
 
 /* Info Icons Lift Like Chips, Centred On Capitals */
@@ -654,13 +618,15 @@
         transform: translateY(-50%);
     }
 
-/* Name Fills Its Row, Long Ones End In Dots */
+/* Name Grows With Its Text, Long Ones End In Dots */
 .name-field {
-    flex: 1 1 0;
-    min-width: 0;
+    flex: 0 1 auto;
+    min-width: 150px;
 }
 
     .name-field input {
+        field-sizing: content;
+        text-align: end;
         text-overflow: ellipsis;
     }
 
@@ -729,6 +695,13 @@ mark {
         box-shadow: 0 0 0 2px var(--tonal-info-hover), var(--mud-elevation-4);
     }
 
+/* Cards Stay Big Enough For Their Stacked Chips */
+.clip-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(272px, 1fr));
+    gap: 12px;
+}
+
 /* Thumbnails Keep The Clip's Shape, Portrait Ones Fit Inside */
 .clip-thumb {
     position: relative;
@@ -743,7 +716,13 @@ mark {
         display: block;
     }
 
-    /* The Length Sits Bottom Right */
+    /* Facts Stack Bottom Left, The Length Sits Bottom Right */
+    .clip-thumb .clip-facts {
+        position: absolute;
+        bottom: 8px;
+        left: 8px;
+    }
+
     .clip-thumb .clip-duration {
         position: absolute;
         right: 8px;
@@ -761,15 +740,13 @@ mark {
 }
 
 /* The Side Panel Takes What The Clip Leaves */
-@media (min-width: 1101px) {
-    .split.editor {
-        container-type: size;
-    }
-
-        .split.editor > .side-panel {
-            width: clamp(300px, calc(100cqw - 24px - 48px - (100cqh - 48px - 36px - var(--trim-gap) - var(--controls-height) - var(--timeline-height) - var(--trim-row-height)) * var(--clip-aspect)), 480px);
-        }
+.split.editor {
+    container-type: size;
 }
+
+    .split.editor > .side-panel {
+        width: clamp(300px, calc(100cqw - 24px - 48px - (100cqh - 48px - 36px - var(--trim-gap) - var(--controls-height) - var(--timeline-height) - var(--trim-row-height)) * var(--clip-aspect)), 480px);
+    }
 
 /* The Player Takes The Height Left, The Clip Centred */
 .player {

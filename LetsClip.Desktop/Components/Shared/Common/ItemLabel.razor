@@ -1,12 +1,24 @@
 @* Item Label *@
 <MudStack Row
+          AlignItems="AlignItems.Center"
           Justify="Justify.SpaceBetween"
           Spacing="4">
-    <MudText Typo="Typo.body2"
-             Color="Color"
-             Class="mud-typography-nowrap flex-shrink-0">
-        @Text
-    </MudText>
+    <MudStack Row
+              AlignItems="AlignItems.Center"
+              Spacing="2"
+              Class="flex-shrink-0">
+        @if (Checked is { } isChecked)
+        {
+            <MudIcon Icon="@Icons.Material.Rounded.Check"
+                     Size="Size.Small"
+                     Style="@(isChecked ? null : "visibility:hidden")" />
+        }
+        <MudText Typo="Typo.body2"
+                 Color="Color"
+                 Class="mud-typography-nowrap">
+            @Text
+        </MudText>
+    </MudStack>
     @if (Detail is not null)
     {
         <MudText Typo="Typo.body2"
