@@ -31,7 +31,6 @@ public sealed record UserSettings(
     double ExportMegabytes = 20,
     bool ExportFullFrameRate = false,
     bool ExportAudio = true,
-    double ExportVolume = 1,
     bool HasSeenTrayHint = false,
     int DefaultsVersion = UserSettings.CurrentDefaults
 )
@@ -164,9 +163,6 @@ public sealed record UserSettings(
             ExportMegabytes = SizeBudget.IsValidTarget(ExportMegabytes) ? ExportMegabytes : 20,
             SaveSoundVolume = double.IsFinite(SaveSoundVolume)
                 ? Math.Clamp(Math.Round(SaveSoundVolume, 1), 0.1, 1)
-                : 1,
-            ExportVolume = double.IsFinite(ExportVolume)
-                ? Math.Clamp(Math.Round(ExportVolume, 1), 0.1, 1)
                 : 1,
         };
     }

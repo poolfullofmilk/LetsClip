@@ -249,6 +249,17 @@
     padding-block: 8px;
 }
 
+    /* The Title Pushes Others Right, A Field May Fill */
+    .setting-row > :first-child {
+        margin-inline-end: auto;
+    }
+
+/* Editor Panels Sit Closer, With No Lines Between Rows */
+.compact .setting-row {
+    min-height: 40px;
+    padding-block: 2px;
+}
+
     /* Switches Drop Their Hover Padding, So They End Flush */
     .setting-row .mud-switch-span {
         margin-inline: -9px;
@@ -291,6 +302,10 @@
         flex: none;
     }
 
+    .loading-state.page-loading {
+        height: auto;
+    }
+
     .player {
         aspect-ratio: 16 / 9;
     }
@@ -319,9 +334,10 @@
     }
 }
 
-/* Info Icons Lift Like Chips, On The Slight Shadow */
+/* Info Icons Lift Like Chips, Centred On Capitals */
 .info-icon svg {
     filter: drop-shadow(var(--mud-elevation-1));
+    translate: 0 -1px;
 }
 
 /* Badges Lift Off Their Surface Like Chips */
@@ -390,6 +406,16 @@
     min-height: 320px;
     height: 100%;
 }
+
+/* One Spinner, Centred In The Room It Has */
+.loading-state {
+    min-height: 320px;
+}
+
+    /* Fills The Window Below The 40 Px Header */
+    .loading-state.page-loading {
+        height: calc(100vh - var(--page-top) - var(--page-bottom) - 40px);
+    }
 
 /* Marks Values Selectable Where MudBlazor Suppresses Selection */
 .selectable-text {
@@ -628,15 +654,13 @@
         transform: translateY(-50%);
     }
 
-/* The Recorded Date Sits Greyed At The Name's End */
-.title-field .mud-input-adornment-text {
-    margin-inline-start: 8px;
-    color: var(--mud-palette-text-secondary);
-    font-size: var(--mud-typography-body2-size);
+/* Name Fills Its Row, Long Ones End In Dots */
+.name-field {
+    flex: 1 1 0;
+    min-width: 0;
 }
 
-    /* A Long Name Ends In Dots Before The Date */
-    .title-field input {
+    .name-field input {
         text-overflow: ellipsis;
     }
 
@@ -719,19 +743,11 @@ mark {
         display: block;
     }
 
-    /* Resolution And Frame Rate Bottom Left, Length Bottom Right */
-    .clip-thumb .clip-media,
+    /* The Length Sits Bottom Right */
     .clip-thumb .clip-duration {
         position: absolute;
-        bottom: 8px;
-    }
-
-    .clip-thumb .clip-media {
-        left: 8px;
-    }
-
-    .clip-thumb .clip-duration {
         right: 8px;
+        bottom: 8px;
     }
 /* #endregion */
 
@@ -741,6 +757,7 @@ mark {
     --controls-height: 36px;
     --timeline-height: 64px;
     --trim-row-height: 40px;
+    --trim-gap: 6px;
 }
 
 /* The Side Panel Takes What The Clip Leaves */
@@ -750,7 +767,7 @@ mark {
     }
 
         .split.editor > .side-panel {
-            width: clamp(300px, calc(100cqw - 24px - 48px - (100cqh - 48px - 36px - var(--controls-height) - var(--timeline-height) - var(--trim-row-height)) * var(--clip-aspect)), 480px);
+            width: clamp(300px, calc(100cqw - 24px - 48px - (100cqh - 48px - 36px - var(--trim-gap) - var(--controls-height) - var(--timeline-height) - var(--trim-row-height)) * var(--clip-aspect)), 480px);
         }
 }
 
@@ -941,10 +958,11 @@ mark {
     font-variant-numeric: tabular-nums;
 }
 
-/* Start And End Fields Fit 1m30,5s */
+/* Start And End Fit 1m30,5s, Labels Clear The Timeline */
 .trim-row {
     flex-shrink: 0;
     height: var(--trim-row-height);
+    margin-top: var(--trim-gap);
 }
 
 .trim-field {
@@ -963,7 +981,7 @@ mark {
     opacity: 0.7;
 }
 
-/* The Volume Slider Opens Beside Its Button, Inside Its Panel */
+/* The Volume Slider Opens Above Its Button */
 .volume {
     position: relative;
     display: flex;
@@ -972,12 +990,12 @@ mark {
 /* Its Padding Bridges The Gap, Hover Stays */
 .volume-pop {
     position: absolute;
-    top: 50%;
-    right: 100%;
+    bottom: 100%;
+    left: 50%;
     z-index: 10;
     display: none;
-    padding-right: 8px;
-    transform: translateY(-50%);
+    padding-bottom: 8px;
+    transform: translateX(-50%);
 }
 
     .volume:is(:hover, :focus-within) .volume-pop {

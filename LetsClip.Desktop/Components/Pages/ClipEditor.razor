@@ -32,24 +32,16 @@ else
             <IconButton Icon="@Icons.Material.Rounded.ArrowBack"
                         Text="All Clips"
                         OnClick="Back" />
-            @* Clip Name Field *@
-            <MudTextField @key="_path"
-                          @ref="_titleField"
-                          T="string"
-                          Value="_titleText"
-                          ValueChanged="TypeTitle"
-                          Immediate
-                          Placeholder="@DefaultTitle"
-                          Variant="Variant.Outlined"
-                          Margin="Margin.Dense"
-                          Adornment="Adornment.End"
-                          AdornmentText="@RecordedText"
-                          Disabled="@(_clip is null)"
-                          OnBlur="SettleTitle"
-                          OnKeyDown="TitleKeyAsync"
-                          Label="Name"
-                          Class="title-field fixed-width my-0" />
+            <MudText Typo="Typo.h5"
+                     Class="header-title mx-2">
+                @Title
+            </MudText>
             <MudSpacer />
+            @* Save Cut Button *@
+            <IconButton Icon="@Icons.Material.Rounded.Save"
+                        Text="Save Cut"
+                        Disabled="@(!CanSaveCut())"
+                        OnClick="() => SaveCutAsync(_range)" />
             @if (_clip?.HasOriginal == true)
             {
                 @* Restore Button *@
@@ -123,9 +115,9 @@ else
                             <MudStack Row
                                       AlignItems="AlignItems.Center"
                                       Justify="Justify.Center"
-                                      Spacing="1">
+                                      Spacing="3">
                                 @* Back Button *@
-                                <IconButton Icon="@Icons.Material.Rounded.Replay5"
+                                <IconButton Icon="@Icons.Material.Rounded.FastRewind"
                                             Text="Back 5 Seconds"
                                             Disabled="@(!_ready)"
                                             OnClick="() => NudgeAsync(-SeekStep)" />
@@ -137,7 +129,7 @@ else
                                             Disabled="@(!_ready)"
                                             OnClick="TogglePlayAsync" />
                                 @* Forward Button *@
-                                <IconButton Icon="@Icons.Material.Rounded.Forward5"
+                                <IconButton Icon="@Icons.Material.Rounded.FastForward"
                                             Text="Forward 5 Seconds"
                                             Disabled="@(!_ready)"
                                             OnClick="() => NudgeAsync(SeekStep)" />
@@ -241,11 +233,39 @@ else
                         Class="side-panel">
                 @if (_media is { } media && _clip is { } clip)
                 {
-                    <ExportPanel @key="clip.Path"
-                                 Clip="clip"
-                                 OnSaveCut="SaveCutAsync"
-                                 Range="_range"
-                                 Media="media" />
+                    <MudStack Spacing="6">
+                        @* Details Panel *@
+                        <MudPaper Elevation="4"
+                                  Class="rounded-panel px-6 py-2 compact">
+                            <SettingRow Title="Name">
+                                @* Clip Name Field *@
+                                <MudTextField @key="_path"
+                                              @ref="_titleField"
+                                              T="string"
+                                              Value="_titleText"
+                                              ValueChanged="TypeTitle"
+                                              Immediate
+                                              Placeholder="@DefaultTitle"
+                                              Variant="Variant.Outlined"
+                                              Margin="Margin.Dense"
+                                              OnBlur="SettleTitle"
+                                              OnKeyDown="TitleKeyAsync"
+                                              aria-label="Clip Name"
+                                              Class="name-field my-0" />
+                            </SettingRow>
+                            <SettingRow Title="Recorded">
+                                <MudText Typo="Typo.body2"
+                                         Class="mud-text-secondary">
+                                    @RecordedText
+                                </MudText>
+                            </SettingRow>
+                        </MudPaper>
+                        <ExportPanel @key="clip.Path"
+                                     Clip="clip"
+                                     OnSaveCut="SaveCutAsync"
+                                     Range="_range"
+                                     Media="media" />
+                    </MudStack>
                 }
             </MudElement>
         </MudElement>

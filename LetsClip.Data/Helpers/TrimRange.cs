@@ -29,6 +29,12 @@ public readonly record struct TrimRange(double Start, double End)
             && End - Start >= Step - Tolerance;
     }
 
+    public bool CutsShort(double duration)
+    {
+        // Shorter Than The Clip By More Than Half A Step
+        return Length < duration - (Step / 2);
+    }
+
     public static TrimRange Whole(double duration)
     {
         return new TrimRange(0, Math.Max(0, duration));
@@ -50,6 +56,9 @@ public readonly record struct TrimRange(double Start, double End)
             && !new TrimRange(5, 5).IsValidFor(10)
             && !new TrimRange(-0.1, 5).IsValidFor(10)
             && !new TrimRange(double.NaN, 5).IsValidFor(10)
+            && range.CutsShort(10)
+            && !Whole(10).CutsShort(10)
+            && !new TrimRange(0, 9.96).CutsShort(10)
             && Fit(4, 3, 10) == Whole(10)
             && Fit(1, 30, 10) == new TrimRange(1, 10);
     }

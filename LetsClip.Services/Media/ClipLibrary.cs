@@ -146,11 +146,7 @@ public sealed class ClipLibrary : IDisposable
             return null;
         }
 
-        // Older Metadata Lacks A Size, Probed Once Keeping Its Trim
-        var known = ReadMetadata(file);
-        var metadata = known is { Width: > 0 }
-            ? known
-            : await ProbeMetadataAsync(file, known, token);
+        var metadata = ReadMetadata(file) ?? await ProbeMetadataAsync(file, token);
         if (metadata is null)
         {
             return null;
@@ -164,9 +160,6 @@ public sealed class ClipLibrary : IDisposable
             metadata.Duration,
             file.Length,
             File.Exists(thumbnail) ? thumbnail : null,
-            metadata.Width,
-            metadata.Height,
-            metadata.FrameRate ?? 0,
             metadata.Title,
             metadata.Game,
             File.Exists(OriginalPathOf(path))
@@ -388,11 +381,7 @@ public sealed class ClipLibrary : IDisposable
         TryDelete(MetadataPathOf(path));
     }
 
-    private async Task<ClipMetadata?> ProbeMetadataAsync(
-        FileInfo file,
-        ClipMetadata? known,
-        CancellationToken token
-    )
+    private async Task<ClipMetadata?> ProbeMetadataAsync(FileInfo file, CancellationToken token)
     {
         // A Clip Without Metadata Gets It From The File, Once
         await _probing.WaitAsync(token);
@@ -407,32 +396,25 @@ public sealed class ClipLibrary : IDisposable
             {
                 // A Stuck Probe Leaves Out One New Clip, Never All
                 s_logger.Warn($"Failed To Probe A Clip {exception.GetType().Name}");
-                return known;
+                return null;
             }
 
             if (media is not { HasVideo: true, Duration: > 0 })
             {
-                return known;
+                return null;
             }
 
             // Generated Names Know Their Recording Time, Copies Do Not
-            var metadata =
-                known
-                ?? new ClipMetadata(
-                    ClipNames.DateOf(Path.GetFileNameWithoutExtension(file.Name))
-                        ?? new DateTimeOffset(file.CreationTimeUtc, TimeSpan.Zero),
-                    media.Duration,
-                    null,
-                    null,
-                    file.Length,
-                    file.LastWriteTimeUtc
-                );
-            metadata = metadata with
-            {
-                FrameRate = metadata.FrameRate ?? (int)Math.Round(media.FrameRate),
-                Width = media.Width,
-                Height = media.Height,
-            };
+            var metadata = new ClipMetadata(
+                ClipNames.DateOf(Path.GetFileNameWithoutExtension(file.Name))
+                    ?? new DateTimeOffset(file.CreationTimeUtc, TimeSpan.Zero),
+                media.Duration,
+                null,
+                null,
+                file.Length,
+                file.LastWriteTimeUtc,
+                (int)Math.Round(media.FrameRate)
+            );
             WriteMetadata(file.FullName, metadata);
             return metadata;
         }

@@ -91,19 +91,6 @@ public static partial class Formatter
         return megabytes.ToString("0.#", Shown) + " MB";
     }
 
-    public static string FormatResolution(int width, int height)
-    {
-        // The Short Side Names It, Slightly Small Windows Still Count
-        return Math.Min(width, height) switch
-        {
-            >= 1800 => "4K",
-            >= 1260 => "QHD",
-            >= 900 => "FHD",
-            >= 600 => "HD",
-            _ => "SD",
-        };
-    }
-
     private static bool SelfTestPasses()
     {
         var evening = new DateTimeOffset(new DateTime(2026, 11, 4, 22, 43, 5, DateTimeKind.Local));
@@ -115,13 +102,6 @@ public static partial class Formatter
             && FormatDateTime(morning.AddDays(1), today) == "7-11-2026 at 8:05"
             && FormatFileDate(morning) == "6-11-2026 at 8h05"
             && FormatFileDate(evening) == "4-11-2026 at 22h43"
-            && FormatResolution(1920, 1080) == "FHD"
-            && FormatResolution(1080, 1920) == "FHD"
-            && FormatResolution(1916, 1032) == "FHD"
-            && FormatResolution(2560, 1440) == "QHD"
-            && FormatResolution(3840, 2160) == "4K"
-            && FormatResolution(1280, 720) == "HD"
-            && FormatResolution(854, 480) == "SD"
             && FormatSize(20_000_000) == $"20{Point}0 MB"
             && FormatSize(999_499) == "999 KB"
             && FormatSize(1_250_000_000) == $"1{Point}25 GB"

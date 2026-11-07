@@ -77,7 +77,7 @@ public partial class ExportPanel : IDisposable
 
     private bool IsExporting => _progress is not null;
 
-    private bool IsCut => Range.Length < Media.Duration - TrimRange.Step / 2;
+    private bool IsCut => Range.CutsShort(Media.Duration);
 
     // Once Exported, The Same Selection Reads Again
     private string ExportText =>
@@ -100,8 +100,8 @@ public partial class ExportPanel : IDisposable
 
     private ExportBudget Budget => SizeBudget.Plan(Megabytes, Shape);
 
-    private string VolumeText =>
-        WithAudio ? $"{Controller.Settings.ExportVolume * 100:0}%" : "Muted";
+    // Muted Reads Red, Like Every Removal
+    private string AudioClass => WithAudio ? "mud-text-secondary" : "mud-error-text";
 
     // The Most Video Gets, Still Scenes Come Out Smaller
     private string BitrateText =>
@@ -137,7 +137,7 @@ public partial class ExportPanel : IDisposable
             Range,
             Megabytes,
             FrameRate,
-            WithAudio ? Controller.Settings.ExportVolume : 0,
+            WithAudio,
             Controller.Settings.ExportsDirectory
         );
 
@@ -162,23 +162,6 @@ public partial class ExportPanel : IDisposable
     private void ToggleAudio()
     {
         Controller.UpdateSettings(settings => settings with { ExportAudio = !WithAudio });
-    }
-
-    private void SetVolume(double level)
-    {
-        // Zero Mutes, The Last Level Stays For Unmuting
-        Controller.UpdateSettings(settings =>
-            level > 0
-                ? settings with
-                {
-                    ExportAudio = true,
-                    ExportVolume = level,
-                }
-                : settings with
-                {
-                    ExportAudio = false,
-                }
-        );
     }
 
     private void SetFullFrameRate(bool full)

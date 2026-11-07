@@ -13,8 +13,7 @@ public sealed record ExportRequest(
     TrimRange Range,
     double Megabytes,
     double FrameRate,
-    // Zero Leaves The Sound Out
-    double Volume,
+    bool WithAudio,
     string ExportsFolder
 );
 
@@ -113,7 +112,7 @@ public static class ClipExporter
 
         // Past The Ceiling Only Bloats, Unlimited Lands There
         var duration = request.Range.Length;
-        var withAudio = request.Volume > 0 && source.HasAudio;
+        var withAudio = request.WithAudio && source.HasAudio;
         var (width, height) = OutputSize(source.Width, source.Height);
         var frameRate = request.FrameRate;
         var sourceRate = new FileInfo(request.SourcePath).Length / source.Duration;
@@ -125,7 +124,7 @@ public static class ClipExporter
         var budget = SizeBudget.Plan(request.Megabytes, clip);
         var started = Stopwatch.StartNew();
         s_logger.Info(
-            $"Exporting {Path.GetFileName(request.SourcePath)} From {Formatter.FormatDuration(request.Range.Start)} To {Formatter.FormatDuration(request.Range.End)} At {width} × {height}, {frameRate} FPS, {(withAudio ? $"With Audio At {request.Volume * 100:0}%" : "Without Audio")}, Aiming Under {Formatter.FormatMegabytes(request.Megabytes)}, {budget.Verdict}"
+            $"Exporting {Path.GetFileName(request.SourcePath)} From {Formatter.FormatDuration(request.Range.Start)} To {Formatter.FormatDuration(request.Range.End)} At {width} × {height}, {frameRate} FPS, {(withAudio ? "With Audio" : "Without Audio")}, Aiming Under {Formatter.FormatMegabytes(request.Megabytes)}, {budget.Verdict}"
         );
         if (budget.Verdict == BudgetVerdict.TooSmall)
         {
@@ -312,8 +311,6 @@ public static class ClipExporter
             output.AddRange([
                 "-map",
                 "0:a:0",
-                "-af",
-                job.Request.Volume.ToString("'volume='0.#", CultureInfo.InvariantCulture),
                 "-c:a",
                 "aac",
                 "-b:a",

@@ -23,7 +23,7 @@ public sealed class CaptureSession(
 
     // Rumble Cut, Steady Noise Reduced, Quiet Gaps Gated
     private const string MicrophoneCleaning =
-        "[0:a]asplit[a][b];[a]pan=stereo|c0=c0|c1=c1[system];[b]pan=stereo|c0=c2|c1=c3,highpass=f=80,afftdn=nr=12:nf=-50:tn=1,agate=threshold=0.003:ratio=3:range=0.1:attack=5:release=200[voice];[system][voice]amix=inputs=2:normalize=0[audio]";
+        "[0:a]asplit[a][b];[a]pan=stereo|c0=c0|c1=c1[system];[b]pan=stereo|c0=c2|c1=c3,highpass=f=80,afftdn=nr=20:nf=-45:tn=1,agate=threshold=0.01:ratio=3:range=0.06:attack=5:release=250[voice];[system][voice]amix=inputs=2:normalize=0[audio]";
 
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
     private static readonly TimeSpan s_startTimeout = TimeSpan.FromSeconds(12);

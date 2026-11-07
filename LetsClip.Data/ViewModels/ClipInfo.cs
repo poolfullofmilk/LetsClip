@@ -9,9 +9,6 @@ public sealed record ClipInfo(
     double Duration,
     long SizeBytes,
     string? ThumbnailPath,
-    int Width,
-    int Height,
-    int FrameRate,
     string? CustomTitle,
     string? Game,
     bool HasOriginal

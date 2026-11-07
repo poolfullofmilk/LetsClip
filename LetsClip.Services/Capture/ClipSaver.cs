@@ -102,8 +102,6 @@ public static class ClipSaver
                     0,
                     default,
                     frameRate,
-                    media.Width,
-                    media.Height,
                     null,
                     game
                 )

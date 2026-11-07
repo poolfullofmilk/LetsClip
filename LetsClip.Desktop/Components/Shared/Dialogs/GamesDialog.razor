@@ -21,18 +21,7 @@
                           Class="my-0" />
             @if (IsLoading)
             {
-                <MudStack Row
-                          AlignItems="AlignItems.Center"
-                          Spacing="2"
-                          Class="py-4">
-                    <MudProgressCircular Color="Color.Info"
-                                         Size="Size.Small"
-                                         Indeterminate />
-                    <MudText Typo="Typo.body2"
-                             Class="mud-text-secondary">
-                        Looking for games and apps
-                    </MudText>
-                </MudStack>
+                <Loading />
             }
             else if (ShownRows.Count == 0)
             {

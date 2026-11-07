@@ -448,6 +448,12 @@ public partial class ClipEditor : IAsyncDisposable
         );
     }
 
+    private bool CanSaveCut()
+    {
+        // Only A Shorter Selection Has Anything To Cut
+        return _ready && _range.CutsShort(_duration);
+    }
+
     private async Task RestoreOriginalAsync()
     {
         if (_path is { } path)

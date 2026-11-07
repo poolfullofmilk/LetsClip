@@ -37,7 +37,7 @@ public static class AppTheme
     private const string LineFaint = "rgba(255,255,255, 0.10)";
 
     // Two Depths, A Very Slight Lift And A Panel Drop
-    private const string SlightShadow = "0 1px 3px rgba(0,0,0, 0.2)";
+    private const string SlightShadow = "0 1px 6px rgba(0,0,0, 0.2)";
     private const string PanelShadow = "0 8px 24px -10px rgba(0,0,0, 0.6)";
 
     public static readonly MudTheme Custom = new()

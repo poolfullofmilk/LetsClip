@@ -1,6 +1,6 @@
 @* Export Panel *@
 <MudPaper Elevation="4"
-          Class="rounded-panel px-6 py-2">
+          Class="rounded-panel px-6 py-2 compact">
     <MudText Typo="Typo.h6"
              Class="pt-2">
         Export
@@ -12,14 +12,12 @@
             @Formatter.FormatDuration(Range.Length)
         </MudText>
     </SettingRow>
-    <MudDivider />
     <SettingRow Title="Original Size">
         <MudText Typo="Typo.body2"
                  Class="mud-text-secondary">
             @Formatter.FormatSize(Clip.SizeBytes)
         </MudText>
     </SettingRow>
-    <MudDivider />
     @if (Limits is { Count: > 1 } limits)
     {
         <SettingRow Title="Size Limit"
@@ -43,7 +41,6 @@
                 </ChoiceSelect>
             </MudElement>
         </SettingRow>
-        <MudDivider />
     }
     <SettingRow Title="Resolution">
         <MudText Typo="Typo.body2"
@@ -51,7 +48,6 @@
             @($"{OutputSize.Width} × {OutputSize.Height}")
         </MudText>
     </SettingRow>
-    <MudDivider />
     @if (SourceFrameRate > 60)
     {
         <SettingRow Title="Frame Rate">
@@ -85,22 +81,20 @@
             </MudText>
         </SettingRow>
     }
-    <MudDivider />
     @if (Media.HasAudio)
     {
         <SettingRow Title="Audio">
             <MudText Typo="Typo.body2"
-                     Class="mud-text-secondary">
-                @VolumeText
+                     Class="@AudioClass">
+                @(WithAudio ? "On" : "Muted")
             </MudText>
-            @* Audio Volume Button *@
-            <VolumeButton Text="@(WithAudio ? "Mute Audio" : "Unmute Audio")"
-                          Disabled="@IsExporting"
-                          OnClick="ToggleAudio"
-                          Value="@(WithAudio ? Controller.Settings.ExportVolume : 0)"
-                          ValueChanged="SetVolume" />
+            @* Audio Button *@
+            <IconButton Icon="@(WithAudio ? Icons.Material.Rounded.VolumeUp : Icons.Material.Rounded.VolumeOff)"
+                        Text="@(WithAudio ? "Mute Audio" : "Unmute Audio")"
+                        Color="@(WithAudio ? Color.Default : Color.Error)"
+                        Disabled="@IsExporting"
+                        OnClick="ToggleAudio" />
         </SettingRow>
-        <MudDivider />
     }
     <SettingRow Title="Bitrate">
         <MudText Typo="Typo.body2"
@@ -115,7 +109,6 @@
             @VerdictText
         </MudChip>
     </SettingRow>
-    <MudDivider />
 
     <MudStack Spacing="3"
               Class="pt-3 pb-4">

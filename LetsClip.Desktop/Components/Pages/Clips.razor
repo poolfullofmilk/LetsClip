@@ -118,35 +118,7 @@
             <ChildContent>
                 @if (_clips is null)
                 {
-                    @* Clip Skeletons *@
-                    <MudGrid Spacing="3">
-
-                        @for (var index = 0; index < 6; index++)
-                        {
-                            <MudItem xs="12"
-                                     sm="6"
-                                     lg="4"
-                                     xl="3">
-                                <MudPaper Elevation="4"
-                                          Class="rounded-panel pa-4">
-                                    <MudSkeleton SkeletonType="SkeletonType.Rectangle"
-                                                 Animation="Animation.Wave"
-                                                 Class="rounded-inner"
-                                                 Style="aspect-ratio:16/9; height:auto" />
-                                    <MudText Typo="Typo.subtitle2"
-                                             Class="mt-2">
-                                        <MudSkeleton Animation="Animation.Wave"
-                                                     Width="60%" />
-                                    </MudText>
-                                    <MudText Typo="Typo.caption">
-                                        <MudSkeleton Animation="Animation.Wave"
-                                                     Width="40%" />
-                                    </MudText>
-                                </MudPaper>
-                            </MudItem>
-                        }
-
-                    </MudGrid>
+                    <Loading Class="page-loading" />
                 }
                 else if (_clips.Count == 0)
                 {
@@ -202,10 +174,6 @@
                                             <MudImage Src="@thumbnail"
                                                       Alt="@clip.Title" />
                                         }
-                                        <MediaChips Width="clip.Width"
-                                                    Height="clip.Height"
-                                                    FrameRate="clip.FrameRate"
-                                                    Class="clip-media" />
                                         <MudChip T="string"
                                                  Size="Size.Small"
                                                  Variant="Variant.Filled"

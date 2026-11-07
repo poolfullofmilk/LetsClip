@@ -5,7 +5,7 @@
 - Games and Apps Only records just that window, so chats and notifications stay out, and you pick any installed game or app from one list
 - One click picks the recommended quality, or record up to your monitor's own resolution and refresh rate
 - Records system audio, and your microphone with its background noise cleaned out
-- Trim a clip to the exact frame, set its volume and export it as an MP4, under a size limit when you need one
+- Trim a clip to the exact frame and export it as an MP4, with or without sound, under a size limit when you need one
 - Keep just the trimmed part without losing any quality, and bring the full clip back anytime
 - Clips are named after their game or app, rename them and filter them by game
 - Starts with Windows in the tray and updates itself
@@ -28,6 +28,9 @@
 - GPL-3.0, see [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)
 
 ## Screenshots
+
+### Demo
+![Demo](Screenshots/Demo.webp)
 
 ### Clips
 ![Clips](Screenshots/Clips.png)
