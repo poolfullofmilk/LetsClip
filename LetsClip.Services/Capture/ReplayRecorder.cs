@@ -153,7 +153,7 @@ public sealed class ReplayRecorder : IDisposable
         }
     }
 
-    public async Task StopAsync(string? reason = null)
+    public async Task StopAsync(string? reason)
     {
         await _transition.WaitAsync();
         try

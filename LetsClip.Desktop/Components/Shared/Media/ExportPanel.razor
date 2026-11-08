@@ -14,29 +14,28 @@
             @Formatter.FormatSize(Clip.SizeBytes)
         </MudText>
     </SettingRow>
-    @if (Limits is { Count: > 1 } limits)
-    {
-        <SettingRow Title="Size Limit">
-            @* Size Limit Select *@
-            <MudElement HtmlTag="div"
-                        Class="short-width">
-                <ChoiceSelect T="double"
-                              Value="Limit"
-                              ValueChanged="SetLimit"
-                              ToStringFunc="LimitLabel"
-                              Disabled="@IsExporting"
-                              aria-label="Size Limit">
-                    @foreach (var limit in limits)
-                    {
-                        <MudSelectItem T="double"
-                                       Value="limit">
-                            @LimitLabel(limit)
-                        </MudSelectItem>
-                    }
-                </ChoiceSelect>
-            </MudElement>
-        </SettingRow>
-    }
+    <SettingRow Title="Fit for Discord">
+        @* Discord Plan Select *@
+        <MudElement HtmlTag="div"
+                    Class="short-width">
+            <ChoiceSelect T="DiscordPlan"
+                          Value="Plan"
+                          ValueChanged="SetPlan"
+                          ToStringFunc="PlanLabel"
+                          Disabled="@IsExporting"
+                          RelativeWidth="@DropdownWidth.Adaptive"
+                          aria-label="Fit for Discord">
+                @foreach (var plan in Enum.GetValues<DiscordPlan>())
+                {
+                    <MudSelectItem T="DiscordPlan"
+                                   Value="plan">
+                        <ItemLabel Text="@PlanLabel(plan)"
+                                   Detail="@PlanDetail(plan)" />
+                    </MudSelectItem>
+                }
+            </ChoiceSelect>
+        </MudElement>
+    </SettingRow>
     <SettingRow Title="Resolution">
         <MudText Typo="Typo.body2"
                  Class="mud-text-secondary">
@@ -44,35 +43,10 @@
         </MudText>
     </SettingRow>
     <SettingRow Title="Frame Rate">
-        @if (SourceFrameRate > 60)
-        {
-            @* Frame Rate Select *@
-            <MudElement HtmlTag="div"
-                        Class="short-width">
-                <ChoiceSelect T="bool"
-                              Value="Controller.Settings.ExportFullFrameRate"
-                              ValueChanged="SetFullFrameRate"
-                              ToStringFunc="FrameRateLabel"
-                              Disabled="@IsExporting"
-                              aria-label="Frame Rate">
-                    <MudSelectItem T="bool"
-                                   Value="false">
-                        @FrameRateLabel(false)
-                    </MudSelectItem>
-                    <MudSelectItem T="bool"
-                                   Value="true">
-                        @FrameRateLabel(true)
-                    </MudSelectItem>
-                </ChoiceSelect>
-            </MudElement>
-        }
-        else
-        {
-            <MudText Typo="Typo.body2"
-                     Class="mud-text-secondary">
-                @($"{FrameRate:0} FPS")
-            </MudText>
-        }
+        <MudText Typo="Typo.body2"
+                 Class="mud-text-secondary">
+            @($"{FrameRate:0} FPS")
+        </MudText>
     </SettingRow>
     @if (Media.HasAudio)
     {

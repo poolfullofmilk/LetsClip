@@ -235,19 +235,34 @@
                                                 Class="d-flex align-center gap-1"
                                                 ClickPropagation="false">
                                         @* Clip Info *@
-                                        <InfoIcon Label="@FactsText(clip)">
-                                            <MudElement HtmlTag="div"
-                                                        Class="info-facts">
-                                                @foreach (var fact in FactsOf(clip))
-                                                {
-                                                    <MudText Typo="Typo.body2"
-                                                             Class="mud-text-secondary">
-                                                        @fact.Label
-                                                    </MudText>
-                                                    <MudText Typo="Typo.body2">@fact.Value</MudText>
-                                                }
-                                            </MudElement>
-                                        </InfoIcon>
+                                        <Tooltip Placement="Placement.Left"
+                                                 ShowOnFocus
+                                                 RootClass="d-inline-flex cursor-default info-icon">
+                                            <Content>
+                                                <MudElement HtmlTag="div"
+                                                            Class="info-facts">
+                                                    @foreach (var fact in FactsOf(clip))
+                                                    {
+                                                        <MudText Typo="Typo.body2"
+                                                                 Class="mud-text-secondary">
+                                                            @fact.Label
+                                                        </MudText>
+                                                        <MudText Typo="Typo.body2">@fact.Value</MudText>
+                                                    }
+                                                </MudElement>
+                                            </Content>
+                                            <ChildContent>
+                                                <MudElement HtmlTag="span"
+                                                            Class="d-inline-flex"
+                                                            tabindex="0"
+                                                            role="img"
+                                                            aria-label="@FactsText(clip)">
+                                                    <MudIcon Icon="@AppTheme.InfoIcon"
+                                                             Color="Color.Default"
+                                                             Size="Size.Small" />
+                                                </MudElement>
+                                            </ChildContent>
+                                        </Tooltip>
                                         @* Delete Button *@
                                         <IconButton Icon="@Icons.Material.Rounded.Delete"
                                                     Text="Delete Clip"

@@ -28,8 +28,7 @@ public sealed record UserSettings(
     bool NoiseCancellation = true,
     string Hotkey = "F10",
     string? ClipsFolder = null,
-    double ExportMegabytes = 20,
-    bool ExportFullFrameRate = false,
+    DiscordPlan ExportDiscordPlan = DiscordPlan.Off,
     bool ExportAudio = true,
     bool HasSeenTrayHint = false,
     int DefaultsVersion = 0,
@@ -169,7 +168,9 @@ public sealed record UserSettings(
             MicrophoneDeviceId = MicrophoneDeviceId ?? "",
             Hotkey = HotkeyGesture.Parse(Hotkey).ToString(),
             ClipsFolder = Path.IsPathFullyQualified(ClipsFolder ?? "") ? ClipsFolder : null,
-            ExportMegabytes = SizeBudget.IsValidTarget(ExportMegabytes) ? ExportMegabytes : 20,
+            ExportDiscordPlan = Enum.IsDefined(ExportDiscordPlan)
+                ? ExportDiscordPlan
+                : DiscordPlan.Off,
             SaveSoundVolume = double.IsFinite(SaveSoundVolume)
                 ? Math.Clamp(Math.Round(SaveSoundVolume, 1), 0.1, 1)
                 : 1,

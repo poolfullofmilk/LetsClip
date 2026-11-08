@@ -47,37 +47,14 @@ public partial class ExportPanel : IDisposable
     private string? _error;
     private bool _disposed;
 
-    // Limits This Selection Would Feel, Then Unlimited
-    private IReadOnlyList<double> Limits => SizeBudget.LimitsFor(Shape);
+    private DiscordPlan Plan => Controller.Settings.ExportDiscordPlan;
 
-    // The Saved Limit, Or The Nearest Offered Below It
-    private double Limit
-    {
-        get
-        {
-            var saved = Controller.Settings.ExportMegabytes;
-            var limits = Limits;
-            return saved >= Ceiling
-                ? SizeBudget.MaximumMegabytes
-                : limits.Where(limit => limit <= saved).DefaultIfEmpty(limits[0]).Max();
-        }
-    }
-
-    // Past This More Size Adds Nothing, So Unlimited Aims Here
-    private double Ceiling => SizeBudget.CeilingMegabytes(Shape);
+    // Off, Or Already Small Enough, Is An Exact Copy
+    private bool KeepsClip => SizeBudget.KeepsClip(Plan, Range.Length, SourceBytesPerSecond);
 
     // The Selection As The Size Budget Reads It
     private ExportShape Shape =>
-        new(
-            Range.Length,
-            OutputSize.Width,
-            OutputSize.Height,
-            FrameRate,
-            WithAudio,
-            SourceBytesPerSecond
-        );
-
-    private double Megabytes => Math.Min(Limit, Ceiling);
+        new(Range.Length, OutputSize.Width, OutputSize.Height, FrameRate, WithAudio);
 
     private bool WithAudio => Controller.Settings.ExportAudio && Media.HasAudio;
 
@@ -97,26 +74,38 @@ public partial class ExportPanel : IDisposable
         !IsExporting
         && !Busy
         && Range.IsValidFor(Media.Duration)
-        && Budget.Verdict != BudgetVerdict.TooSmall;
+        && Budget?.Verdict != BudgetVerdict.TooSmall;
 
     private (int Width, int Height) OutputSize =>
-        ClipExporter.OutputSize(Media.Width, Media.Height);
+        KeepsClip
+            ? (Media.Width, Media.Height)
+            : ClipExporter.OutputSize(Media.Width, Media.Height);
 
-    private double SourceFrameRate => ClipExporter.FrameRateOf(Media.FrameRate, true);
+    // Odd Probes Read As 60, An Encode Stops At 60
+    private double FrameRate
+    {
+        get
+        {
+            var rate = Media.FrameRate is > 1 and < 241 ? Math.Round(Media.FrameRate) : 60;
+            return KeepsClip ? rate : Math.Min(rate, 60);
+        }
+    }
 
-    private double FrameRate =>
-        ClipExporter.FrameRateOf(Media.FrameRate, Controller.Settings.ExportFullFrameRate);
+    // Null While The Export Is An Exact Copy
+    private ExportBudget? Budget =>
+        KeepsClip || SizeBudget.LimitOf(Plan) is not { } limit
+            ? null
+            : SizeBudget.Plan(limit, Shape);
 
-    private ExportBudget Budget => SizeBudget.Plan(Megabytes, Shape);
-
-    // The Most Video Gets, Still Scenes Come Out Smaller
+    // The Clip's Own, Or The Most An Encode Gets
     private string BitrateText =>
-        Budget.VideoBitsPerSecond > 0
-            ? $"Up to {Formatter.FormatBitrate(Budget.VideoBitsPerSecond)}"
-            : "-";
+        Budget is not { } budget ? Formatter.FormatBitrate(SourceBytesPerSecond * 8)
+        : budget.VideoBitsPerSecond > 0
+            ? $"Up to {Formatter.FormatBitrate(budget.VideoBitsPerSecond)}"
+        : "-";
 
     private string? VerdictHint =>
-        Budget.Verdict switch
+        Budget?.Verdict switch
         {
             BudgetVerdict.Soft =>
                 "Fast motion will look soft at this size, a shorter selection keeps it sharper",
@@ -125,44 +114,35 @@ public partial class ExportPanel : IDisposable
         };
 
     private string VerdictHintClass =>
-        Budget.Verdict == BudgetVerdict.TooSmall ? "mud-error-text" : "mud-text-secondary";
+        Budget?.Verdict == BudgetVerdict.TooSmall ? "mud-error-text" : "mud-text-secondary";
 
     private ExportRequest Request =>
-        new(
-            Clip.Path,
-            Range,
-            Megabytes,
-            FrameRate,
-            WithAudio,
-            Controller.Settings.ExportsDirectory
-        );
+        new(Clip.Path, Range, Plan, FrameRate, WithAudio, Controller.Settings.ExportsDirectory);
 
-    private static string LimitLabel(double megabytes)
+    private static string PlanLabel(DiscordPlan plan)
     {
-        return megabytes >= SizeBudget.MaximumMegabytes
-            ? "Unlimited"
-            : Formatter.FormatMegabytes(megabytes);
+        return plan switch
+        {
+            DiscordPlan.Free => "Free",
+            DiscordPlan.NitroBasic => "Nitro Basic",
+            DiscordPlan.Nitro => "Nitro",
+            _ => "Off",
+        };
     }
 
-    private void SetLimit(double megabytes)
+    private static string? PlanDetail(DiscordPlan plan)
     {
-        // Saved As Picked, A Short Selection Never Lowers It
-        Controller.UpdateSettings(settings => settings with { ExportMegabytes = megabytes });
+        return SizeBudget.LimitOf(plan) is { } limit ? Formatter.FormatMegabytes(limit) : null;
     }
 
-    private string FrameRateLabel(bool full)
+    private void SetPlan(DiscordPlan plan)
     {
-        return $"{ClipExporter.FrameRateOf(Media.FrameRate, full):0} FPS";
+        Controller.UpdateSettings(settings => settings with { ExportDiscordPlan = plan });
     }
 
     private void ToggleAudio()
     {
         Controller.UpdateSettings(settings => settings with { ExportAudio = !WithAudio });
-    }
-
-    private void SetFullFrameRate(bool full)
-    {
-        Controller.UpdateSettings(settings => settings with { ExportFullFrameRate = full });
     }
 
     private async Task ExportAsync()

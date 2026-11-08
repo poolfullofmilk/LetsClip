@@ -21,6 +21,9 @@ public sealed class CaptureSession(
     private const double KeepMarginSeconds = 3;
     private const long CacheByteFloor = 1_500_000_000;
 
+    // Past 1440p Reading Whole Frames Back Costs Too Much
+    private const int MaximumWholeWindowPixels = 2560 * 1440;
+
     // Rumble Cut, Steady Noise Reduced, Quiet Gaps Gated
     public const string VoiceCleaning =
         "highpass=f=80,afftdn=nr=20:nf=-45:tn=1,agate=threshold=0.01:ratio=3:range=0.06:attack=5:release=250";
@@ -213,10 +216,19 @@ public sealed class CaptureSession(
         var isWindow = Options.GameWindow != 0;
         var rotation = isWindow ? 0 : monitor.Rotation;
         var rotated = rotation is 90 or 270;
+
+        // The GPU Blurs A Smaller Size, So The CPU Scales
+        var readsWhole =
+            !Encoder.GpuFrames
+            && MonitorCatalog.ClientSizeOf(Options.GameWindow) is { } client
+            && client.Width * client.Height <= MaximumWholeWindowPixels;
+        var sized = readsWhole
+            ? ""
+            : string.Create(CultureInfo.InvariantCulture, $":width={width}:height={height}");
         var source = isWindow
             ? string.Create(
                 CultureInfo.InvariantCulture,
-                $"gfxcapture=hwnd={Options.GameWindow}:max_framerate={rate}:capture_cursor=1:width={width}:height={height}:resize_mode=scale_aspect"
+                $"gfxcapture=hwnd={Options.GameWindow}:max_framerate={rate}:capture_cursor=1{sized}:resize_mode=scale_aspect"
             )
             : string.Create(
                 CultureInfo.InvariantCulture,
@@ -266,7 +278,7 @@ public sealed class CaptureSession(
                 "format=bgra",
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"scale={scaledWidth}:{scaledHeight}:flags=bilinear:out_color_matrix=bt709:out_range=tv"
+                    $"scale={scaledWidth}:{scaledHeight}:flags=lanczos:out_color_matrix=bt709:out_range=tv"
                 ),
                 "format=nv12",
             ]);

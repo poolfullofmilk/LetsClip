@@ -11,7 +11,7 @@ namespace LetsClip.Services.Media;
 public sealed record ExportRequest(
     string SourcePath,
     TrimRange Range,
-    double Megabytes,
+    DiscordPlan Plan,
     double FrameRate,
     bool WithAudio,
     string ExportsFolder
@@ -38,7 +38,9 @@ public static class ClipExporter
     private static readonly TimeSpan s_hardwareStart = TimeSpan.FromSeconds(5);
 
     public const string TooSmallMessage =
-        "Too little room for this length, pick a larger size or a shorter selection";
+        "Too long for this Discord plan, pick a shorter selection";
+
+    private const string RejectedMessage = "The exported file did not check out, nothing was kept";
 
     public static (int Width, int Height) OutputSize(int width, int height, int lines = 1080)
     {
@@ -50,13 +52,6 @@ public static class ClipExporter
             Math.Min((portrait ? lines : across) / width, (portrait ? across : lines) / height)
         );
         return (EvenUp(width * scale), EvenUp(height * scale));
-    }
-
-    public static double FrameRateOf(double sourceRate, bool fullFrameRate)
-    {
-        // Odd Probes Read As 60, Faster Clips Drop To 60
-        var rate = sourceRate is > 1 and < 241 ? Math.Round(sourceRate) : 60;
-        return fullFrameRate ? rate : Math.Min(rate, 60);
     }
 
     public static async Task<string> ExportAsync(
@@ -106,28 +101,32 @@ public static class ClipExporter
             throw new ExportException("The selection does not fit inside the clip");
         }
 
-        if (!SizeBudget.IsValidTarget(request.Megabytes))
-        {
-            throw new ExportException(
-                $"Pick a size between {SizeBudget.MinimumMegabytes} and {SizeBudget.MaximumMegabytes} MB"
-            );
-        }
-
-        // Past The Ceiling Only Bloats, Unlimited Lands There
         var duration = request.Range.Length;
         var withAudio = request.WithAudio && source.HasAudio;
+        var sourceRate = new FileInfo(request.SourcePath).Length / source.Duration;
+        Directory.CreateDirectory(request.ExportsFolder);
+        var started = Stopwatch.StartNew();
+
+        // Off, Or Already Small Enough, Is An Exact Copy
+        if (
+            SizeBudget.KeepsClip(request.Plan, duration, sourceRate)
+            && await CopyAsync(request, withAudio, progress, token) is { } copied
+        )
+        {
+            s_logger.Info(
+                $"Exported {Path.GetFileName(copied)} Losslessly At {Formatter.FormatSize(new FileInfo(copied).Length)} In {started.Elapsed.TotalSeconds:0.0} s"
+            );
+            return copied;
+        }
+
+        // Too Big For The Plan, Encoded To Fit At 1080p
+        var limit = SizeBudget.LimitOf(request.Plan)!.Value;
         var (width, height) = OutputSize(source.Width, source.Height);
         var frameRate = request.FrameRate;
-        var sourceRate = new FileInfo(request.SourcePath).Length / source.Duration;
-        var clip = new ExportShape(duration, width, height, frameRate, withAudio, sourceRate);
-        request = request with
-        {
-            Megabytes = Math.Min(request.Megabytes, SizeBudget.CeilingMegabytes(clip)),
-        };
-        var budget = SizeBudget.Plan(request.Megabytes, clip);
-        var started = Stopwatch.StartNew();
+        var clip = new ExportShape(duration, width, height, frameRate, withAudio);
+        var budget = SizeBudget.Plan(limit, clip);
         s_logger.Info(
-            $"Exporting {Path.GetFileName(request.SourcePath)} From {Formatter.FormatDuration(request.Range.Start)} To {Formatter.FormatDuration(request.Range.End)} At {width} × {height}, {frameRate} FPS, {(withAudio ? "With Audio" : "Without Audio")}, Aiming Under {Formatter.FormatMegabytes(request.Megabytes)}, {budget.Verdict}"
+            $"Exporting {Path.GetFileName(request.SourcePath)} From {Formatter.FormatDuration(request.Range.Start)} To {Formatter.FormatDuration(request.Range.End)} At {width} × {height}, {frameRate} FPS, {(withAudio ? "With Audio" : "Without Audio")}, Aiming Under {Formatter.FormatMegabytes(limit)}, {budget.Verdict}"
         );
         if (budget.Verdict == BudgetVerdict.TooSmall)
         {
@@ -149,7 +148,6 @@ public static class ClipExporter
         }
 
         encoders.Add(VideoEncoders.Software);
-        Directory.CreateDirectory(request.ExportsFolder);
         var workFolder = CacheFolders.NewFolder();
         var temporary = Path.Combine(
             request.ExportsFolder,
@@ -211,24 +209,12 @@ public static class ClipExporter
                             break;
                         }
 
-                        throw new ExportException(
-                            "The exported file did not check out, nothing was kept"
-                        );
+                        throw new ExportException(RejectedMessage);
                     }
 
                     if (size <= budget.TargetBytes)
                     {
-                        // Named By The Clip's Name Or Date, Never Its Limit
-                        var stem = Path.GetFileNameWithoutExtension(request.SourcePath);
-                        var title =
-                            ClipNames.FileSafe(ClipLibrary.MetadataOf(request.SourcePath)?.Title)
-                            ?? (
-                                ClipNames.DateOf(stem) is { } date
-                                    ? $"{AppInfo.DisplayName} {Formatter.FormatFileDate(date)}"
-                                    : stem
-                            );
-                        var finalPath = ClipSaver.UniquePath(request.ExportsFolder, title);
-                        File.Move(temporary, finalPath);
+                        var finalPath = Keep(request, temporary);
                         s_logger.Info(
                             $"Exported {Path.GetFileName(finalPath)} At {Formatter.FormatSize(size)} With {encoder.Name} In {attempts} Attempts And {started.Elapsed.TotalSeconds:0.0} s"
                         );
@@ -243,9 +229,7 @@ public static class ClipExporter
                 }
             }
 
-            throw new ExportException(
-                "Could not get under the size limit, pick a larger size or a shorter selection"
-            );
+            throw new ExportException("Could not fit this Discord plan, pick a shorter selection");
         }
         finally
         {
@@ -253,6 +237,89 @@ public static class ClipExporter
             await FFmpeg.DeleteOutputAsync(temporary);
             CacheFolders.Delete(workFolder);
         }
+    }
+
+    private static async Task<string?> CopyAsync(
+        ExportRequest request,
+        bool withAudio,
+        IProgress<ExportProgress> progress,
+        CancellationToken token
+    )
+    {
+        // Stream Copied, The Clip's Own Frames, Size And Quality
+        progress.Report(new ExportProgress("Copying", 0.5));
+        var range = request.Range;
+        var temporary = Path.Combine(
+            request.ExportsFolder,
+            $"{ClipLibrary.PartialPrefix}{Guid.NewGuid():N}.mp4"
+        );
+        try
+        {
+            var result = await FFmpeg.RunAsync(
+                FFmpeg.FFmpegPath,
+                [
+                    "-hide_banner",
+                    "-nostdin",
+                    "-loglevel",
+                    "error",
+                    "-y",
+                    "-ss",
+                    FFmpeg.Seconds(range.SeekStart),
+                    "-i",
+                    request.SourcePath,
+                    "-t",
+                    FFmpeg.Seconds(range.Length),
+                    "-map",
+                    "0:v:0",
+                    .. (withAudio ? (string[])["-map", "0:a:0"] : []),
+                    "-c",
+                    "copy",
+                    "-movflags",
+                    "+faststart",
+                    "-f",
+                    "mp4",
+                    temporary,
+                ],
+                TimeSpan.FromMinutes(2),
+                token
+            );
+            var output = result.Succeeded ? await MediaProbe.ProbeAsync(temporary, token) : null;
+            if (
+                output is not { HasVideo: true }
+                || Math.Abs(output.Duration - range.Length) > DurationTolerance
+                || output.HasAudio != withAudio
+            )
+            {
+                throw new ExportException(RejectedMessage);
+            }
+
+            // The Plan's Limit Holds, Past It Encoding Takes Over
+            return
+                SizeBudget.LimitOf(request.Plan) is { } limit
+                && new FileInfo(temporary).Length > limit * 1_000_000
+                ? null
+                : Keep(request, temporary);
+        }
+        finally
+        {
+            await FFmpeg.DeleteOutputAsync(temporary);
+        }
+    }
+
+    private static string Keep(ExportRequest request, string temporary)
+    {
+        // Named By The Clip's Name Or Date, Never Its Limit
+        var stem = Path.GetFileNameWithoutExtension(request.SourcePath);
+        var title =
+            ClipNames.FileSafe(ClipLibrary.MetadataOf(request.SourcePath)?.Title)
+            ?? (
+                ClipNames.DateOf(stem) is { } date
+                    ? $"{AppInfo.DisplayName} {Formatter.FormatFileDate(date)}"
+                    : stem
+            );
+        var finalPath = ClipSaver.UniquePath(request.ExportsFolder, title);
+        File.Move(temporary, finalPath);
+        return finalPath;
     }
 
     private sealed record EncodeJob(
