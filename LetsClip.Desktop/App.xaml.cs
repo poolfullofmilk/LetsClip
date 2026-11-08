@@ -3,6 +3,7 @@ using LetsClip.Data.Enums;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
 using LetsClip.Desktop.Interop;
+using LetsClip.Desktop.Theming;
 using LetsClip.Services.Capture;
 using LetsClip.Services.Integration;
 using Microsoft.Extensions.DependencyInjection;
@@ -100,6 +101,7 @@ public partial class App : Application
 
         // A Crash Leaves Cache Behind, Cleared Off The Startup Path
         _ = Task.Run(CacheFolders.DeleteLeftovers);
+        LetsClip.Services.Media.FFmpeg.HoldFiles();
 
         // A Failure In The Page Is Logged, Never Fatal
         DispatcherUnhandledException += (_, exceptionArgs) =>
@@ -132,17 +134,17 @@ public partial class App : Application
             configuration.SnackbarConfiguration.ShowCloseIcon = false;
             configuration.SnackbarConfiguration.SuccessIcon = Icons.Material.Rounded.CheckCircle;
             configuration.SnackbarConfiguration.WarningIcon = Icons.Material.Rounded.Warning;
-            configuration.SnackbarConfiguration.InfoIcon = Icons.Material.Rounded.Info;
+            configuration.SnackbarConfiguration.InfoIcon = AppTheme.InfoIcon;
             configuration.SnackbarConfiguration.ErrorIcon = Icons.Material.Rounded.Error;
             configuration.SnackbarConfiguration.PositionClass = Defaults
                 .Classes
                 .Position
                 .BottomRight;
 
-            // Barely See-Through With A Quick Fade
-            configuration.SnackbarConfiguration.MaximumOpacity = 92;
-            configuration.SnackbarConfiguration.ShowTransitionDuration = 200;
-            configuration.SnackbarConfiguration.HideTransitionDuration = 250;
+            // Slightly See-Through With A Quick Fade
+            configuration.SnackbarConfiguration.MaximumOpacity = 85;
+            configuration.SnackbarConfiguration.ShowTransitionDuration = 150;
+            configuration.SnackbarConfiguration.HideTransitionDuration = 150;
         });
 
         // Tooltips Wait A Moment Before Showing

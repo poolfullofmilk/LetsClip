@@ -37,10 +37,13 @@
     --shade: color-mix(in srgb, var(--mud-palette-black) 58%, transparent);
     --tonal-info: color-mix(in srgb, var(--mud-palette-secondary) 20%, transparent);
     --tonal-info-hover: color-mix(in srgb, var(--mud-palette-secondary) 30%, transparent);
-    --tooltip-surface: color-mix(in srgb, var(--mud-palette-white) 9%, var(--mud-palette-surface));
+    --lifted-surface: color-mix(in srgb, var(--mud-palette-white) 9%, var(--mud-palette-surface));
+    --grabber: color-mix(in srgb, var(--mud-palette-white) 35%, var(--mud-palette-surface));
     --scrollbar-thumb: color-mix(in srgb, var(--mud-palette-white) 18%, transparent);
     --scrollbar-thumb-hover: color-mix(in srgb, var(--mud-palette-white) 32%, transparent);
+    --icon-shadow: 0 2px 8px rgb(0 0 0 / 60%);
     --quick: 120ms ease-out;
+    --fade: 150ms ease-out;
 }
 
 /* Scaled 1080p Screens Get A Slimmer Frame */
@@ -257,15 +260,23 @@
     padding-block: 8px;
 }
 
-    /* The Title Pushes Others Right, A Field May Fill */
+    /* The Title Pushes Others Right, On Its Value's Baseline */
     .setting-row > :first-child {
         margin-inline-end: auto;
+        line-height: var(--mud-typography-body2-lineheight);
     }
 
-/* Editor Panels Sit Closer, With No Lines Between Rows */
+/* Editor Panels Sit Closer, Every Row 40 Px, Fields Too */
 .compact .setting-row {
     min-height: 40px;
-    padding-block: 2px;
+    padding-block: 0;
+}
+
+/* Short Windows Keep Every Row On Screen, No Scrollbar */
+@media (max-height: 720px) {
+    .compact .setting-row {
+        min-height: 35px;
+    }
 }
 
     /* Switches Drop Their Hover Padding, So They End Flush */
@@ -298,11 +309,28 @@
     flex-shrink: 0;
 }
 
-/* Info Icons Lift Like Chips, Centred On Capitals */
-.info-icon svg {
-    filter: drop-shadow(var(--mud-elevation-1));
-    translate: 0 -1px;
+/* Info Icons Match An Icon Button's Box */
+.info-icon {
+    padding: 3px;
 }
+
+    .info-icon svg {
+        filter: drop-shadow(var(--icon-shadow));
+    }
+
+/* Clip Facts Read As Label And Value */
+.info-facts {
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 2px 16px;
+    text-align: start;
+    white-space: nowrap;
+}
+
+    .info-facts > :nth-child(even) {
+        font-variant-numeric: tabular-nums;
+        text-align: end;
+    }
 
 /* Badges Lift Off Their Surface Like Chips */
 .mud-badge {
@@ -381,17 +409,12 @@
         height: calc(100vh - var(--page-top) - var(--page-bottom) - 40px);
     }
 
-/* Marks Values Selectable Where MudBlazor Suppresses Selection */
-.selectable-text {
-    user-select: text;
-}
-
 /* Tooltips Rise On A Lighter Surface, Long Ones Wrap */
 .mud-tooltip.mud-tooltip-default {
     max-width: 320px !important;
     padding: 6px 10px;
     border-radius: var(--radius-inner);
-    background-color: var(--tooltip-surface);
+    background-color: var(--lifted-surface);
     color: var(--mud-palette-text-primary);
     box-shadow: var(--mud-elevation-4);
     font-size: 13px;
@@ -399,7 +422,7 @@
 }
 
     .mud-tooltip.mud-tooltip-default.mud-tooltip-arrow::after {
-        border-color: var(--tooltip-surface) transparent transparent transparent;
+        border-color: var(--lifted-surface) transparent transparent transparent;
     }
 
 /* A Button's Tooltip Steps Aside While Its Menu Is Open */
@@ -439,9 +462,10 @@
     overflow-x: clip !important;
 }
 
-/* Dialogs Are Panels, So Their Cards Never Out Round Them */
+/* Dialogs Are Panels, Rounded And Lifted Like Them */
 .mud-dialog {
     border-radius: var(--radius-panel) !important;
+    box-shadow: var(--mud-elevation-4);
 }
 
     /* Raised Sections Keep Their Shadow Clear Of The Actions */
@@ -512,8 +536,17 @@
 .mud-button-filled,
 .mud-button-filled:hover,
 .mud-button-filled:focus-visible,
-.mud-button-filled:active {
+.mud-button-filled:active,
+.mud-switch-button .mud-switch-thumb-medium {
     box-shadow: var(--mud-elevation-1);
+}
+
+/* Filled Icon Buttons Match The Plain 26 Px Circle */
+.mud-icon-button.mud-button-filled {
+    width: 26px;
+    height: 26px;
+    padding: 3px;
+    border-radius: 50%;
 }
 
 /* Blue Buttons, Picks And Info Alerts Are Tonal */
@@ -538,7 +571,7 @@
 /* What Arrives Fades In, Notices And Export Results Alike */
 .appear,
 .mud-alert {
-    animation: appear 200ms ease-out;
+    animation: appear var(--fade);
 }
 
 @keyframes appear {
@@ -548,13 +581,53 @@
     }
 }
 
+/* Pages, Panels And Pictures Only Fade, Moving Could Add Scrollbars */
+.fade-in,
+.page > *,
+.timeline-strip {
+    animation: fade-in var(--fade);
+}
+
+/* Cards And Clip Swaps Blend As Quickly As Everything Else */
+::view-transition-group(*),
+::view-transition-old(*),
+::view-transition-new(*) {
+    animation-duration: 150ms;
+}
+
+@keyframes fade-in {
+    from {
+        opacity: 0;
+    }
+}
+
+/* A Quick Load Never Shows Its Spinner */
+.player .mud-progress-circular-svg,
+.loading-state .mud-progress-circular-svg {
+    animation: fade-in var(--fade) 300ms backwards;
+}
+
 /* When Windows Shows No Animations, Neither Does LetsClip */
 @media (prefers-reduced-motion: reduce) {
     .mud-chip.recording .mud-chip-icon,
     .appear,
-    .mud-alert {
+    .mud-alert,
+    .fade-in,
+    .page > *,
+    .timeline-strip,
+    .player video,
+    .player .mud-progress-circular-svg,
+    .loading-state .mud-progress-circular-svg,
+    ::view-transition-group(*),
+    ::view-transition-old(*),
+    ::view-transition-new(*) {
         animation: none;
     }
+}
+
+/* Alerts Keep The Same 16 Px Edge As Buttons */
+.mud-alert.mud-alert-dense {
+    padding-inline: 16px;
 }
 
 /* Alerts Read At The Size Of Body Text */
@@ -563,9 +636,28 @@
     line-height: var(--mud-typography-body2-lineheight);
 }
 
-    /* The Icon Sits Centred Beside Text Of Any Length */
+    /* Icon Left, Text Centred, Like The Save Button Below */
     .mud-alert .mud-alert-position {
+        position: relative;
         align-items: center;
+    }
+
+    .mud-alert .mud-alert-icon {
+        position: absolute;
+        left: 0;
+        margin: 0;
+    }
+
+        .mud-alert .mud-alert-icon svg {
+            width: 20px;
+            height: 20px;
+        }
+
+    .mud-alert .mud-alert-message {
+        flex: 1;
+        padding-inline: 28px;
+        text-align: center;
+        text-wrap: balance;
     }
 
 /* Fields Sit Inset, Blue Edge On Focus */
@@ -601,9 +693,13 @@
     background-color: var(--row-hover);
 }
 
-.mud-nav-link .mud-nav-link-text {
-    font-weight: 500;
+.mud-nav-link {
+    transition: background-color var(--quick), color var(--quick);
 }
+
+    .mud-nav-link .mud-nav-link-text {
+        font-weight: 500;
+    }
 
 /* The Capture Button Keeps Its Icon Left, Text Centred */
 .mud-button-root.icon-left .mud-button-label:has(> .mud-button-icon-start) {
@@ -618,10 +714,10 @@
         transform: translateY(-50%);
     }
 
-/* Name Grows With Its Text, Long Ones End In Dots */
+/* Name Fits Its Text Or Placeholder, Long Ones Get Dots */
 .name-field {
     flex: 0 1 auto;
-    min-width: 150px;
+    min-width: 0;
 }
 
     .name-field input {
@@ -695,7 +791,7 @@ mark {
         box-shadow: 0 0 0 2px var(--tonal-info-hover), var(--mud-elevation-4);
     }
 
-/* Cards Stay Big Enough For Their Stacked Chips */
+/* Cards Stay Wide Enough For Date And Length */
 .clip-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(272px, 1fr));
@@ -716,8 +812,8 @@ mark {
         display: block;
     }
 
-    /* Facts Stack Bottom Left, The Length Sits Bottom Right */
-    .clip-thumb .clip-facts {
+    /* The Date Sits Bottom Left, The Length Bottom Right */
+    .clip-thumb .clip-date {
         position: absolute;
         bottom: 8px;
         left: 8px;
@@ -727,6 +823,49 @@ mark {
         position: absolute;
         right: 8px;
         bottom: 8px;
+    }
+
+/* A Hover Preview Plays Over The Picture, Under The Chips */
+.clip-preview {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+    .clip-preview video {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        opacity: 0;
+        transition: opacity var(--fade);
+    }
+
+    .clip-preview[data-playing] video,
+    .clip-preview[data-playing] .clip-preview-bar {
+        opacity: 1;
+    }
+
+/* Centred Between The Chips And The Edge */
+.clip-preview-bar {
+    position: absolute;
+    right: 8px;
+    bottom: 2px;
+    left: 8px;
+    height: 4px;
+    overflow: hidden;
+    border-radius: var(--radius-pill);
+    background-color: var(--shade);
+    box-shadow: var(--mud-elevation-1);
+    opacity: 0;
+    transition: opacity var(--fade);
+}
+
+    .clip-preview-bar > div {
+        height: 100%;
+        background-color: var(--mud-palette-error);
+        transform: scaleX(0);
+        transform-origin: left;
     }
 /* #endregion */
 
@@ -787,23 +926,44 @@ mark {
     }
 }
 
-    /* The Clip Lifts On The Theme Shadow, Edge To Edge */
-    /* Full Screen Keeps Play And Seeking, Not Volume */
-    .player video::-webkit-media-controls-mute-button {
-        display: none;
+/* The Clip Lifts On The Theme Shadow, Edge To Edge */
+.player video {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: var(--radius-inner);
+    box-shadow: var(--mud-elevation-4);
+    cursor: pointer;
+    object-fit: cover;
+    animation: fade-in var(--fade);
+}
+
+/* A Held Frame Covers A File Change, Then Fades */
+.player-frozen {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    border-radius: var(--radius-inner);
+    box-shadow: var(--mud-elevation-4);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--fade);
+    translate: -50% -50%;
+}
+
+    .player-frozen[data-held] {
+        opacity: 1;
+        transition: none;
     }
 
+.player:has(.player-frozen[data-held]) video {
+    visibility: hidden;
+}
+
+    /* Full Screen Keeps Play And Seeking, Not Volume */
+    .player video::-webkit-media-controls-mute-button,
     .player video::-webkit-media-controls-volume-slider {
         display: none;
-    }
-
-    .player video {
-        display: block;
-        max-width: 100%;
-        max-height: 100%;
-        border-radius: var(--radius-inner);
-        box-shadow: var(--mud-elevation-4);
-        object-fit: cover;
     }
 
 /* Thumbnails In A Track, Handles Outside The Kept Part */
@@ -858,8 +1018,8 @@ mark {
     position: absolute;
     top: 0;
     bottom: 0;
-    border-top: 3px solid var(--mud-palette-info);
-    border-bottom: 3px solid var(--mud-palette-info);
+    border-top: 3px solid var(--grabber);
+    border-bottom: 3px solid var(--grabber);
     pointer-events: none;
 }
 
@@ -869,7 +1029,7 @@ mark {
     top: 0;
     bottom: 0;
     width: var(--handle-width);
-    background-color: var(--mud-palette-info);
+    background-color: var(--grabber);
     cursor: ew-resize;
 }
 
@@ -886,12 +1046,12 @@ mark {
     .timeline-handle[data-handle="start"] {
         margin-left: calc(-1 * var(--handle-width));
         border-radius: var(--radius-thumb) 0 0 var(--radius-thumb);
-        box-shadow: 1px 0 0 var(--mud-palette-info);
+        box-shadow: 1px 0 0 var(--grabber), var(--mud-elevation-1);
     }
 
     .timeline-handle[data-handle="end"] {
         border-radius: 0 var(--radius-thumb) var(--radius-thumb) 0;
-        box-shadow: -1px 0 0 var(--mud-palette-info);
+        box-shadow: -1px 0 0 var(--grabber), var(--mud-elevation-1);
     }
 
     /* Centred By Layout, So The Line Snaps To Pixels */
@@ -970,21 +1130,32 @@ mark {
     bottom: 100%;
     left: 50%;
     z-index: 10;
-    display: none;
     padding-bottom: 8px;
+    visibility: hidden;
+    opacity: 0;
     transform: translateX(-50%);
+    transition: opacity var(--quick), visibility var(--quick);
 }
 
-    .volume:is(:hover, :focus-within) .volume-pop {
-        display: block;
+    /* Keyboard Focus Too, A Click Must Not Keep It Open */
+    .volume:is(:hover, :has(:focus-visible)) .volume-pop {
+        visibility: visible;
+        opacity: 1;
     }
 
-/* The 16 Px Thumb Keeps 10 Px Clear */
+/* The Rotated Slider Keeps 10 Px Clear At Both Ends */
 .volume-paper {
     display: flex;
     align-items: center;
-    width: 120px;
-    height: 36px;
-    padding-inline: 10px;
+    justify-content: center;
+    width: 36px;
+    height: 120px;
 }
+
+    /* Turns About Its Centre, Only The Track May Be Tall */
+    .volume-paper .mud-slider {
+        flex: none;
+        width: 100px;
+        height: auto;
+    }
 /* #endregion */

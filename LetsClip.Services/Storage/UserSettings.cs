@@ -32,11 +32,15 @@ public sealed record UserSettings(
     bool ExportFullFrameRate = false,
     bool ExportAudio = true,
     bool HasSeenTrayHint = false,
-    int DefaultsVersion = UserSettings.CurrentDefaults
+    int DefaultsVersion = 0,
+    ClipSort ClipSort = ClipSort.Newest
 )
 {
     // Raised When New Defaults Reach Existing Users Once
     public const int CurrentDefaults = 1;
+
+    // Every Clip Opens At Half Volume, Its Microphone Test Too
+    public const double OpeningVolume = 0.5;
 
     public static readonly int[] ReplayChoices = [30, 60, 120];
     public static readonly int[] FrameRateChoices = [30, 60, 120, 144, 165, 240];
@@ -67,17 +71,12 @@ public sealed record UserSettings(
         try
         {
             var json = File.ReadAllText(s_filePath);
-            var settings = JsonSerializer.Deserialize<UserSettings>(json) ?? new UserSettings();
-
-            // Ponytail: Old Full Size Becomes 2160, 8K Gets 4K
-            var legacy = JsonSerializer.Deserialize<LegacySettings>(json);
-            if (legacy is { FullResolution: true })
-            {
-                settings = settings with { Resolution = ResolutionChoices[^1] };
-            }
+            var settings =
+                JsonSerializer.Deserialize<UserSettings>(json)
+                ?? new UserSettings(DefaultsVersion: CurrentDefaults);
 
             // Version 1 Gives Everyone F10 And Automatic Audio, Once
-            if ((legacy?.DefaultsVersion ?? 0) >= CurrentDefaults)
+            if (settings.DefaultsVersion >= CurrentDefaults)
             {
                 return settings.Normalized();
             }
@@ -99,7 +98,7 @@ public sealed record UserSettings(
             when (exception is IOException or UnauthorizedAccessException or JsonException)
         {
             // A Missing Or Damaged File Means Defaults
-            return new UserSettings();
+            return new UserSettings(DefaultsVersion: CurrentDefaults);
         }
     }
 
@@ -166,7 +165,4 @@ public sealed record UserSettings(
                 : 1,
         };
     }
-
-    // A File Without The Version Predates It
-    private sealed record LegacySettings(bool FullResolution, int? DefaultsVersion);
 }

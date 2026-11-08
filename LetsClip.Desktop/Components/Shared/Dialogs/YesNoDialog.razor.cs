@@ -8,6 +8,16 @@ public partial class YesNoDialog
     [CascadingParameter]
     public required IMudDialogInstance MudDialog { get; set; }
 
+    public static async Task<bool> ConfirmDeleteAsync(IDialogService dialogService)
+    {
+        var dialog = await dialogService.ShowAsync<YesNoDialog>(
+            "Delete Clip",
+            new DialogOptions { MaxWidth = MaxWidth.ExtraSmall }
+        );
+
+        return await dialog.Result is { Canceled: false };
+    }
+
     private void Yes()
     {
         MudDialog.Close(DialogResult.Ok(true));

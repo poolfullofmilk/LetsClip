@@ -24,6 +24,8 @@ public sealed record CaptureOptions(
 
 public sealed record SaveOutcome(ClipInfo? Clip, string? Error);
 
+public sealed class CaptureBlockedException(string message) : InvalidOperationException(message);
+
 public sealed class ReplayRecorder : IDisposable
 {
     // Free Space Needed To Start, And The Floor That Stops
@@ -43,8 +45,25 @@ public sealed class ReplayRecorder : IDisposable
     // A Moving Window Closes Its Segment Within This
     private static readonly TimeSpan s_windowWait = TimeSpan.FromSeconds(1.5);
 
+    // A Fresh Capture Of A Moving Window Draws Within This
+    private static readonly TimeSpan s_windowProbe = TimeSpan.FromSeconds(5);
+
     // A Session This Old Had Worked, Its Retry Comes Quick
     private static readonly TimeSpan s_ranLong = TimeSpan.FromSeconds(30);
+
+    // How Long A Fallback Waits Before Trying Better Encoders
+    private static readonly TimeSpan[] s_upgradeWaits =
+    [
+        TimeSpan.FromMinutes(1),
+        TimeSpan.FromMinutes(2),
+        TimeSpan.FromMinutes(5),
+        TimeSpan.FromMinutes(15),
+        TimeSpan.FromMinutes(30),
+    ];
+
+    // Readings Before A Passing Problem Is Worth Showing
+    private const int ProblemTicks = 5;
+    private const int SlowTicks = 10;
 
     private readonly ClipLibrary _library;
     private readonly SemaphoreSlim _transition = new(1, 1);
@@ -54,6 +73,8 @@ public sealed class ReplayRecorder : IDisposable
     private CaptureSession? _session;
     private int _saves;
     private int _healthTicks;
+    private int _problemTicks;
+    private bool _windowQuiet;
 
     public ReplayRecorder(ClipLibrary library)
     {
@@ -75,8 +96,7 @@ public sealed class ReplayRecorder : IDisposable
 
     public event Action<ClipInfo>? ClipSaved;
 
-    // Every Error, True When The Session Had Run A While
-    public event Action<bool>? Failed;
+    public event Action<CaptureFailure>? Failed;
 
     public CaptureStatus Status { get; private set; }
 
@@ -110,6 +130,7 @@ public sealed class ReplayRecorder : IDisposable
             }
 
             _ = WatchEndAsync(session);
+            _ = UpgradeAsync(session);
             UpdateStatus(session, CaptureState.Recording);
             _health.Change(s_healthPeriod, s_healthPeriod);
             s_logger.Info(
@@ -120,7 +141,9 @@ public sealed class ReplayRecorder : IDisposable
         {
             // Any Failed Start Shows As An Error
             var message = exception.Message.TrimEnd('.');
-            Failed?.Invoke(false);
+            Failed?.Invoke(
+                exception is CaptureBlockedException ? CaptureFailure.Blocked : CaptureFailure.Brief
+            );
             SetStatus(Status with { State = CaptureState.Error, Message = message });
             s_logger.Warn($"Failed To Start Recording {exception.GetType().Name}, {message}");
         }
@@ -199,18 +222,18 @@ public sealed class ReplayRecorder : IDisposable
     {
         if (!FFmpeg.IsAvailable)
         {
-            throw new InvalidOperationException("FFmpeg is missing beside LetsClip, reinstall it");
+            throw new CaptureBlockedException("FFmpeg is missing beside LetsClip, reinstall it");
         }
 
         // The Saved Monitor Is Found By Device Path, Never Number
         var monitor =
             MonitorCatalog.Find(MonitorCatalog.Enumerate(), options.Monitor.DevicePath)
-            ?? throw new InvalidOperationException(
+            ?? throw new CaptureBlockedException(
                 $"{options.Monitor.FriendlyName} is not connected"
             );
         if (monitor.IsHdr)
         {
-            throw new InvalidOperationException(
+            throw new CaptureBlockedException(
                 $"HDR is on for {monitor.FriendlyName}, turn it off in Display Settings to record in SDR"
             );
         }
@@ -218,7 +241,7 @@ public sealed class ReplayRecorder : IDisposable
         Directory.CreateDirectory(AppInfo.CacheDirectory);
         if (FreeBytes(AppInfo.CacheDirectory) < MinimumFreeBytes)
         {
-            throw new InvalidOperationException("Less than 2 GB free for the replay cache");
+            throw new CaptureBlockedException("Less than 2 GB free for the replay cache");
         }
 
         // A Window Keeps Its Own Shape, No Bars
@@ -228,7 +251,14 @@ public sealed class ReplayRecorder : IDisposable
                 ? FitInside(box, client)
                 : box;
         var skipped = new List<string>();
-        foreach (var encoder in VideoEncoders.Candidates(MonitorCatalog.AdapterVendors()))
+
+        // AMF Can Hang After A Killed Session, Two Starts
+        var encoders = VideoEncoders
+            .Candidates(MonitorCatalog.AdapterVendors())
+            .SelectMany(encoder =>
+                Enumerable.Repeat(encoder, encoder.IsHardware && !encoder.GpuFrames ? 2 : 1)
+            );
+        foreach (var encoder in encoders)
         {
             if (
                 !await VideoEncoders.WorksAsync(
@@ -240,11 +270,7 @@ public sealed class ReplayRecorder : IDisposable
                 )
             )
             {
-                if (!encoder.GpuFrames)
-                {
-                    skipped.Add($"{encoder.Name} unavailable");
-                }
-
+                skipped.Add($"{encoder.Name} unavailable");
                 continue;
             }
 
@@ -260,21 +286,11 @@ public sealed class ReplayRecorder : IDisposable
             try
             {
                 await session.LaunchAsync();
-                if (skipped.Count > 0)
-                {
-                    session.Warning = $"Using {encoder.Name}, {string.Join(", ", skipped)}";
-                }
-
                 return session;
             }
             catch (Exception exception) when (IsStartFailure(exception))
             {
-                // A GPU Route Falling Back Is No News
-                if (!encoder.GpuFrames)
-                {
-                    skipped.Add($"{encoder.Name} failed");
-                }
-
+                skipped.Add($"{encoder.Name} failed");
                 s_logger.Warn(
                     $"Failed To Capture With {encoder.Name}{(encoder.GpuFrames ? " On The GPU" : "")}, {exception.Message}"
                 );
@@ -286,7 +302,7 @@ public sealed class ReplayRecorder : IDisposable
             }
         }
 
-        throw new InvalidOperationException(string.Join(", ", skipped));
+        throw new InvalidOperationException(string.Join(", ", skipped.Distinct()));
     }
 
     private async Task WatchEndAsync(CaptureSession session)
@@ -303,7 +319,7 @@ public sealed class ReplayRecorder : IDisposable
             && MonitorCatalog.ClientSizeOf(session.Options.GameWindow) is null
         )
         {
-            await FailAsync(session, "Recording stopped, the window closed", quiet: true);
+            await FailAsync(session, "Recording stopped, the window closed", windowClosed: true);
             return;
         }
 
@@ -315,7 +331,12 @@ public sealed class ReplayRecorder : IDisposable
         await FailAsync(session, $"Recording stopped, {reason}");
     }
 
-    private async Task FailAsync(CaptureSession session, string message, bool quiet = false)
+    private async Task FailAsync(
+        CaptureSession session,
+        string message,
+        bool windowClosed = false,
+        bool blocked = false
+    )
     {
         // A Broken Session Ends Whole, Its History Untrusted
         await _transition.WaitAsync();
@@ -335,9 +356,14 @@ public sealed class ReplayRecorder : IDisposable
             _health.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
 
             // The Controller Hears First, A Quick Retry Shows No Error
-            Failed?.Invoke(quiet || Stopwatch.GetElapsedTime(session.OriginTimestamp) > s_ranLong);
+            Failed?.Invoke(
+                blocked ? CaptureFailure.Blocked
+                : windowClosed || Stopwatch.GetElapsedTime(session.OriginTimestamp) > s_ranLong
+                    ? CaptureFailure.RanLong
+                : CaptureFailure.Brief
+            );
             SetStatus(Status with { State = CaptureState.Error, Message = message });
-            if (quiet)
+            if (windowClosed)
             {
                 s_logger.Info("Stopped Recording, The Window Closed");
             }
@@ -350,6 +376,153 @@ public sealed class ReplayRecorder : IDisposable
         {
             _transition.Release();
         }
+    }
+    #endregion
+
+    #region Encoder Recovery
+    private async Task UpgradeAsync(CaptureSession current)
+    {
+        // A Fallback Keeps Trying Better Encoders, Out Of Sight
+        var better = VideoEncoders
+            .Candidates(MonitorCatalog.AdapterVendors())
+            .TakeWhile(encoder => encoder != current.Encoder)
+            .ToList();
+        for (var attempt = 0; better.Count > 0; attempt++)
+        {
+            var wait = s_upgradeWaits[Math.Min(attempt, s_upgradeWaits.Length - 1)];
+            await Task.WhenAny(Task.Delay(wait), current.Ended);
+            if (current.Stopping || current.HasEnded)
+            {
+                return;
+            }
+
+            foreach (var encoder in better)
+            {
+                if (await TryMoveToAsync(current, encoder))
+                {
+                    return;
+                }
+            }
+        }
+    }
+
+    private async Task<bool> TryMoveToAsync(CaptureSession current, VideoEncoder encoder)
+    {
+        // Runs Beside The Fallback Until It Holds A Whole Replay
+        var (width, height) = current.Size;
+        var options = current.Options;
+        if (
+            !await VideoEncoders.WorksAsync(
+                encoder,
+                width,
+                height,
+                options.FrameRate,
+                CancellationToken.None
+            )
+        )
+        {
+            return false;
+        }
+
+        var standby = new CaptureSession(options, encoder, width, height);
+        try
+        {
+            await standby.LaunchAsync();
+            await Task.WhenAny(
+                Task.Delay(TimeSpan.FromSeconds(options.Seconds + CaptureSession.SegmentSeconds)),
+                standby.Ended,
+                current.Ended
+            );
+            if (!standby.HasEnded && await SwapAsync(current, standby))
+            {
+                return true;
+            }
+        }
+        catch (Exception exception) when (IsStartFailure(exception))
+        {
+            s_logger.Info($"Stayed On {current.Encoder.Name}, {encoder.Name}: {exception.Message}");
+        }
+
+        standby.Shutdown();
+        return false;
+    }
+
+    private async Task<bool> SwapAsync(CaptureSession current, CaptureSession standby)
+    {
+        // Whole Replay Ready, So The Change Costs No History
+        await _transition.WaitAsync();
+        try
+        {
+            await WaitForSavesAsync(TimeSpan.FromSeconds(5));
+            lock (_gate)
+            {
+                if (_session != current)
+                {
+                    return false;
+                }
+
+                _session = standby;
+            }
+
+            _ = WatchEndAsync(standby);
+            _ = UpgradeAsync(standby);
+            UpdateStatus(standby, null);
+            await Task.Run(current.Shutdown);
+            s_logger.Info($"Moved Recording From {current.Encoder.Name} To {standby.Encoder.Name}");
+            return true;
+        }
+        finally
+        {
+            _transition.Release();
+        }
+    }
+
+    private async Task ProbeWindowAsync(CaptureSession current)
+    {
+        // Only A Hung Encoder Loses To A Fresh Capture
+        var (width, height) = current.Size;
+        var encoders = VideoEncoders
+            .Candidates(MonitorCatalog.AdapterVendors())
+            .Where(encoder => encoder == current.Encoder || !encoder.IsHardware);
+        foreach (var encoder in encoders)
+        {
+            if (current.Stopping || current.HasEnded)
+            {
+                return;
+            }
+
+            var standby = new CaptureSession(current.Options, encoder, width, height);
+            try
+            {
+                await standby.LaunchAsync();
+                await Task.WhenAny(
+                    standby.Video!.FirstSegment,
+                    Task.Delay(s_windowProbe),
+                    current.Ended
+                );
+
+                // A Window That Just Moved Reaches The Old One Too
+                await Task.Delay(s_windowWait);
+                if (
+                    standby.Video.FirstSegment.IsCompletedSuccessfully
+                    && current.Video!.SinceLastSegment > s_stallTimeout
+                    && await SwapAsync(current, standby)
+                )
+                {
+                    return;
+                }
+            }
+            catch (Exception exception) when (IsStartFailure(exception))
+            {
+                s_logger.Info(
+                    $"Failed To Probe The Window With {encoder.Name}: {exception.Message}"
+                );
+            }
+
+            standby.Shutdown();
+        }
+
+        s_logger.Debug("Kept The Capture Of A Still Window");
     }
     #endregion
 
@@ -471,18 +644,33 @@ public sealed class ReplayRecorder : IDisposable
         }
 
         // Exactly The Replay Length, Or All Of A Younger Session
-        return await ClipSaver.SaveAsync(
-            video,
-            session.Audio?.Segments.Covering(from, end) ?? [],
-            Math.Max(from, CaptureSession.LeadSeconds),
-            to,
-            videoOffset,
-            session.Folder,
-            recordedAt,
-            session.Options.FrameRate,
-            session.Options.GameName,
-            _library
-        );
+        Task<ClipInfo> SaveClipAsync()
+        {
+            return ClipSaver.SaveAsync(
+                video,
+                session.Audio?.Segments.Covering(from, end) ?? [],
+                Math.Max(from, CaptureSession.LeadSeconds),
+                to,
+                videoOffset,
+                session.Folder,
+                recordedAt,
+                session.Options.FrameRate,
+                session.Options.GameName,
+                _library
+            );
+        }
+
+        try
+        {
+            return await SaveClipAsync();
+        }
+        catch (IOException exception)
+        {
+            // A Scanner Holding The File Lets Go In A Moment
+            s_logger.Info($"Saving Again After {exception.GetType().Name}");
+            await Task.Delay(TimeSpan.FromSeconds(1));
+            return await SaveClipAsync();
+        }
     }
 
     private static string SaveErrorOf(Exception exception)
@@ -544,11 +732,27 @@ public sealed class ReplayRecorder : IDisposable
             return;
         }
 
+        // A Still Window And A Hung Encoder Look Alike
+        var windowQuiet = isWindow && video.SinceLastSegment > s_stallTimeout;
+        if (windowQuiet && !_windowQuiet)
+        {
+            _ = ProbeWindowAsync(session);
+        }
+
+        _windowQuiet = windowQuiet;
+
         if (++_healthTicks % 10 == 0 && FreeBytes(session.Folder) < StopFreeBytes)
         {
-            _ = FailAsync(session, "The disk is almost full, free some space and start again");
+            _ = FailAsync(
+                session,
+                "The disk is almost full, free some space and start again",
+                blocked: true
+            );
             return;
         }
+
+        // A Problem That Clears Itself Is Never Shown
+        _problemTicks = session.Mixer?.Problem is null ? 0 : _problemTicks + 1;
 
         if (!isWindow)
         {
@@ -569,7 +773,7 @@ public sealed class ReplayRecorder : IDisposable
 
             var video = session.Video;
             var target = session.Options.FrameRate;
-            var slow = video is { SlowReports: >= 3, FramesPerSecond: { } measured }
+            var slow = video is { SlowReports: >= SlowTicks, FramesPerSecond: { } measured }
                 ? target > 30
                     ? $"Capturing at {measured:0} FPS, below {target}, pick a lower frame rate"
                     : $"Capturing at {measured:0} FPS, below {target}"
@@ -578,7 +782,7 @@ public sealed class ReplayRecorder : IDisposable
                 state ?? Status.State,
                 null,
                 _saves > 0,
-                session.Mixer?.Problem ?? slow ?? session.Warning
+                (_problemTicks >= ProblemTicks ? session.Mixer?.Problem : null) ?? slow
             );
 
             // Only A Real Change Wakes The Tray And The Page

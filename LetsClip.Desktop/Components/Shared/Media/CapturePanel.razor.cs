@@ -142,6 +142,11 @@ public partial class CapturePanel : IDisposable
         );
     }
 
+    private void SetGamesOnly(bool enabled)
+    {
+        Controller.UpdateSettings(settings => settings with { GamesOnly = enabled });
+    }
+
     private void SetReplay(int seconds)
     {
         Controller.UpdateSettings(settings => settings with { ReplaySeconds = seconds });

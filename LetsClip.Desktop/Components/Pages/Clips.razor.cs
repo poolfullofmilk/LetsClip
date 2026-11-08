@@ -1,3 +1,4 @@
+using LetsClip.Data.Enums;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
 using LetsClip.Desktop.Components.Shared.Dialogs;
@@ -26,11 +27,15 @@ public partial class Clips : IDisposable
     [Inject]
     public required IJSRuntime JavaScript { get; set; }
 
+    public const string Route = "clips";
+
     private readonly CancellationTokenSource _closing = new();
     private DotNetObjectReference<Clips>? _reference;
-    private IReadOnlyList<ClipInfo>? _clips;
-    private IReadOnlyList<ClipInfo>? _nextClips;
+    private Action? _nextChange;
     private int _loads;
+
+    // The Last List, So Coming Back Never Shows A Spinner
+    private static IReadOnlyList<ClipInfo>? s_clips;
 
     // The Games Shown, Null For All, Kept While LetsClip Runs
     private static HashSet<string>? s_shownGames;
@@ -40,20 +45,34 @@ public partial class Clips : IDisposable
     private bool _filterOpen;
 
     private string CountText =>
-        _clips is not { Count: > 0 } clips ? ""
+        s_clips is not { Count: > 0 } clips ? ""
         : IsFiltered ? $"{ShownClips.Count} of {clips.Count}"
         : $"{clips.Count}";
 
     private static bool IsFiltered => s_shownGames is not null;
 
-    private IReadOnlyList<ClipInfo> ShownClips =>
-        s_shownGames is { } shown
-            ? [.. (_clips ?? []).Where(clip => shown.Contains(GameOf(clip)))]
-            : _clips ?? [];
+    // What The Cards Show, Filtered Then Ordered
+    private IReadOnlyList<ClipInfo> ShownClips
+    {
+        get
+        {
+            var shown = (s_clips ?? []).Where(clip =>
+                s_shownGames?.Contains(GameOf(clip)) != false
+            );
+            var ordered = Controller.Settings.ClipSort switch
+            {
+                ClipSort.Oldest => shown.OrderBy(clip => clip.RecordedAt),
+                ClipSort.Largest => shown.OrderByDescending(clip => clip.SizeBytes),
+                ClipSort.Longest => shown.OrderByDescending(clip => clip.Duration),
+                _ => shown.OrderByDescending(clip => clip.RecordedAt),
+            };
+            return [.. ordered];
+        }
+    }
 
-    private IReadOnlyList<string> Games =>
+    private static IReadOnlyList<string> Games =>
         [
-            .. (_clips ?? [])
+            .. (s_clips ?? [])
                 .Select(GameOf)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Order(StringComparer.CurrentCultureIgnoreCase),
@@ -115,25 +134,31 @@ public partial class Clips : IDisposable
 
     private async Task ShowAsync(IReadOnlyList<ClipInfo> clips)
     {
-        // Cards Slide To New Places, Others Fade In Or Out
+        // The Same Cards Just Update
         if (
-            _clips is not null
-            && _clips.Select(clip => clip.Path).SequenceEqual(clips.Select(clip => clip.Path))
+            s_clips is not null
+            && s_clips.Select(clip => clip.Path).SequenceEqual(clips.Select(clip => clip.Path))
         )
         {
-            _clips = clips;
+            s_clips = clips;
             StateHasChanged();
             return;
         }
 
-        _nextClips = clips;
+        await ChangeAsync(() => s_clips = clips);
+    }
+
+    private async Task ChangeAsync(Action change)
+    {
+        // Cards Slide To New Places, Others Fade In Or Out
+        _nextChange += change;
         _reference ??= DotNetObjectReference.Create(this);
         try
         {
             await JavaScript.InvokeVoidAsync(
                 "letsClip.transition",
                 _reference,
-                nameof(ShowNextClips)
+                nameof(ShowNextChange)
             );
         }
         catch (JSDisconnectedException)
@@ -143,10 +168,17 @@ public partial class Clips : IDisposable
     }
 
     [JSInvokable]
-    public void ShowNextClips()
+    public void ShowNextChange()
     {
-        _clips = _nextClips ?? _clips;
+        Interlocked.Exchange(ref _nextChange, null)?.Invoke();
         StateHasChanged();
+    }
+
+    private async Task SetSortAsync(ClipSort sort)
+    {
+        await ChangeAsync(() =>
+            Controller.UpdateSettings(settings => settings with { ClipSort = sort })
+        );
     }
 
     private static string CardName(ClipInfo clip)
@@ -155,17 +187,16 @@ public partial class Clips : IDisposable
         return $"clip-{(uint)clip.Path.GetHashCode(StringComparison.OrdinalIgnoreCase)}";
     }
 
-    private static IEnumerable<string> FactsOf(ClipInfo clip)
+    private static IEnumerable<(string Label, string Value)> FactsOf(ClipInfo clip)
     {
-        // Stacked From The Bottom Left, The Date Last
+        // Old Metadata May Not Know The Resolution Yet
         if (clip.Width > 0)
         {
-            yield return $"{clip.Width} × {clip.Height}";
+            yield return ("Resolution", $"{clip.Width} × {clip.Height}");
         }
 
-        yield return Formatter.FormatBitrate(clip.SizeBytes * 8 / clip.Duration);
-        yield return Formatter.FormatSize(clip.SizeBytes);
-        yield return Formatter.FormatDateTime(clip.RecordedAt);
+        yield return ("Bitrate", Formatter.FormatBitrate(clip.SizeBytes * 8 / clip.Duration));
+        yield return ("Size", Formatter.FormatSize(clip.SizeBytes));
     }
 
     #region Game Filter
@@ -203,29 +234,35 @@ public partial class Clips : IDisposable
         _search = null;
     }
 
-    private void ApplyFilter()
+    private async Task ApplyFilterAsync()
     {
         // Every Game Checked Means No Filter, New Games Show Too
-        s_shownGames = Games.All(_draft.Contains)
+        var shown = Games.All(_draft.Contains)
             ? null
             : new HashSet<string>(_draft, StringComparer.OrdinalIgnoreCase);
         _filterOpen = false;
+        await ChangeAsync(() => s_shownGames = shown);
     }
 
-    private static void ShowAll()
+    private async Task ShowAllAsync()
     {
-        s_shownGames = null;
+        await ChangeAsync(() => s_shownGames = null);
     }
     #endregion
 
+    public static string EditorOf(string path)
+    {
+        return $"{Route}/{Uri.EscapeDataString(Path.GetFileName(path))}";
+    }
+
     private void Open(ClipInfo clip)
     {
-        NavigationManager.NavigateTo(ClipRoutes.EditorOf(clip.Path));
+        NavigationManager.NavigateTo(EditorOf(clip.Path));
     }
 
     private async Task DeleteAsync(ClipInfo clip)
     {
-        if (!await DialogService.ConfirmDeleteAsync())
+        if (!await YesNoDialog.ConfirmDeleteAsync(DialogService))
         {
             return;
         }
@@ -238,7 +275,7 @@ public partial class Clips : IDisposable
 
         // The Card Goes At Once, The Watcher's Reload Then Agrees
         ++_loads;
-        await ShowAsync([.. (_clips ?? []).Where(shown => shown.Path != clip.Path)]);
+        await ShowAsync([.. (s_clips ?? []).Where(shown => shown.Path != clip.Path)]);
     }
 
     private void OpenFolder()

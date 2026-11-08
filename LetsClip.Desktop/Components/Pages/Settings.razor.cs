@@ -19,6 +19,9 @@ public partial class Settings : IDisposable
     // A Slid Volume Plays Once Settled, Restarts Cut The Chime
     private static readonly TimeSpan s_chimeDelay = TimeSpan.FromMilliseconds(300);
 
+    // Renewed Each Second, So A Restarted Session Is Muted Too
+    private static readonly TimeSpan s_loopbackMute = TimeSpan.FromSeconds(2);
+
     [Inject]
     public required CaptureController Controller { get; set; }
 
@@ -31,6 +34,9 @@ public partial class Settings : IDisposable
     [Inject]
     public required IDialogService DialogService { get; set; }
 
+    [Inject]
+    public required ISnackbar Snackbar { get; set; }
+
     private IReadOnlyList<AudioDeviceInfo> _playback = [];
     private IReadOnlyList<AudioDeviceInfo> _microphones = [];
     private DotNetObjectReference<Settings>? _reference;
@@ -41,6 +47,12 @@ public partial class Settings : IDisposable
     private string? _folderError;
     private string? _hotkeyError;
     private string? _microphoneError;
+    private (long Used, long Free)? _space;
+
+    private string? SpaceText =>
+        _space is var (used, free)
+            ? $"{Formatter.FormatSize(used)} Used · {Formatter.FormatSize(free)} Free"
+            : null;
 
     // A Folder Under The Profile Reads From There, Like Videos\LetsClip
     private string ClipsFolderText
@@ -70,6 +82,14 @@ public partial class Settings : IDisposable
         (_playback, _microphones) = await Task.Run(() =>
             (AudioDevices.Playback(), AudioDevices.Microphones())
         );
+        await MeasureSpaceAsync();
+    }
+
+    private async Task MeasureSpaceAsync()
+    {
+        // Walks The Folder, Off The UI Thread
+        var folder = Controller.Settings.ClipsDirectory;
+        _space = await Task.Run(() => ClipLibrary.SpaceOf(folder));
     }
 
     private async Task ShowGamesAsync()
@@ -81,34 +101,6 @@ public partial class Settings : IDisposable
     }
 
     #region Audio Devices
-    private static string LabelOf(IReadOnlyList<AudioDeviceInfo> devices, string? id)
-    {
-        return devices.FirstOrDefault(device => device.Id == id)?.Name ?? "Automatic";
-    }
-
-    private static string ShownDevice(IReadOnlyList<AudioDeviceInfo> devices, string id)
-    {
-        // A Gone Device Records Through Automatic Until It Returns
-        return devices.Any(device => device.Id == id) ? id : AudioDevices.AutomaticId;
-    }
-
-    private static string? DetailOf(IReadOnlyList<AudioDeviceInfo> devices, string id)
-    {
-        // The Closed Field Reads Like Its Item
-        return devices.FirstOrDefault(device => device.Id == id)?.Adapter;
-    }
-
-    private static bool IsChecked(IReadOnlyList<AudioDeviceInfo> devices, string savedId, string id)
-    {
-        // Automatic Also Checks The Device It Follows
-        var shown = ShownDevice(devices, savedId);
-        return id == shown
-            || (
-                shown == AudioDevices.AutomaticId
-                && devices.Any(device => device.Id == id && device.IsDefault)
-            );
-    }
-
     private void SetSystemAudio(bool enabled)
     {
         Controller.UpdateSettings(settings => settings with { SystemAudio = enabled });
@@ -129,16 +121,21 @@ public partial class Settings : IDisposable
         Controller.UpdateSettings(settings => settings with { Microphone = enabled });
     }
 
-    private void SetNoiseCancellation(bool enabled)
+    private async Task SetNoiseCancellationAsync(bool enabled)
     {
         Controller.UpdateSettings(settings => settings with { NoiseCancellation = enabled });
+        await RestartMicrophoneTestAsync();
     }
 
     private async Task SetMicrophoneDevice(string id)
     {
         Controller.UpdateSettings(settings => settings with { MicrophoneDeviceId = id });
+        await RestartMicrophoneTestAsync();
+    }
 
-        // A Running Test Follows The Newly Picked Microphone
+    private async Task RestartMicrophoneTestAsync()
+    {
+        // A Running Test Follows What Was Just Picked
         if (_meter is not null)
         {
             StopMicrophoneTest();
@@ -149,24 +146,33 @@ public partial class Settings : IDisposable
     private async Task ToggleMicrophoneTestAsync()
     {
         _microphoneError = null;
+
         if (_meter is not null)
         {
             StopMicrophoneTest();
             return;
         }
 
-        // Opening The Device Takes A Moment, Off The UI Thread
+        // Opening The Devices Takes A Moment, Off The UI Thread
         var id = Controller.Settings.MicrophoneDeviceId;
+        var noiseCancellation = Controller.Settings.NoiseCancellation;
         try
         {
-            _meter = await Task.Run(() => new MicrophoneMeter(id));
+            _meter = await Task.Run(() => new MicrophoneMeter(id, noiseCancellation));
+            Snackbar.Add(
+                "You hear yourself as clips will, headphones avoid an echo",
+                Severity.Info
+            );
             _ = WarnIfSilentAsync(_meter);
+            _ = KeepOutOfClipsAsync(_meter);
+            _ = StopWhenLostAsync(_meter);
         }
         catch (Exception exception)
             when (exception
                     is System.Runtime.InteropServices.COMException
                         or InvalidOperationException
                         or ArgumentException
+                        or System.ComponentModel.Win32Exception
             )
         {
             s_logger.Warn($"Failed To Test Microphone {exception.GetType().Name}");
@@ -183,6 +189,29 @@ public partial class Settings : IDisposable
             s_logger.Warn("Microphone Test Heard Only Silence");
             _microphoneError =
                 "No sound reaches LetsClip from this microphone, check its mute key and Windows privacy settings";
+            StateHasChanged();
+        }
+    }
+
+    private async Task KeepOutOfClipsAsync(MicrophoneMeter meter)
+    {
+        // The Loopback Hears Silence, So No Clip Holds The Test
+        while (_meter == meter)
+        {
+            Controller.Recorder.MuteSystemAudio(s_loopbackMute);
+            await Task.Delay(TimeSpan.FromSeconds(1));
+        }
+    }
+
+    private async Task StopWhenLostAsync(MicrophoneMeter meter)
+    {
+        // An Unplugged Device Ends The Test, Saying Why
+        await meter.Ended;
+        if (_meter == meter)
+        {
+            s_logger.Warn("Microphone Test Lost Its Device");
+            _microphoneError = "The test stopped, check your microphone and output in Windows";
+            StopMicrophoneTest();
             StateHasChanged();
         }
     }
@@ -306,7 +335,7 @@ public partial class Settings : IDisposable
         Controller.UpdateSettings(settings => settings with { StartWithWindows = enabled });
     }
 
-    private void PickFolder()
+    private async Task PickFolderAsync()
     {
         _folderError = null;
         if (DesktopShell.PickFolder(Controller.Settings.ClipsDirectory) is not { } folder)
@@ -322,26 +351,21 @@ public partial class Settings : IDisposable
             return;
         }
 
-        try
-        {
-            Directory.CreateDirectory(full);
-            var probe = Path.Combine(full, $"{ClipLibrary.PartialPrefix}{Guid.NewGuid():N}.probe");
-            File.WriteAllText(probe, "");
-            File.Delete(probe);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        if (!ClipLibrary.CanWriteTo(full))
         {
             _folderError = "LetsClip cannot write there, pick another folder";
             return;
         }
 
         Controller.UpdateSettings(settings => settings with { ClipsFolder = full });
+        await MeasureSpaceAsync();
     }
 
-    private void UseDefaultFolder()
+    private async Task UseDefaultFolderAsync()
     {
         _folderError = null;
         Controller.UpdateSettings(settings => settings with { ClipsFolder = null });
+        await MeasureSpaceAsync();
     }
 
     private void OpenFolder()

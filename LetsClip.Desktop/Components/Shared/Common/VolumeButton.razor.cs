@@ -13,6 +13,9 @@ public partial class VolumeButton
     public required string Text { get; set; }
 
     [Parameter]
+    public bool Filled { get; set; }
+
+    [Parameter]
     public bool Disabled { get; set; }
 
     [Parameter]

@@ -36,10 +36,71 @@ window.addEventListener(
     true
 );
 
+// Resting On A Card's Picture Plays Its Clip, Silently
+(() => {
+    let previewed = null;
+
+    const stopPreview = () => {
+        if (!previewed) return;
+        const { holder, timer, frame, video, bar } = previewed;
+        previewed = null;
+        clearTimeout(timer);
+        cancelAnimationFrame(frame);
+        delete holder.dataset.playing;
+        if (!video) return;
+        // After Its Fade, Then The File Is Let Go
+        setTimeout(() => {
+            video.removeAttribute("src");
+            video.load();
+            video.remove();
+            bar.remove();
+        }, 200);
+    };
+
+    const startPreview = (holder) => {
+        const entry = { holder, frame: 0 };
+        previewed = entry;
+        // A Pointer Only Passing Over Loads Nothing
+        entry.timer = setTimeout(() => {
+            const video = document.createElement("video");
+            video.muted = true;
+            video.loop = true;
+            video.src = holder.dataset.clip;
+            const bar = document.createElement("div");
+            bar.className = "clip-preview-bar";
+            const fill = bar.appendChild(document.createElement("div"));
+            holder.append(video, bar);
+            Object.assign(entry, { video, bar });
+            video.addEventListener("playing", () => (holder.dataset.playing = ""), { once: true });
+            video.play().catch(() => {});
+            const follow = () => {
+                if (previewed !== entry) return;
+                if (!holder.isConnected) return stopPreview();
+                if (video.duration) fill.style.transform = `scaleX(${video.currentTime / video.duration})`;
+                entry.frame = requestAnimationFrame(follow);
+            };
+            entry.frame = requestAnimationFrame(follow);
+        }, 250);
+    };
+
+    document.addEventListener("pointerover", (event) => {
+        const holder = (event.target instanceof Element && event.target.closest(".clip-thumb")?.querySelector(".clip-preview")) || null;
+        if (holder === (previewed?.holder ?? null)) return;
+        stopPreview();
+        if (holder && !matchMedia("(prefers-reduced-motion: reduce)").matches) startPreview(holder);
+    });
+
+    // Opening It, Leaving Or Hiding The Window Ends One
+    document.addEventListener("pointerdown", stopPreview);
+    document.addEventListener("visibilitychange", stopPreview);
+    document.documentElement.addEventListener("pointerleave", stopPreview);
+})();
+
 window.letsClip = (() => {
     // Changes Run Through Here Animate, Named Cards Slide
     const transition = (dotnet, method) => {
-        document.startViewTransition(() => dotnet.invokeMethodAsync(method).catch(() => {}));
+        // A Newer Change Skips This One, Which Rejects Ready
+        document.startViewTransition(() => dotnet.invokeMethodAsync(method).catch(() => {})).ready.catch(() => {});
     };
 
     // The Shortest Selection, Matching TrimRange.Step
@@ -82,8 +143,8 @@ window.letsClip = (() => {
         if (state && !state.frame) state.frame = requestAnimationFrame(loop);
     };
 
-    // Each Clip Opens Playing Its Kept Part With Sound
-    const attach = (video, source, playhead, timeline, dotnet, length, start, end, volume, separator, frames) => {
+    // Opening A Clip Plays It, A Cut Or Restore Waits
+    const attach = (video, source, playhead, timeline, dotnet, length, start, end, volume, muted, separator, frames, autoPlay) => {
         detach();
         // Detach Removed The Source Behind Blazor's Back
         if (video.getAttribute("src") !== source) video.setAttribute("src", source);
@@ -99,16 +160,23 @@ window.letsClip = (() => {
         setEdge(range, "end", end);
         if (range.start !== start || range.end !== end) commit(range);
         video.currentTime = range.start + inside;
-        setVolume(volume, false);
-        const failed = () => dotnet.invokeMethodAsync("OnPlayerError").catch(() => {});
+        setVolume(volume, muted);
+        const failed = () => {
+            release(video);
+            dotnet.invokeMethodAsync("OnPlayerError").catch(() => {});
+        };
         const loaded = () => {
             dotnet.invokeMethodAsync("OnPlayerReady").catch(() => {});
-            play(range.start, range.end);
+            if (autoPlay) play(range.start, range.end);
+            // The Held Frame Lets Go Once The Right One Shows
+            if (video.seeking) video.addEventListener("seeked", () => release(video), { signal, once: true });
+            else release(video);
         };
         video.addEventListener("error", failed, { signal });
         video.addEventListener("loadeddata", loaded, { signal, once: true });
         if (video.readyState >= 2) loaded();
         if (video.error) failed();
+        video.addEventListener("click", toggle, { signal });
         video.addEventListener("dblclick", fullScreen, { signal });
         timeline.addEventListener("pointerdown", down, { signal });
         timeline.addEventListener("pointermove", move, { signal });
@@ -119,13 +187,30 @@ window.letsClip = (() => {
         kick();
     };
 
+    const frozenOf = (video) => video.parentElement.querySelector(".player-frozen");
+    const release = (video) => delete frozenOf(video).dataset.held;
+
+    // The Frame On Screen Stays While The File Changes
+    const hold = (video) => {
+        if (video.readyState < 2) return;
+        const canvas = frozenOf(video);
+        const box = video.getBoundingClientRect();
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext("2d").drawImage(video, 0, 0);
+        canvas.style.width = `${box.width}px`;
+        canvas.style.height = `${box.height}px`;
+        canvas.dataset.held = "";
+    };
+
     // Playback Stops And Releases The File When The Editor Closes
-    const detach = () => {
+    const detach = (holdFrame) => {
         if (!state) return;
         cancelAnimationFrame(state.frame);
         state.listening.abort();
         const { video } = state;
         if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+        if (holdFrame) hold(video);
         video.pause();
         video.removeAttribute("src");
         video.load();
@@ -327,6 +412,14 @@ window.letsClip = (() => {
         if (!state) return;
         if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
         else state.video.requestFullscreen().catch(() => {});
+    };
+
+    // A Click Plays From Where The Handles Say
+    const toggle = () => {
+        if (!state || document.fullscreenElement) return;
+        if (!state.video.paused) return pause();
+        const { start, end } = readRange();
+        play(start, end);
     };
 
     document.addEventListener("fullscreenchange", () => {

@@ -1,3 +1,4 @@
+using LetsClip.Desktop.Theming;
 using Microsoft.AspNetCore.Components;
 using MudBlazor;
 
@@ -21,7 +22,7 @@ public partial class Notice
         {
             Severity.Error => Icons.Material.Rounded.Error,
             Severity.Success => Icons.Material.Rounded.CheckCircle,
-            Severity.Info or Severity.Normal => Icons.Material.Rounded.Info,
+            Severity.Info or Severity.Normal => AppTheme.InfoIcon,
             _ => Icons.Material.Rounded.Warning,
         };
 

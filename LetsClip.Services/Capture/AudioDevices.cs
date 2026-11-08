@@ -90,7 +90,7 @@ public static partial class AudioDevices
         }
     }
 
-    public static (string Name, string? Adapter) NamesOf(string friendlyName, string? adapterName)
+    private static (string Name, string? Adapter) NamesOf(string friendlyName, string? adapterName)
     {
         // Windows' Own Split, Microphone Array With Its Adapter Beside It
         var suffix = $" ({adapterName})";

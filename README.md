@@ -5,10 +5,12 @@
 - Games and Apps Only records just that window, so chats and notifications stay out, and you pick any installed game or app from one list
 - One click picks the recommended quality, or record up to your monitor's own resolution and refresh rate
 - Records system audio, and your microphone with its background noise cleaned out
+- Test your microphone live and hear how it will sound in a clip
 - Trim a clip to the exact frame and export it as an MP4, with or without sound, under a size limit when you need one
 - Keep just the trimmed part without losing any quality, and bring the full clip back anytime
-- Clips are named after their game or app and show their resolution, bitrate and size, rename them and filter them by game
-- Starts with Windows in the tray and updates itself
+- Clips are named after their game or app and show their resolution, bitrate and size, rename them, sort them and filter them by game
+- Rest the pointer on a clip to preview it
+- Starts with Windows in the tray, updates itself and recovers from problems on its own
 
 ## Quick start
 1. Download the exe from the [latest release](https://github.com/poolfullofmilk/LetsClip/releases/latest)

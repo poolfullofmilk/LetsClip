@@ -28,12 +28,39 @@ public static partial class FFmpeg
     private const int ExtendedLimitInformation = 9;
     private static readonly nint s_job = CreateKillOnCloseJob();
 
+    // Open Files Survive Temp Cleaners, FFmpeg Sits In %Temp%
+    private static List<FileStream> s_heldFiles = [];
+
     // Windows Throttles A Shown App's Children, Capture Then Drops Frames
     private const int ProcessPowerThrottling = 4;
     private const uint ThrottleExecutionSpeed = 0x1;
     private const uint ThrottleTimerResolution = 0x4;
 
     public static bool IsAvailable => File.Exists(FFmpegPath) && File.Exists(FFprobePath);
+
+    public static void HoldFiles()
+    {
+        try
+        {
+            s_heldFiles =
+            [
+                .. Directory
+                    .EnumerateFiles(Folder)
+                    .Select(path => new FileStream(
+                        path,
+                        FileMode.Open,
+                        FileAccess.Read,
+                        FileShare.Read
+                    )),
+            ];
+            s_logger.Debug($"Holding {s_heldFiles.Count} FFmpeg Files Open");
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Only A Cleaner Could Now Remove Them, Recording Still Runs
+            s_logger.Warn($"Failed To Hold FFmpeg Files {exception.GetType().Name}");
+        }
+    }
 
     public static Process Start(
         string executable,
@@ -188,8 +215,8 @@ public static partial class FFmpeg
 
     public static string Seconds(double value)
     {
-        // Invariant Seconds To The Microsecond, Never Below Zero
-        return Math.Max(0, value).ToString("0.######", CultureInfo.InvariantCulture);
+        // Invariant Seconds To The Microsecond
+        return value.ToString("0.######", CultureInfo.InvariantCulture);
     }
 
     private static bool IsProgress(string line)
@@ -212,29 +239,12 @@ public static partial class FFmpeg
         return job;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
+    [StructLayout(LayoutKind.Explicit, Size = 144)]
     private struct ExtendedLimits
     {
-        // JOBOBJECT_EXTENDED_LIMIT_INFORMATION, Only The Flags Are Set
-        public long PerProcessUserTimeLimit;
-        public long PerJobUserTimeLimit;
+        // JOBOBJECT_EXTENDED_LIMIT_INFORMATION On 64 Bit
+        [FieldOffset(16)]
         public uint LimitFlags;
-        public nuint MinimumWorkingSetSize;
-        public nuint MaximumWorkingSetSize;
-        public uint ActiveProcessLimit;
-        public nuint Affinity;
-        public uint PriorityClass;
-        public uint SchedulingClass;
-        public ulong ReadOperationCount;
-        public ulong WriteOperationCount;
-        public ulong OtherOperationCount;
-        public ulong ReadTransferCount;
-        public ulong WriteTransferCount;
-        public ulong OtherTransferCount;
-        public nuint ProcessMemoryLimit;
-        public nuint JobMemoryLimit;
-        public nuint PeakProcessMemoryUsed;
-        public nuint PeakJobMemoryUsed;
     }
 
     [StructLayout(LayoutKind.Sequential)]

@@ -22,10 +22,10 @@
                                  Class="mud-text-secondary ellipsis">
                             @(Controller.Games.GameName ?? "Waiting")
                         </MudText>
-                        @* Settings Link *@
+                        @* Record Monitor Link *@
                         <MudLink Typo="Typo.caption"
                                  Color="Color.Info"
-                                 Href="settings">
+                                 OnClick="() => SetGamesOnly(false)">
                             or Record a Monitor
                         </MudLink>
                     </MudStack>
@@ -36,40 +36,50 @@
                       Class="pt-6 pb-4">
                 @if (!Controller.Settings.GamesOnly)
                 {
-                    @* Monitor Select *@
-                    <FieldDetail Detail="@MonitorDetail(Controller.SelectedMonitor)">
-                        <ChoiceSelect T="MonitorInfo"
-                                      Label="Monitor"
-                                      Value="Controller.SelectedMonitor"
-                                      ValueChanged="SelectMonitor"
-                                      OpenChanged="OutlineMonitors"
-                                      ToStringFunc="MonitorLabel"
-                                      Placeholder="Pick the Monitor to Record">
-                            @foreach (var monitor in Controller.Monitors)
-                            {
-                                <MudSelectItem T="MonitorInfo"
-                                               Value="monitor">
-                                    <MudStack Row
-                                              Justify="Justify.SpaceBetween"
-                                              AlignItems="AlignItems.Center"
-                                              Spacing="4">
-                                        <MudText Typo="Typo.body2">@monitor.FriendlyName</MudText>
-                                        <MudStack Spacing="0"
-                                                  AlignItems="AlignItems.End">
-                                            <MudText Typo="Typo.body2"
-                                                     Class="mud-text-secondary">
-                                                @($"{monitor.Width} × {monitor.Height}")
-                                            </MudText>
-                                            <MudText Typo="Typo.body2"
-                                                     Class="mud-text-secondary">
-                                                @($"{monitor.RefreshRate} Hz")
-                                            </MudText>
+                    <MudStack Spacing="1"
+                              AlignItems="AlignItems.End">
+                        @* Monitor Select *@
+                        <FieldDetail Class="mud-width-full"
+                                     Detail="@MonitorDetail(Controller.SelectedMonitor)">
+                            <ChoiceSelect T="MonitorInfo"
+                                          Label="Monitor"
+                                          Value="Controller.SelectedMonitor"
+                                          ValueChanged="SelectMonitor"
+                                          OpenChanged="OutlineMonitors"
+                                          ToStringFunc="MonitorLabel"
+                                          Placeholder="Pick the Monitor to Record">
+                                @foreach (var monitor in Controller.Monitors)
+                                {
+                                    <MudSelectItem T="MonitorInfo"
+                                                   Value="monitor">
+                                        <MudStack Row
+                                                  Justify="Justify.SpaceBetween"
+                                                  AlignItems="AlignItems.Center"
+                                                  Spacing="4">
+                                            <MudText Typo="Typo.body2">@monitor.FriendlyName</MudText>
+                                            <MudStack Spacing="0"
+                                                      AlignItems="AlignItems.End">
+                                                <MudText Typo="Typo.body2"
+                                                         Class="mud-text-secondary">
+                                                    @($"{monitor.Width} × {monitor.Height}")
+                                                </MudText>
+                                                <MudText Typo="Typo.body2"
+                                                         Class="mud-text-secondary">
+                                                    @($"{monitor.RefreshRate} Hz")
+                                                </MudText>
+                                            </MudStack>
                                         </MudStack>
-                                    </MudStack>
-                                </MudSelectItem>
-                            }
-                        </ChoiceSelect>
-                    </FieldDetail>
+                                    </MudSelectItem>
+                                }
+                            </ChoiceSelect>
+                        </FieldDetail>
+                        @* Record Games Link *@
+                        <MudLink Typo="Typo.caption"
+                                 Color="Color.Info"
+                                 OnClick="() => SetGamesOnly(true)">
+                            or Record Games and Apps
+                        </MudLink>
+                    </MudStack>
                 }
                 @* Replay Length Select *@
                 <ChoiceSelect T="int"

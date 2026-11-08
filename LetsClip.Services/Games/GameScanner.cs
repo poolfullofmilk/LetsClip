@@ -273,12 +273,25 @@ internal static partial class GameScanner
     }
     #endregion
 
-    #region Steam
-    private static List<string> DiscoverSteamGameRoots()
+    #region Libraries
+    private static List<string> RootsFrom(Action<List<string>> discover)
     {
         List<string> roots = [];
-
         try
+        {
+            discover(roots);
+        }
+        catch
+        {
+            // An Unreadable Library Only Means Fewer Known Games
+        }
+
+        return roots;
+    }
+
+    private static List<string> DiscoverSteamGameRoots()
+    {
+        return RootsFrom(roots =>
         {
             var libraryFolders = File.ReadAllText(
                 Path.Combine(
@@ -321,22 +334,12 @@ internal static partial class GameScanner
                     }
                 }
             }
-        }
-        catch
-        {
-            // An Unreadable Library Only Means Fewer Known Games
-        }
-
-        return roots;
+        });
     }
-    #endregion
 
-    #region Epic
     private static List<string> DiscoverEpicGameRoots()
     {
-        List<string> roots = [];
-
-        try
+        return RootsFrom(roots =>
         {
             foreach (
                 var itemFilePath in EnumerateFilesSafely(
@@ -355,22 +358,12 @@ internal static partial class GameScanner
                     roots.Add(installLocation);
                 }
             }
-        }
-        catch
-        {
-            // An Unreadable Library Only Means Fewer Known Games
-        }
-
-        return roots;
+        });
     }
-    #endregion
 
-    #region Riot
     private static List<string> DiscoverRiotGameRoots()
     {
-        List<string> roots = [];
-
-        try
+        return RootsFrom(roots =>
         {
             using var jsonDocument = JsonDocument.Parse(
                 File.ReadAllText(@"C:\ProgramData\Riot Games\RiotClientInstalls.json")
@@ -390,22 +383,12 @@ internal static partial class GameScanner
 
                 roots.AddRange(EnumerateDirectoriesSafely(riotRoot));
             }
-        }
-        catch
-        {
-            // An Unreadable Library Only Means Fewer Known Games
-        }
-
-        return roots;
+        });
     }
-    #endregion
 
-    #region Rockstar
     private static List<string> DiscoverRockstarGameRoots()
     {
-        List<string> roots = [];
-
-        try
+        var found = RootsFrom(roots =>
         {
             using var baseKey = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Rockstar Games");
 
@@ -422,18 +405,11 @@ internal static partial class GameScanner
                     roots.Add(installLocation);
                 }
             }
-        }
-        catch
-        {
-            // An Unreadable Library Only Means Fewer Known Games
-        }
-
-        roots.AddRange(s_rockstarRoots.SelectMany(EnumerateDirectoriesSafely));
-        return roots;
+        });
+        found.AddRange(s_rockstarRoots.SelectMany(EnumerateDirectoriesSafely));
+        return found;
     }
-    #endregion
 
-    #region Roblox
     private static IEnumerable<string> DiscoverRobloxGameRoots() =>
         EnumerateDirectoriesSafely(
                 Path.Combine(

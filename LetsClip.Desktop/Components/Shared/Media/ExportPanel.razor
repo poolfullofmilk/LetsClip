@@ -1,10 +1,6 @@
 @* Export Panel *@
-<MudPaper Elevation="4"
-          Class="rounded-panel px-6 py-2 compact">
-    <MudText Typo="Typo.h6"
-             Class="pt-2">
-        Export
-    </MudText>
+<Panel Title="Export"
+       Class="compact">
     <SettingRow Title="Length">
         <MudText Typo="Typo.body2"
                  Class="mud-text-secondary player-time"
@@ -12,7 +8,7 @@
             @Formatter.FormatDuration(Range.Length)
         </MudText>
     </SettingRow>
-    <SettingRow Title="Original Size">
+    <SettingRow Title="Clip Size">
         <MudText Typo="Typo.body2"
                  Class="mud-text-secondary">
             @Formatter.FormatSize(Clip.SizeBytes)
@@ -20,8 +16,7 @@
     </SettingRow>
     @if (Limits is { Count: > 1 } limits)
     {
-        <SettingRow Title="Size Limit"
-                    Info="The exported file stays under this size. Unlimited keeps all the quality the clip has">
+        <SettingRow Title="Size Limit">
             @* Size Limit Select *@
             <MudElement HtmlTag="div"
                         Class="short-width">
@@ -48,9 +43,9 @@
             @($"{OutputSize.Width} × {OutputSize.Height}")
         </MudText>
     </SettingRow>
-    @if (SourceFrameRate > 60)
-    {
-        <SettingRow Title="Frame Rate">
+    <SettingRow Title="Frame Rate">
+        @if (SourceFrameRate > 60)
+        {
             @* Frame Rate Select *@
             <MudElement HtmlTag="div"
                         Class="short-width">
@@ -70,28 +65,23 @@
                     </MudSelectItem>
                 </ChoiceSelect>
             </MudElement>
-        </SettingRow>
-    }
-    else
-    {
-        <SettingRow Title="Frame Rate">
+        }
+        else
+        {
             <MudText Typo="Typo.body2"
                      Class="mud-text-secondary">
                 @($"{FrameRate:0} FPS")
             </MudText>
-        </SettingRow>
-    }
+        }
+    </SettingRow>
     @if (Media.HasAudio)
     {
         <SettingRow Title="Audio">
-            <MudText Typo="Typo.body2"
-                     Class="@AudioClass">
-                @(WithAudio ? "On" : "Muted")
-            </MudText>
             @* Audio Button *@
             <IconButton Icon="@(WithAudio ? Icons.Material.Rounded.VolumeUp : Icons.Material.Rounded.VolumeOff)"
                         Text="@(WithAudio ? "Mute Audio" : "Unmute Audio")"
                         Color="@(WithAudio ? Color.Default : Color.Error)"
+                        Filled
                         Disabled="@IsExporting"
                         OnClick="ToggleAudio" />
         </SettingRow>
@@ -101,13 +91,6 @@
                  Class="mud-text-secondary">
             @BitrateText
         </MudText>
-        <MudChip T="string"
-                 Size="Size.Small"
-                 Variant="Variant.Text"
-                 Color="@VerdictColor"
-                 Class="ma-0">
-            @VerdictText
-        </MudChip>
     </SettingRow>
 
     <MudStack Spacing="3"
@@ -115,6 +98,7 @@
         @if (VerdictHint is { } hint)
         {
             <MudText Typo="Typo.caption"
+                     Align="Align.Center"
                      Class="@VerdictHintClass">
                 @hint
             </MudText>
@@ -139,8 +123,8 @@
                 @* Cancel Button *@
                 <MudButton Variant="Variant.Filled"
                            Color="Color.Error"
-                           Size="Size.Small"
                            FullWidth
+                           Class="mt-2"
                            OnClick="Cancel">
                     Cancel Export
                 </MudButton>
@@ -171,6 +155,7 @@
                 <MudStack Spacing="2">
                     <MudStack Row
                               AlignItems="AlignItems.Center"
+                              Justify="Justify.Center"
                               Spacing="2">
                         <MudIcon Icon="@Icons.Material.Rounded.CheckCircle"
                                  Color="Color.Success"
@@ -200,4 +185,4 @@
             </MudPaper>
         }
     </MudStack>
-</MudPaper>
+</Panel>

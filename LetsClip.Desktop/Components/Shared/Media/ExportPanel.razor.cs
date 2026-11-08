@@ -100,24 +100,11 @@ public partial class ExportPanel : IDisposable
 
     private ExportBudget Budget => SizeBudget.Plan(Megabytes, Shape);
 
-    // Muted Reads Red, Like Every Removal
-    private string AudioClass => WithAudio ? "mud-text-secondary" : "mud-error-text";
-
     // The Most Video Gets, Still Scenes Come Out Smaller
     private string BitrateText =>
-        Budget.VideoBitsPerSecond > 0 ? Formatter.FormatBitrate(Budget.VideoBitsPerSecond) : "-";
-
-    private string VerdictText =>
-        Budget.Verdict == BudgetVerdict.TooSmall ? "Too Small" : Budget.Verdict.ToString();
-
-    private Color VerdictColor =>
-        Budget.Verdict switch
-        {
-            BudgetVerdict.Sharp => Color.Success,
-            BudgetVerdict.Good => Color.Info,
-            BudgetVerdict.Soft => Color.Warning,
-            _ => Color.Error,
-        };
+        Budget.VideoBitsPerSecond > 0
+            ? $"Up to {Formatter.FormatBitrate(Budget.VideoBitsPerSecond)}"
+            : "-";
 
     private string? VerdictHint =>
         Budget.Verdict switch
@@ -193,7 +180,9 @@ public partial class ExportPanel : IDisposable
                 () => ClipExporter.ExportAsync(request, progress, token),
                 token
             );
-            if (IsCut)
+
+            // The Exported Selection, Even If The Handles Moved Since
+            if (request.Range.CutsShort(Media.Duration))
             {
                 _progress = new ExportProgress("Saving the Cut", 1);
                 StateHasChanged();

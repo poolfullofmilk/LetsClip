@@ -294,7 +294,7 @@ public static class ClipExporter
             "pipe:2",
             "-nostats",
             "-ss",
-            FFmpeg.Seconds(range.Start - TrimRange.EdgeMargin),
+            FFmpeg.Seconds(range.SeekStart),
             "-i",
             job.Request.SourcePath,
             "-t",

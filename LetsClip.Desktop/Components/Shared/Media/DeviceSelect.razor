@@ -1,0 +1,27 @@
+@* Device Select *@
+<FieldDetail Class="fixed-width"
+             Detail="@Detail">
+    <ChoiceSelect T="string"
+                  Value="@Shown"
+                  ValueChanged="ValueChanged"
+                  ToStringFunc="LabelOf"
+                  Label="Device"
+                  Disabled="@Disabled">
+        <MudSelectItem T="string"
+                       Value="@AudioDevices.AutomaticId"
+                       Class="divided">
+            <ItemLabel Text="Automatic"
+                       Checked="@IsChecked(AudioDevices.AutomaticId)" />
+        </MudSelectItem>
+        @foreach (var device in Devices)
+        {
+            <MudSelectItem T="string"
+                           Value="device.Id">
+                <ItemLabel Text="@device.Name"
+                           Detail="@device.Adapter"
+                           Checked="@IsChecked(device.Id)" />
+            </MudSelectItem>
+        }
+    </ChoiceSelect>
+    @ChildContent
+</FieldDetail>

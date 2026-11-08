@@ -7,6 +7,7 @@ using LetsClip.Desktop.Components.Shared.Media;
 using LetsClip.Desktop.Interop;
 using LetsClip.Services.Capture;
 using LetsClip.Services.Media;
+using LetsClip.Services.Storage;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.JSInterop;
@@ -18,9 +19,6 @@ namespace LetsClip.Desktop.Components.Pages;
 public partial class ClipEditor : IAsyncDisposable
 {
     private const double SeekStep = 5;
-
-    // Every Clip Opens Playing At Half Volume, Changed In Tenths
-    private const double OpeningVolume = 0.5;
 
     // Writes Wait For Dragging Or Typing To Settle
     private static readonly TimeSpan s_saveDelay = TimeSpan.FromMilliseconds(400);
@@ -62,10 +60,16 @@ public partial class ClipEditor : IAsyncDisposable
     private bool _missing;
     private bool _ready;
     private bool _attached;
+
+    // A Clip Or File Is Changing Behind The Held Frame
+    private bool _swapping;
+    private LoadedClip? _loaded;
+    private DotNetObjectReference<ClipEditor>? _page;
     private bool _playError;
     private bool _paused = true;
+    private bool _autoPlay;
     private bool _muted;
-    private double _volume = OpeningVolume;
+    private double _volume = UserSettings.OpeningVolume;
     private int _volumeShown;
     private double _duration;
     private TrimRange _range;
@@ -76,10 +80,6 @@ public partial class ClipEditor : IAsyncDisposable
     private string VideoUrl => _path is null ? "" : DesktopShell.ClipUrl(_path);
 
     private string Title => _clip?.Title ?? "";
-
-    // The Game Or App, Shown While The Field Is Empty
-    private string DefaultTitle =>
-        _clip is { } clip ? (clip with { CustomTitle = null }).Title : "";
 
     private string RecordedText =>
         _clip is { } clip ? Formatter.FormatDateTime(clip.RecordedAt) : "";
@@ -94,24 +94,32 @@ public partial class ClipEditor : IAsyncDisposable
 
     private string PlayTip => _paused ? "Play" : "Pause";
 
-    private TrimRange DefaultRange => TrimRange.Whole(_duration);
-
     protected override async Task OnParametersSetAsync()
     {
         // The Tray Balloon Can Open Another Clip Here
-        if (FileName == _loadedName)
+        if (FileName != _loadedName)
         {
-            return;
+            _loadedName = FileName;
+            await LoadAsync(opening: true);
         }
+    }
 
-        _loadedName = FileName;
+    private async Task LoadAsync(bool opening)
+    {
+        // The Clip On Screen Stays Until The Next Is Ready
+        var seamless = _clip is not null;
+        _swapping = seamless;
+        _autoPlay = opening;
         EndClip();
         var lifetime = new CancellationTokenSource();
         _lifetime = lifetime;
         var token = lifetime.Token;
-        (_clip, _media, _path, _stripUrl) = (null, null, null, null);
-        (_missing, _ready, _playError, _paused) = (false, false, false, true);
-        await DetachAsync();
+        if (!seamless)
+        {
+            (_missing, _ready, _playError, _paused) = (false, false, false, true);
+        }
+
+        await DetachAsync(seamless);
 
         // Only A Plain File Name In The Clips Folder
         if (
@@ -119,17 +127,17 @@ public partial class ClipEditor : IAsyncDisposable
             || !FileName.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase)
         )
         {
-            _missing = true;
+            ShowMissing();
             return;
         }
 
         var path = Path.Combine(Controller.Settings.ClipsDirectory, FileName);
         var clip = await Task.Run(() => Controller.Library.GetAsync(path, token), token);
-        var frames = Task.Run(() => MediaProbe.FrameTimesAsync(path, token), token);
+        var frameTimes = Task.Run(() => MediaProbe.FrameTimesAsync(path, token), token);
         var media = clip is null
             ? null
             : await Task.Run(() => MediaProbe.ProbeAsync(path, token), token);
-        _frames = await frames;
+        var frames = await frameTimes;
 
         // Another Clip Opened Meanwhile, This Result Belongs To Nobody
         if (token.IsCancellationRequested)
@@ -139,31 +147,98 @@ public partial class ClipEditor : IAsyncDisposable
 
         if (clip is null || media is not { HasVideo: true, Duration: > 0 })
         {
-            _missing = true;
+            ShowMissing();
             return;
         }
 
+        // Its Timeline Is Ready Before Anything Changes On Screen
+        var strip = seamless
+            ? await Task.Run(() => ClipLibrary.EnsureStripAsync(path, media.Duration, token), token)
+            : null;
+
         // Window Clips Keep Their Capture Rate, Probes Read Low
-        _clip = clip;
-        _titleText = clip.Title;
-        _path = path;
         var metadata = ClipLibrary.MetadataOf(path);
-        _media = media with { FrameRate = metadata?.FrameRate ?? media.FrameRate };
-        _duration = _media.Duration;
-        _range = metadata is { TrimStart: { } start, TrimEnd: { } end }
-            ? TrimRange.Fit(start, end, _duration)
-            : DefaultRange;
-        (_muted, _volume, _volumeShown) = (false, OpeningVolume, 0);
-        s_logger.Info(
-            $"Opened {FileName} In The Editor, {Formatter.FormatDuration(_duration)} At {_media.Width} × {_media.Height}, {_media.FrameRate:0} FPS, Kept {Formatter.FormatDuration(_range.Start)} To {Formatter.FormatDuration(_range.End)}"
+        var loaded = new LoadedClip(
+            clip,
+            media with
+            {
+                FrameRate = metadata?.FrameRate ?? media.FrameRate,
+            },
+            path,
+            frames,
+            strip is null ? null : DesktopShell.ThumbnailUrl(strip),
+            metadata is { TrimStart: { } start, TrimEnd: { } end }
+                ? TrimRange.Fit(start, end, media.Duration)
+                : TrimRange.Whole(media.Duration),
+            opening,
+            token
         );
-        _ = LoadStripAsync(path, _duration, token);
+        if (!seamless)
+        {
+            Show(loaded);
+            _ = LoadStripAsync(path, media.Duration, token);
+            return;
+        }
+
+        _loaded = loaded;
+        _page ??= DotNetObjectReference.Create(this);
+        try
+        {
+            await JavaScript.InvokeVoidAsync("letsClip.transition", _page, nameof(ShowLoaded));
+        }
+        catch (JSDisconnectedException)
+        {
+            // The Window Is Closing, Nothing Left To Show
+        }
+    }
+
+    [JSInvokable]
+    public void ShowLoaded()
+    {
+        // A Newer Clip Wins, This One Is Dropped
+        if (
+            Interlocked.Exchange(ref _loaded, null) is { } loaded
+            && !loaded.Token.IsCancellationRequested
+        )
+        {
+            Show(loaded);
+            StateHasChanged();
+        }
+    }
+
+    private void Show(LoadedClip loaded)
+    {
+        // One Step, So Nothing On Screen Changes Piecemeal
+        (_clip, _media, _path, _frames) = (loaded.Clip, loaded.Media, loaded.Path, loaded.Frames);
+        (_stripUrl, _duration, _range) = (loaded.StripUrl, loaded.Media.Duration, loaded.Range);
+        (_titleText, _swapping, _playError, _paused) = (
+            loaded.Clip.CustomTitle ?? "",
+            false,
+            false,
+            true
+        );
+
+        // A Cut Or Restore Leaves The Player As It Was
+        if (loaded.Opening)
+        {
+            (_muted, _volume, _volumeShown) = (false, UserSettings.OpeningVolume, 0);
+        }
+
+        s_logger.Info(
+            $"Opened {FileName} In The Editor, {Formatter.FormatDuration(_duration)} At {loaded.Media.Width} × {loaded.Media.Height}, {loaded.Media.FrameRate:0} FPS, Kept {Formatter.FormatDuration(_range.Start)} To {Formatter.FormatDuration(_range.End)}"
+        );
+    }
+
+    private void ShowMissing()
+    {
+        (_clip, _media, _path, _stripUrl) = (null, null, null, null);
+        (_missing, _swapping) = (true, false);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         // Element References Arrive One Render After The Markup
-        if (_attached || _path is null || string.IsNullOrEmpty(_video.Id))
+        if (_attached || _swapping || _path is null || string.IsNullOrEmpty(_video.Id))
         {
             return;
         }
@@ -182,12 +257,14 @@ public partial class ClipEditor : IAsyncDisposable
             _range.Start,
             _range.End,
             _volume,
+            _muted,
             CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator,
-            _frames
+            _frames,
+            _autoPlay
         );
     }
 
-    private async Task DetachAsync()
+    private async Task DetachAsync(bool holdFrame = false)
     {
         if (!_attached)
         {
@@ -200,7 +277,7 @@ public partial class ClipEditor : IAsyncDisposable
         _reference = null;
         try
         {
-            await JavaScript.InvokeVoidAsync("letsClip.detach");
+            await JavaScript.InvokeVoidAsync("letsClip.detach", holdFrame);
         }
         catch (JSDisconnectedException)
         {
@@ -265,7 +342,7 @@ public partial class ClipEditor : IAsyncDisposable
     [JSInvokable]
     public void OnPlayerError()
     {
-        _playError = true;
+        (_playError, _ready) = (true, false);
         StateHasChanged();
     }
     #endregion
@@ -303,7 +380,7 @@ public partial class ClipEditor : IAsyncDisposable
             return;
         }
 
-        var range = _range == DefaultRange ? (TrimRange?)null : _range;
+        var range = _range == TrimRange.Whole(_duration) ? (TrimRange?)null : _range;
         Volatile.Write(
             ref _pendingTrim,
             () =>
@@ -395,9 +472,9 @@ public partial class ClipEditor : IAsyncDisposable
             return;
         }
 
-        // Empty Or The Default Name Means The Default
+        // Empty Means No Name, The Clip Reads As Its Game
         var typed = text.Trim();
-        var title = typed.Length == 0 || typed == DefaultTitle ? null : typed;
+        var title = typed.Length == 0 ? null : typed;
         if (title == clip.CustomTitle)
         {
             return;
@@ -418,9 +495,9 @@ public partial class ClipEditor : IAsyncDisposable
 
     private void SettleTitle()
     {
-        // Leaving Writes At Once, An Empty Field Shows The Default
+        // Leaving Writes At Once, Trimmed Like The Saved Name
         SaveNow();
-        _titleText = Title;
+        _titleText = _clip?.CustomTitle ?? "";
     }
 
     private async Task TitleKeyAsync(KeyboardEventArgs key)
@@ -442,11 +519,13 @@ public partial class ClipEditor : IAsyncDisposable
             return;
         }
 
-        await ReplaceFileAsync(() => ClipLibrary.CutAsync(path, range, CancellationToken.None));
-        Snackbar.Add(
-            "Saved the cut, Restore Original brings back the whole clip",
-            Severity.Success
-        );
+        if (await ReplaceFileAsync(() => ClipLibrary.CutAsync(path, range, CancellationToken.None)))
+        {
+            Snackbar.Add(
+                "Saved the cut, Restore Original brings back the whole clip",
+                Severity.Success
+            );
+        }
     }
 
     private bool CanSaveCut()
@@ -457,20 +536,29 @@ public partial class ClipEditor : IAsyncDisposable
 
     private async Task RestoreOriginalAsync()
     {
-        if (_path is { } path)
+        if (_path is { } path && await ReplaceFileAsync(() => ClipLibrary.RestoreAsync(path)))
         {
-            await ReplaceFileAsync(() => ClipLibrary.RestoreAsync(path));
+            Snackbar.Add("Restored the whole clip", Severity.Success);
         }
     }
 
-    private async Task ReplaceFileAsync(Func<Task> replace)
+    private async Task<bool> ReplaceFileAsync(Func<Task> replace)
     {
+        // One At A Time, Nothing May Reattach Meanwhile
+        if (_swapping)
+        {
+            return false;
+        }
+
         // Pending Writes Land First, Then The Player Lets Go
+        (_swapping, _paused) = (true, true);
         SaveNow();
-        await DetachAsync();
+        await DetachAsync(holdFrame: true);
+        var replaced = false;
         try
         {
             await Task.Run(replace);
+            replaced = true;
         }
         catch (Exception exception)
             when (exception
@@ -484,15 +572,14 @@ public partial class ClipEditor : IAsyncDisposable
             Snackbar.Add("The clip could not be changed, it may be in use", Severity.Warning);
         }
 
-        _loadedName = null;
-        await OnParametersSetAsync();
-        StateHasChanged();
+        await LoadAsync(opening: false);
+        return replaced;
     }
     #endregion
 
     private async Task DeleteAsync()
     {
-        if (_path is not { } path || !await DialogService.ConfirmDeleteAsync())
+        if (_path is not { } path || !await YesNoDialog.ConfirmDeleteAsync(DialogService))
         {
             return;
         }
@@ -517,7 +604,7 @@ public partial class ClipEditor : IAsyncDisposable
 
     private void Back()
     {
-        NavigationManager.NavigateTo(ClipRoutes.List);
+        NavigationManager.NavigateTo(Clips.Route);
     }
 
     public async ValueTask DisposeAsync()
@@ -526,6 +613,18 @@ public partial class ClipEditor : IAsyncDisposable
         _saveTimer?.Dispose();
         EndClip();
         await DetachAsync();
+        _page?.Dispose();
         GC.SuppressFinalize(this);
     }
+
+    private sealed record LoadedClip(
+        ClipInfo Clip,
+        MediaInfo Media,
+        string Path,
+        double[] Frames,
+        string? StripUrl,
+        TrimRange Range,
+        bool Opening,
+        CancellationToken Token
+    );
 }

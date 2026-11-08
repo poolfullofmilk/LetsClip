@@ -26,7 +26,7 @@ else
               Class="page-fill">
         <MudStack Row
                   AlignItems="AlignItems.Center"
-                  Spacing="2"
+                  Spacing="1"
                   Class="header-row">
             @* Back Button *@
             <IconButton Icon="@Icons.Material.Rounded.ArrowBack"
@@ -87,6 +87,9 @@ else
                                         controlslist="nodownload noplaybackrate noremoteplayback"
                                         disablepictureinpicture
                                         aria-label="Clip Preview" />
+                            <MudElement HtmlTag="canvas"
+                                        Class="player-frozen"
+                                        aria-hidden="true" />
                             @if (_volumeShown > 0)
                             {
                                 @* Volume Overlay *@
@@ -233,14 +236,11 @@ else
                         Class="side-panel">
                 @if (_media is { } media && _clip is { } clip)
                 {
-                    <MudStack Spacing="6">
+                    <MudStack Spacing="6"
+                              Class="fade-in">
                         @* Details Panel *@
-                        <MudPaper Elevation="4"
-                                  Class="rounded-panel px-6 py-2 compact">
-                            <MudText Typo="Typo.h6"
-                                     Class="pt-2">
-                                Details
-                            </MudText>
+                        <Panel Title="Details"
+                               Class="compact">
                             <SettingRow Title="Name">
                                 @* Clip Name Field *@
                                 <MudTextField @key="_path"
@@ -249,7 +249,7 @@ else
                                               Value="_titleText"
                                               ValueChanged="TypeTitle"
                                               Immediate
-                                              Placeholder="@DefaultTitle"
+                                              Placeholder="Name"
                                               Variant="Variant.Outlined"
                                               Margin="Margin.Dense"
                                               OnBlur="SettleTitle"
@@ -263,7 +263,7 @@ else
                                     @RecordedText
                                 </MudText>
                             </SettingRow>
-                        </MudPaper>
+                        </Panel>
                         <ExportPanel @key="clip.Path"
                                      Clip="clip"
                                      OnSaveCut="SaveCutAsync"

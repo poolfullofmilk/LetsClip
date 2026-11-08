@@ -89,7 +89,7 @@ public partial class GamesDialog : IDisposable
 
         // Icons Are Read Once, Then Kept Beside The Thumbnails
         var icons = await Task.Run(() =>
-            fresh.Select(row => (row.Key, Url: AppIcons.UrlOf(row.Path))).ToList()
+            fresh.Select(row => (row.Key, Url: DesktopShell.IconUrl(row.Path))).ToList()
         );
         foreach (var (key, url) in icons)
         {

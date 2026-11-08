@@ -4,8 +4,11 @@ namespace LetsClip.Desktop.Theming;
 
 public static class AppTheme
 {
+    // The One Icon For Details, Notes And About
+    public const string InfoIcon = Icons.Material.Rounded.Notes;
+
     // Application Font First, System Fonts Until It Loads
-    public static readonly string[] FontFamily =
+    private static readonly string[] s_fontFamily =
     [
         "Nunito",
         "Segoe UI",
@@ -37,7 +40,7 @@ public static class AppTheme
     private const string LineFaint = "rgba(255,255,255, 0.10)";
 
     // Two Depths, A Very Slight Lift And A Panel Drop
-    private const string SlightShadow = "0 1px 6px rgba(0,0,0, 0.2)";
+    private const string SlightShadow = "0 1px 9px rgba(0,0,0, 0.16)";
     private const string PanelShadow = "0 8px 24px -10px rgba(0,0,0, 0.6)";
 
     public static readonly MudTheme Custom = new()
@@ -105,8 +108,6 @@ public static class AppTheme
             OverlayDark = "rgba(0, 0, 0, 0.5)",
             OverlayLight = "rgba(255, 255, 255, 0.15)",
             Black = "#000000",
-            White = "#ffffff",
-            GrayDefault = Colors.Gray.Default,
             GrayLight = Colors.Gray.Lighten2,
             GrayLighter = Colors.Gray.Lighten4,
             GrayDark = Colors.Gray.Darken2,
@@ -118,97 +119,58 @@ public static class AppTheme
             // Level One Lifts Chips And Cards, The Rest Are Panels
             Elevation = ["none", SlightShadow, .. Enumerable.Repeat(PanelShadow, 24)],
         },
-        Typography = new Typography
-        {
-            // Apply The Font To Every Variant
-            Default = new DefaultTypography
-            {
-                FontFamily = FontFamily,
-                LetterSpacing = NormalLetterSpacing,
-                // Inherited Text Keeps A 16 Pixel Body
-                FontSize = "1rem",
-                LineHeight = "1.5",
-            },
-            H1 = new H1Typography
-            {
-                FontFamily = FontFamily,
-                FontWeight = HeadingWeight,
-                LetterSpacing = NormalLetterSpacing,
-            },
-            H2 = new H2Typography
-            {
-                FontFamily = FontFamily,
-                FontWeight = HeadingWeight,
-                LetterSpacing = NormalLetterSpacing,
-            },
-            H3 = new H3Typography
-            {
-                FontFamily = FontFamily,
-                FontWeight = HeadingWeight,
-                LetterSpacing = NormalLetterSpacing,
-            },
-            H4 = new H4Typography
-            {
-                FontFamily = FontFamily,
-                FontWeight = HeadingWeight,
-                LetterSpacing = NormalLetterSpacing,
-            },
-            H5 = new H5Typography
-            {
-                FontFamily = FontFamily,
-                FontWeight = HeadingWeight,
-                LetterSpacing = NormalLetterSpacing,
-            },
-            H6 = new H6Typography
-            {
-                FontFamily = FontFamily,
-                FontWeight = HeadingWeight,
-                LetterSpacing = NormalLetterSpacing,
-            },
-            Subtitle1 = new Subtitle1Typography
-            {
-                FontFamily = FontFamily,
-                LetterSpacing = NormalLetterSpacing,
-            },
-            Subtitle2 = new Subtitle2Typography
-            {
-                FontFamily = FontFamily,
-                FontWeight = LabelWeight,
-                LetterSpacing = NormalLetterSpacing,
-            },
-            Body1 = new Body1Typography
-            {
-                FontFamily = FontFamily,
-                LetterSpacing = NormalLetterSpacing,
-            },
-            Body2 = new Body2Typography
-            {
-                FontFamily = FontFamily,
-                LetterSpacing = NormalLetterSpacing,
-            },
-            Button = new ButtonTypography
-            {
-                FontFamily = FontFamily,
-                FontWeight = LabelWeight,
-                LetterSpacing = NormalLetterSpacing,
-                TextTransform = "none",
-            },
-            Caption = new CaptionTypography
-            {
-                FontFamily = FontFamily,
-                LetterSpacing = NormalLetterSpacing,
-            },
-            Overline = new OverlineTypography
-            {
-                FontFamily = FontFamily,
-                LetterSpacing = NormalLetterSpacing,
-                TextTransform = "none",
-            },
-        },
+        Typography = BuildTypography(),
         LayoutProperties = new LayoutProperties
         {
             DefaultBorderRadius = "15px",
             AppbarHeight = "55px",
         },
     };
+
+    private static Typography BuildTypography()
+    {
+        // Inherited Text Keeps A 16 Pixel Body
+        var typography = new Typography
+        {
+            Default = new DefaultTypography { FontSize = "1rem", LineHeight = "1.5" },
+            Button = new ButtonTypography { TextTransform = "none" },
+            Overline = new OverlineTypography { TextTransform = "none" },
+        };
+        BaseTypography[] headings =
+        [
+            typography.H1,
+            typography.H2,
+            typography.H3,
+            typography.H4,
+            typography.H5,
+            typography.H6,
+        ];
+        BaseTypography[] others =
+        [
+            typography.Default,
+            typography.Subtitle1,
+            typography.Subtitle2,
+            typography.Body1,
+            typography.Body2,
+            typography.Button,
+            typography.Caption,
+            typography.Overline,
+        ];
+        foreach (var heading in headings)
+        {
+            heading.FontWeight = HeadingWeight;
+        }
+
+        typography.Subtitle2.FontWeight = LabelWeight;
+        typography.Button.FontWeight = LabelWeight;
+
+        // Every Variant Takes The Font
+        foreach (var variant in headings.Concat(others))
+        {
+            variant.FontFamily = s_fontFamily;
+            variant.LetterSpacing = NormalLetterSpacing;
+        }
+
+        return typography;
+    }
 }

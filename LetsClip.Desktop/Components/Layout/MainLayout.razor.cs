@@ -5,7 +5,6 @@ using LetsClip.Desktop.Components.Shared.Dialogs;
 using LetsClip.Desktop.Interop;
 using LetsClip.Services.Integration;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Web;
 using MudBlazor;
 
 namespace LetsClip.Desktop.Components.Layout;
@@ -24,7 +23,7 @@ public partial class MainLayout : IDisposable
     [Inject]
     public required ISnackbar Snackbar { get; set; }
 
-    private ErrorBoundary? _errorBoundary;
+    private SelfHealingBoundary? _errorBoundary;
     private ReleaseInfo? _availableUpdate;
 
     protected override void OnInitialized()
@@ -80,13 +79,7 @@ public partial class MainLayout : IDisposable
 
     private void OnOpenClipRequested(string path)
     {
-        _ = InvokeAsync(() => NavigationManager.NavigateTo(ClipRoutes.EditorOf(path)));
-    }
-
-    private void RecoverFromError()
-    {
-        _errorBoundary?.Recover();
-        NavigationManager.NavigateTo(ClipRoutes.List);
+        _ = InvokeAsync(() => NavigationManager.NavigateTo(Clips.EditorOf(path)));
     }
 
     private static void OpenLogs()

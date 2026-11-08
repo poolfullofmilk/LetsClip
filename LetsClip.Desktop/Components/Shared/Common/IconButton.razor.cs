@@ -13,6 +13,9 @@ public partial class IconButton
     public required string Text { get; set; }
 
     [Parameter]
+    public Placement Placement { get; set; } = Placement.Top;
+
+    [Parameter]
     public Color Color { get; set; } = Color.Default;
 
     [Parameter]

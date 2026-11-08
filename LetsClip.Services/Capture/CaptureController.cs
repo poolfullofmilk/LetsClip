@@ -19,6 +19,9 @@ public sealed class CaptureController : IDisposable
     // Failures In A Row Wait Longer, At Most A Minute
     private static readonly int[] s_retrySeconds = [2, 5, 15, 30, 60];
 
+    // Failures In A Row Kept Out Of Sight
+    private const int QuietFailures = 4;
+
     private readonly Lock _gate = new();
 
     // Starts And Stops Run One At A Time, Whoever Asks
@@ -38,7 +41,7 @@ public sealed class CaptureController : IDisposable
         Settings = UserSettings.Load();
         Library = new ClipLibrary(Settings.ClipsDirectory);
         Recorder = new ReplayRecorder(Library);
-        Recorder.Failed += ranLong => _ = RetryAsync(ranLong);
+        Recorder.Failed += failure => _ = RetryAsync(failure);
         Games.GameChanged += name => _ = OnGameChangedAsync(name);
         RefreshMonitors();
         _ = LoadGamesAsync();
@@ -97,7 +100,7 @@ public sealed class CaptureController : IDisposable
     public int RecommendedFrameRate =>
         FrameRateChoices.Where(rate => rate <= (_hasHardwareEncoder.Value ? 60 : 30)).Max();
 
-    // A Session That Dropped After Running Restarts Out Of Sight
+    // Only What Lasts Or Needs The Person Is Ever Shown
     public bool ShowsError => Recorder.Status.State == CaptureState.Error && !_quietRetry;
 
     // Starting And A Restart Already Read As Recording
@@ -313,17 +316,17 @@ public sealed class CaptureController : IDisposable
             : StepAsync(() => _lastGame = game);
     }
 
-    private async Task RetryAsync(bool ranLong)
+    private async Task RetryAsync(CaptureFailure failure)
     {
         // Every Failure Starts Over By Itself, Set Once And Forget
-        var failures = ranLong ? 1 : _failures + 1;
+        var failures = failure == CaptureFailure.RanLong ? 1 : _failures + 1;
         _failures = failures;
         var retry = Interlocked.Increment(ref _retry);
-        _quietRetry = ranLong;
+        _quietRetry = failure != CaptureFailure.Blocked && failures <= QuietFailures;
         Changed?.Invoke();
         var seconds = s_retrySeconds[Math.Min(failures, s_retrySeconds.Length) - 1];
         s_logger.Info(
-            $"Retrying In {seconds} s, Failure {failures} In A Row{(ranLong ? " After A Long Run, Out Of Sight" : "")}"
+            $"Retrying In {seconds} s, Failure {failures} In A Row, {failure}{(_quietRetry ? ", Out Of Sight" : "")}"
         );
         await Task.Delay(TimeSpan.FromSeconds(seconds));
         if (retry != Volatile.Read(ref _retry))

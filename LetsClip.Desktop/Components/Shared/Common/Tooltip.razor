@@ -1,7 +1,9 @@
 @* Tooltip *@
 <MudTooltip Text="@Text"
+            TooltipContent="Content"
             RootClass="@RootClass"
-            Disabled="@(Disabled || string.IsNullOrEmpty(Text))"
+            Placement="Placement"
+            Disabled="@(Disabled || (string.IsNullOrEmpty(Text) && Content is null))"
             ShowOnFocus="false"
             Arrow>
     @ChildContent

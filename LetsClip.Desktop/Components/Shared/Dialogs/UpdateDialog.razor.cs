@@ -31,7 +31,7 @@ public partial class UpdateDialog
     private long _total;
     private int _percent;
 
-    private string Title => $"LetsClip v{Release.Tag.TrimStart('v', 'V')} Is Out";
+    private string Title => $"LetsClip {Release.Tag} Is Out";
 
     private string ProgressText =>
         _total > 0 && _received >= _total ? "Starting the new version"

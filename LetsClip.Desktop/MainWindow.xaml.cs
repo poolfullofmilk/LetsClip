@@ -19,6 +19,10 @@ public partial class MainWindow : Window
 {
     private const int BalloonMilliseconds = 4000;
 
+    // The Smallest Window The Page Is Laid Out For
+    private const double PageWidth = 1280;
+    private const double PageHeight = 540;
+
     // A Quick Hide And Show Never Suspends
     private static readonly TimeSpan s_suspendDelay = TimeSpan.FromSeconds(1);
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
@@ -38,6 +42,7 @@ public partial class MainWindow : Window
     private string? _lastSavedClip;
     private bool _isExiting;
     private WindowState _windowedState;
+    private double _pageZoom = 1;
 
     public MainWindow(IServiceProvider services, CaptureController controller, DesktopShell shell)
     {
@@ -47,7 +52,13 @@ public partial class MainWindow : Window
         WebView.Services = services;
         WebView.BlazorWebViewInitialized += (_, eventArgs) =>
             SetUpBrowser(eventArgs.WebView.CoreWebView2);
-        SourceInitialized += (_, _) => WindowCaptionTheme.Apply(this);
+        SourceInitialized += (_, _) =>
+        {
+            WindowCaptionTheme.Apply(this);
+            FitToScreen();
+        };
+        DpiChanged += (_, _) => FitToScreen();
+        LocationChanged += (_, _) => FitToScreen();
         StateChanged += (_, _) => HideWhenMinimized();
         IsVisibleChanged += (_, _) => _ = RestPageAsync();
 
@@ -249,12 +260,42 @@ public partial class MainWindow : Window
         _trayIcon.Text = text.Length > 127 ? text[..127] : text;
     }
 
+    private void FitToScreen()
+    {
+        // Small Or Heavily Scaled Screens Still Show The Whole Page
+        var scale = System.Windows.Media.VisualTreeHelper.GetDpi(this).DpiScaleX;
+        var area = Forms.Screen.FromHandle(new WindowInteropHelper(this).Handle).WorkingArea;
+        var (width, height) = (area.Width / scale, area.Height / scale);
+        (MinWidth, MinHeight) = (Math.Min(PageWidth, width), Math.Min(PageHeight, height));
+        (Width, Height) = (Math.Min(Width, width), Math.Min(Height, height));
+        _pageZoom = Math.Min(1, width / PageWidth);
+        if (WebView.WebView is { CoreWebView2: not null } control)
+        {
+            control.ZoomFactor = _pageZoom;
+        }
+    }
+
     private void SetUpBrowser(CoreWebView2 browser)
     {
         _browser = browser;
 
         // Page Background Before The First Paint, No White Flash
         WebView.WebView.DefaultBackgroundColor = Drawing.Color.FromArgb(0x20, 0x20, 0x20);
+        WebView.WebView.ZoomFactor = _pageZoom;
+
+        // A Crashed Page Reloads Itself, Recording Never Depended On It
+        browser.ProcessFailed += (_, eventArgs) =>
+        {
+            s_logger.Warn($"Browser Failed, {eventArgs.ProcessFailedKind}");
+            if (
+                eventArgs.ProcessFailedKind
+                is CoreWebView2ProcessFailedKind.RenderProcessExited
+                    or CoreWebView2ProcessFailedKind.RenderProcessUnresponsive
+            )
+            {
+                browser.Reload();
+            }
+        };
 
         // Browser Keys, Ctrl Wheel And Pinch Zoom Stay Off
         browser.Settings.AreBrowserAcceleratorKeysEnabled = false;

@@ -22,8 +22,11 @@ public sealed class CaptureSession(
     private const long CacheByteFloor = 1_500_000_000;
 
     // Rumble Cut, Steady Noise Reduced, Quiet Gaps Gated
+    public const string VoiceCleaning =
+        "highpass=f=80,afftdn=nr=20:nf=-45:tn=1,agate=threshold=0.01:ratio=3:range=0.06:attack=5:release=250";
+
     private const string MicrophoneCleaning =
-        "[0:a]asplit[a][b];[a]pan=stereo|c0=c0|c1=c1[system];[b]pan=stereo|c0=c2|c1=c3,highpass=f=80,afftdn=nr=20:nf=-45:tn=1,agate=threshold=0.01:ratio=3:range=0.06:attack=5:release=250[voice];[system][voice]amix=inputs=2:normalize=0[audio]";
+        $"[0:a]asplit[a][b];[a]pan=stereo|c0=c0|c1=c1[system];[b]pan=stereo|c0=c2|c1=c3,{VoiceCleaning}[voice];[system][voice]amix=inputs=2:normalize=0[audio]";
 
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
     private static readonly TimeSpan s_startTimeout = TimeSpan.FromSeconds(12);
@@ -65,8 +68,6 @@ public sealed class CaptureSession(
     public AudioMixer? Mixer { get; private set; }
 
     public volatile bool Stopping;
-
-    public string? Warning { get; set; }
 
     public bool HasEnded => Video?.HasExited != false || Audio?.HasExited == true;
 
@@ -125,6 +126,10 @@ public sealed class CaptureSession(
         var finished = await Task.WhenAny(ready, Ended, Task.Delay(s_startTimeout));
         if (finished != ready && !(isWindow && !HasEnded))
         {
+            // Which Half Went Quiet, The Log Answers Reports With
+            s_logger.Warn(
+                $"Capture Start Waited, Video {Video.FramesSoFar} Frames {Video.FirstSegment.IsCompleted}, Audio {Audio?.FirstSegment.IsCompleted}"
+            );
             throw new InvalidOperationException(
                 Video.LastError ?? Audio?.LastError ?? "The capture did not start in time"
             );
@@ -410,7 +415,6 @@ public sealed class CaptureSession(
         private readonly Action<SegmentProcess, Segment> _added;
         private readonly Task _readers;
         private long _lastSegmentTimestamp = Stopwatch.GetTimestamp();
-        private long _lastFrames;
         private string? _lastWarning;
         private int _warningRepeats;
         private long _lastFrameTimestamp;
@@ -455,6 +459,8 @@ public sealed class CaptureSession(
         public int? ExitCode { get; private set; }
 
         public double? FramesPerSecond { get; private set; }
+
+        public long FramesSoFar { get; private set; }
 
         public int SlowReports { get; private set; }
 
@@ -566,13 +572,13 @@ public sealed class CaptureSession(
         {
             // Frames Per Second Of Wall Time Between Two Progress Reports
             var now = Stopwatch.GetTimestamp();
-            if (_lastFrameTimestamp != 0 && frames > _lastFrames)
+            if (_lastFrameTimestamp != 0 && frames > FramesSoFar)
             {
                 var seconds = Stopwatch.GetElapsedTime(_lastFrameTimestamp, now).TotalSeconds;
-                FramesPerSecond = (frames - _lastFrames) / Math.Max(seconds, 0.001);
+                FramesPerSecond = (frames - FramesSoFar) / Math.Max(seconds, 0.001);
             }
 
-            _lastFrames = frames;
+            FramesSoFar = frames;
             _lastFrameTimestamp = now;
         }
 

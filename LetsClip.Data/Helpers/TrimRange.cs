@@ -8,7 +8,7 @@ public readonly record struct TrimRange(double Start, double End)
     public const double Step = 0.1;
 
     // Points Sit On Frame Starts, FFmpeg Seeks This Much Earlier
-    public const double EdgeMargin = 0.001;
+    private const double EdgeMargin = 0.001;
     private const double Tolerance = 0.0005;
 
     static TrimRange()
@@ -17,6 +17,8 @@ public readonly record struct TrimRange(double Start, double End)
     }
 
     public double Length => End - Start;
+
+    public double SeekStart => Math.Max(0, Start - EdgeMargin);
 
     public bool IsValidFor(double duration)
     {

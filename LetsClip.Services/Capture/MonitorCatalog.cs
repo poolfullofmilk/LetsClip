@@ -288,20 +288,14 @@ public static unsafe partial class MonitorCatalog
         }
     }
 
-    [StructLayout(LayoutKind.Sequential)]
+    [StructLayout(LayoutKind.Explicit, Size = 312)]
     private struct AdapterDescription
     {
-        // DXGI_ADAPTER_DESC1
-        public fixed char Description[128];
+        // DXGI_ADAPTER_DESC1 On 64 Bit
+        [FieldOffset(256)]
         public uint VendorId;
-        public uint DeviceId;
-        public uint SubSystemId;
-        public uint Revision;
-        public nuint DedicatedVideoMemory;
-        public nuint DedicatedSystemMemory;
-        public nuint SharedSystemMemory;
-        public uint LuidLow;
-        public int LuidHigh;
+
+        [FieldOffset(304)]
         public uint Flags;
     }
 

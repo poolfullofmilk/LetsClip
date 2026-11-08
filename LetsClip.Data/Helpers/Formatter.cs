@@ -49,7 +49,8 @@ public static partial class Formatter
     public static double? ParseDuration(string? text)
     {
         // The Shown Form Or Plain Seconds Read Back
-        var match = DurationText().Match((text ?? "").Replace(" ", "").ToLowerInvariant());
+        var match = DurationText()
+            .Match((text ?? "").Replace(Point, ".").Replace(" ", "").ToLowerInvariant());
         if (!match.Success || match.Length == 0)
         {
             return null;

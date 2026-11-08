@@ -5,5 +5,5 @@ namespace LetsClip.Desktop.Components.Shared.Common;
 public partial class InfoIcon
 {
     [Parameter]
-    public required string Text { get; set; }
+    public required RenderFragment ChildContent { get; set; }
 }

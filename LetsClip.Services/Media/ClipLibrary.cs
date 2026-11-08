@@ -109,8 +109,7 @@ public sealed class ClipLibrary : IDisposable
                 var made = 0;
                 foreach (var clip in missing)
                 {
-                    var at = FFmpeg.Seconds(Math.Min(1, clip.Duration / 2));
-                    if (await ThumbnailAsync(clip.Path, at) is not null)
+                    if (await ThumbnailAsync(clip.Path, clip.Duration) is not null)
                     {
                         made++;
                     }
@@ -216,7 +215,7 @@ public sealed class ClipLibrary : IDisposable
                     "error",
                     "-y",
                     "-ss",
-                    FFmpeg.Seconds(range.Start - TrimRange.EdgeMargin),
+                    FFmpeg.Seconds(range.SeekStart),
                     "-i",
                     path,
                     "-t",
@@ -242,6 +241,7 @@ public sealed class ClipLibrary : IDisposable
 
             // The First Cut Keeps The Full Clip, Later Ones Replace
             var original = OriginalPathOf(path);
+            var earlierStart = File.Exists(original) ? metadata.CutStart ?? 0 : 0;
             if (!File.Exists(original))
             {
                 var folder = Directory.CreateDirectory(Path.GetDirectoryName(original)!);
@@ -249,8 +249,19 @@ public sealed class ClipLibrary : IDisposable
                 File.Move(path, original);
             }
 
+            // Restore Needs The Cut In The Original's Own Time
             File.Move(temporary, path, overwrite: true);
-            Replaced(path, metadata, media.Duration);
+            await ReplacedAsync(
+                path,
+                metadata with
+                {
+                    TrimStart = null,
+                    TrimEnd = null,
+                    CutStart = earlierStart + range.Start,
+                    CutEnd = earlierStart + range.End,
+                },
+                media.Duration
+            );
             s_logger.Info(
                 $"Cut {Path.GetFileName(path)} To {Formatter.FormatDuration(range.Start)} Through {Formatter.FormatDuration(range.End)}, {Formatter.FormatDuration(media.Duration)} Kept Losslessly"
             );
@@ -263,7 +274,7 @@ public sealed class ClipLibrary : IDisposable
 
     public static async Task RestoreAsync(string path)
     {
-        // The Full Clip Comes Back, The Cut Is Dropped
+        // The Full Clip Comes Back, Its Handles On The Cut
         var original = OriginalPathOf(path);
         var metadata = MetadataOf(path);
         if (!File.Exists(original) || metadata is null)
@@ -278,28 +289,67 @@ public sealed class ClipLibrary : IDisposable
         }
 
         var media = await MediaProbe.ProbeAsync(path, CancellationToken.None);
-        Replaced(path, metadata, media?.Duration ?? metadata.Duration);
-        s_logger.Info($"Restored The Original Of {Path.GetFileName(path)}");
-    }
-
-    private static void Replaced(string path, ClipMetadata metadata, double duration)
-    {
-        // New Pictures, The Name, Game And Date Stay
-        TryDelete(ThumbnailPathOf(path));
-        TryDelete(StripPathOf(path));
-        WriteMetadata(
+        await ReplacedAsync(
             path,
             metadata with
             {
-                Duration = duration,
-                TrimStart = null,
-                TrimEnd = null,
-            }
+                TrimStart = metadata.CutStart,
+                TrimEnd = metadata.CutEnd,
+                CutStart = null,
+                CutEnd = null,
+            },
+            media?.Duration ?? metadata.Duration
         );
+        s_logger.Info($"Restored The Original Of {Path.GetFileName(path)}");
     }
 
-    private static Task<string?> ThumbnailAsync(string path, string at)
+    private static async Task ReplacedAsync(string path, ClipMetadata metadata, double duration)
     {
+        // New Pictures, So Its Card Is Never Blank
+        TryDelete(ThumbnailPathOf(path));
+        TryDelete(StripPathOf(path));
+        WriteMetadata(path, metadata with { Duration = duration });
+        await ThumbnailAsync(path, duration);
+    }
+
+    public static bool CanWriteTo(string folder)
+    {
+        // Made If Needed, One Throwaway File Proves It
+        try
+        {
+            Directory.CreateDirectory(folder);
+            var probe = Path.Combine(folder, $"{PartialPrefix}{Guid.NewGuid():N}.probe");
+            using (File.Create(probe, 1, FileOptions.DeleteOnClose)) { }
+            return true;
+        }
+        catch (Exception exception)
+            when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    public static (long Used, long Free)? SpaceOf(string folder)
+    {
+        try
+        {
+            // Clips, Exports And Kept Originals All Count
+            var used = new DirectoryInfo(folder)
+                .EnumerateFiles("*.mp4", SearchOption.AllDirectories)
+                .Sum(file => file.Length);
+            return (used, new DriveInfo(Path.GetFullPath(folder)).AvailableFreeSpace);
+        }
+        catch (Exception exception)
+            when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            // Unknown Space Only Hides A Row
+            return null;
+        }
+    }
+
+    private static Task<string?> ThumbnailAsync(string path, double duration)
+    {
+        var at = FFmpeg.Seconds(Math.Min(1, duration / 2));
         return RenderAsync(
             ThumbnailPathOf(path),
             ["-ss", at, "-i", path, "-frames:v", "1", "-vf", "scale=480:-2", "-q:v", "4"],
@@ -315,6 +365,7 @@ public sealed class ClipLibrary : IDisposable
     )
     {
         // Twelve Keyframes Across The Clip, The Last Second Skipped
+        // Sparse Keyframes Repeat Their Last, So No Tile Stays Black
         var rate = FFmpeg.Seconds(12 / Math.Max(duration - 1, 0.5));
         return RenderAsync(
             StripPathOf(path),
@@ -325,7 +376,7 @@ public sealed class ClipLibrary : IDisposable
                 path,
                 "-an",
                 "-vf",
-                $"fps={rate},scale=-2:96,tile=12x1",
+                $"fps={rate},tpad=stop=12:stop_mode=clone,scale=-2:96,tile=12x1",
                 "-frames:v",
                 "1",
                 "-fps_mode",
@@ -369,7 +420,7 @@ public sealed class ClipLibrary : IDisposable
         return target;
     }
 
-    public static string ThumbnailPathOf(string path)
+    private static string ThumbnailPathOf(string path)
     {
         return Path.Combine(AppInfo.ThumbnailsDirectory, FilePaths.KeyOf(path) + ".jpg");
     }

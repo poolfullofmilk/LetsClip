@@ -3,16 +3,19 @@
             Class="volume">
     <IconButton Icon="@IconOf(Value)"
                 Text="@Text"
+                Placement="Placement.Left"
+                Filled="Filled"
                 Disabled="Disabled"
                 OnClick="OnClick" />
     @if (!Disabled)
     {
         <MudElement HtmlTag="div"
                     Class="volume-pop">
-            <MudPaper Elevation="1"
+            <MudPaper Elevation="4"
                       Class="volume-paper">
                 @* Volume Slider *@
                 <MudSlider T="double"
+                           Vertical
                            Value="Value"
                            ValueChanged="SlideAsync"
                            Min="Min"

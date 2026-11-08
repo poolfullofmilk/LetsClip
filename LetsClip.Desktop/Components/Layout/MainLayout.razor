@@ -45,7 +45,7 @@
                                      OnClick="OpenLogs" />
                         <MudDivider />
                         @* About *@
-                        <MudMenuItem Icon="@Icons.Material.Rounded.Info"
+                        <MudMenuItem Icon="@AppTheme.InfoIcon"
                                      Label="About"
                                      OnClick="ShowAboutAsync" />
                     </MudMenu>
@@ -87,9 +87,9 @@
 
             @* Page *@
             <MudElement HtmlTag="section"
-                        Class="flex-grow-1"
+                        Class="flex-grow-1 page"
                         Style="min-width:0">
-                <ErrorBoundary @ref="_errorBoundary">
+                <SelfHealingBoundary @ref="_errorBoundary">
                     <ChildContent>
                         @Body
                     </ChildContent>
@@ -101,12 +101,12 @@
                             <MudButton Variant="Variant.Filled"
                                        Color="Color.Info"
                                        Size="Size.Small"
-                                       OnClick="RecoverFromError">
+                                       OnClick="() => _errorBoundary?.BackToClips()">
                                 Back to Clips
                             </MudButton>
                         </EmptyState>
                     </ErrorContent>
-                </ErrorBoundary>
+                </SelfHealingBoundary>
             </MudElement>
         </MudStack>
     </MudMainContent>

@@ -8,9 +8,6 @@ public partial class SettingRow
     public required string Title { get; set; }
 
     [Parameter]
-    public string? Info { get; set; }
-
-    [Parameter]
     public RenderFragment? ChildContent { get; set; }
 
     // A Switch At The Row's End, Named By Its Title

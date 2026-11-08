@@ -6,6 +6,7 @@ using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
 using Microsoft.Win32;
 using NLog;
+using Drawing = System.Drawing;
 using Forms = System.Windows.Forms;
 
 namespace LetsClip.Desktop.Interop;
@@ -150,6 +151,45 @@ public sealed class DesktopShell
         // Stamped, So A Changed File Never Comes From Cache
         var stamp = File.GetLastWriteTimeUtc(path).Ticks;
         return $"https://{host}/{Uri.EscapeDataString(Path.GetFileName(path))}?v={stamp}";
+    }
+
+    public static string IconUrl(string? executablePath)
+    {
+        if (executablePath is null || !File.Exists(executablePath))
+        {
+            return "";
+        }
+
+        var name = $"icon-{FilePaths.KeyOf(executablePath)}.png";
+        var file = Path.Combine(AppInfo.ThumbnailsDirectory, name);
+        try
+        {
+            if (!File.Exists(file))
+            {
+                // 48 Px Stays Sharp At 24 Px Up To 200%
+                using var icon = Drawing.Icon.ExtractIcon(executablePath, 0, 48);
+                if (icon is null)
+                {
+                    return "";
+                }
+
+                using var bitmap = icon.ToBitmap();
+                bitmap.Save(file, Drawing.Imaging.ImageFormat.Png);
+            }
+        }
+        catch (Exception exception)
+            when (exception
+                    is IOException
+                        or UnauthorizedAccessException
+                        or ExternalException
+                        or ArgumentException
+            )
+        {
+            // An Exe Without A Readable Icon Shows The Plain One
+            return "";
+        }
+
+        return $"https://{ThumbnailsHost}/{name}";
     }
 
     public static bool CopyFile(string path)

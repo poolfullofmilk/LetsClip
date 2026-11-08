@@ -22,11 +22,7 @@ public static class ClipSaver
         ClipLibrary library
     )
     {
-        // A Clips Drive That Is Gone Saves To Videos Instead
-        var clipsFolder = Directory.Exists(Path.GetPathRoot(library.Folder))
-            ? library.Folder
-            : AppInfo.DefaultClipsDirectory;
-        Directory.CreateDirectory(clipsFolder);
+        var clipsFolder = FolderFor(library.Folder);
         var temporary = Path.Combine(
             clipsFolder,
             $"{ClipLibrary.PartialPrefix}{Guid.NewGuid():N}.mp4"
@@ -39,7 +35,7 @@ public static class ClipSaver
                     ?
                     [
                         "-itsoffset",
-                        Seconds(-from),
+                        FFmpeg.Seconds(-from),
                         "-i",
                         ConcatOf(audio),
                         "-map",
@@ -57,14 +53,14 @@ public static class ClipSaver
                 "-y",
                 "-copyts",
                 "-itsoffset",
-                Seconds(videoOffset - from),
+                FFmpeg.Seconds(videoOffset - from),
                 "-i",
                 ConcatOf(video),
                 .. audioInput,
                 "-c",
                 "copy",
                 "-to",
-                Seconds(to - from),
+                FFmpeg.Seconds(to - from),
                 "-movflags",
                 "+faststart",
                 "-f",
@@ -118,6 +114,18 @@ public static class ClipSaver
         }
     }
 
+    private static string FolderFor(string picked)
+    {
+        // A Gone Or Locked Folder Saves To Videos
+        if (ClipLibrary.CanWriteTo(picked))
+        {
+            return picked;
+        }
+
+        Directory.CreateDirectory(AppInfo.DefaultClipsDirectory);
+        return AppInfo.DefaultClipsDirectory;
+    }
+
     public static string UniquePath(string folder, string baseName)
     {
         // Never Overwrites, The Same Second Gets (2), (3) And On
@@ -137,10 +145,5 @@ public static class ClipSaver
     {
         return "concat:"
             + string.Join("|", segments.Select(segment => Path.GetFileName(segment.Path)));
-    }
-
-    private static string Seconds(double value)
-    {
-        return value.ToString("0.######", CultureInfo.InvariantCulture);
     }
 }
