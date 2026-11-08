@@ -32,7 +32,7 @@ public static partial class Formatter
     public static string FormatDuration(double seconds)
     {
         // Zero Parts Left Out, 8m30,5s Or 1h2m
-        var tenths = (long)Math.Round(Math.Max(0, seconds) * 10);
+        var tenths = (long)TenthsOf(seconds);
         var hours = tenths / 36000;
         var minutes = tenths / 600 % 60;
         var rest = tenths % 600 / 10.0;
@@ -43,7 +43,13 @@ public static partial class Formatter
     public static string FormatSeconds(double seconds)
     {
         // Plain Seconds To A Tenth, 90,5 For 1m30,5s
-        return Math.Round(Math.Max(0, seconds), 1).ToString("0.#", Shown);
+        return (TenthsOf(seconds) / 10).ToString("0.#", Shown);
+    }
+
+    private static double TenthsOf(double seconds)
+    {
+        // Halves Go Up, The Page Script Rounds The Same
+        return Math.Round(Math.Max(0, seconds) * 10, MidpointRounding.AwayFromZero);
     }
 
     public static double? ParseDuration(string? text)
@@ -60,7 +66,7 @@ public static partial class Formatter
             match.Groups[name].Success
                 ? double.Parse(match.Groups[name].Value.Replace(',', '.'), s_invariant)
                 : 0;
-        return Math.Round((Part("hours") * 3600) + (Part("minutes") * 60) + Part("seconds"), 1);
+        return TenthsOf((Part("hours") * 3600) + (Part("minutes") * 60) + Part("seconds")) / 10;
     }
 
     [GeneratedRegex(
@@ -113,6 +119,9 @@ public static partial class Formatter
             && FormatSize(1_250_000_000) == $"1{Point}25 GB"
             && FormatBitrate(11_570_000) == $"11{Point}6 Mbps"
             && FormatDuration(0) == "0s"
+            && FormatDuration(0.25) == $"0{Point}3s"
+            && FormatSeconds(0.25) == $"0{Point}3"
+            && ParseDuration("0.25") == 0.3
             && FormatDuration(30.3) == $"30{Point}3s"
             && FormatDuration(510.54) == $"8m30{Point}5s"
             && FormatDuration(59.96) == "1m"

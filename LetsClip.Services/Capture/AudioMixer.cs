@@ -259,8 +259,8 @@ public sealed class AudioMixer : IDisposable
                         _expectedFrame = null;
                     }
 
-                    recorder.StartRecording();
                     _recorder = recorder;
+                    recorder.StartRecording();
                     Problem = null;
                     s_logger.Info($"Started {kind} From {endpoint.FriendlyName}");
                 }
@@ -273,6 +273,7 @@ public sealed class AudioMixer : IDisposable
                 {
                     // A Missing Device Records Silence, Never Another Device
                     s_logger.Warn($"Failed To Start {kind} {exception.GetType().Name}");
+                    Disconnect();
                     Problem = $"{kind} Unavailable";
                 }
             }

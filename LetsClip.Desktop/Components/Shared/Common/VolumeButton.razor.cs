@@ -28,9 +28,6 @@ public partial class VolumeButton
     [Parameter]
     public EventCallback<double> ValueChanged { get; set; }
 
-    [Parameter]
-    public double Min { get; set; }
-
     private async Task SlideAsync(double value)
     {
         // Every Caller Gets Whole Tenths

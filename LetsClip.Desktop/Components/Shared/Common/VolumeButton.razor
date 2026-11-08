@@ -3,6 +3,7 @@
             Class="volume">
     <IconButton Icon="@IconOf(Value)"
                 Text="@Text"
+                Color="@(Value <= 0 ? Color.Error : Color.Default)"
                 Placement="Placement.Left"
                 Filled="Filled"
                 Disabled="Disabled"
@@ -18,7 +19,7 @@
                            Vertical
                            Value="Value"
                            ValueChanged="SlideAsync"
-                           Min="Min"
+                           Min="0"
                            Max="1"
                            Step="Step"
                            Color="Color.Info"

@@ -9,6 +9,9 @@ public static partial class ClipNames
     // Saved Names Keep The Sortable Date
     private const string DateFormat = "yyyy-MM-dd HH-mm-ss";
 
+    // Long Enough To Read, Short Enough For Any Folder
+    private const int MaximumNameLength = 120;
+
     static ClipNames()
     {
         Debug.Assert(SelfTestPasses());
@@ -46,13 +49,25 @@ public static partial class ClipNames
             )
             .Trim()
             .TrimEnd('.');
-        return cleaned.Length > 0 ? cleaned : null;
+        if (cleaned.Length > MaximumNameLength)
+        {
+            var cut = char.IsHighSurrogate(cleaned[MaximumNameLength - 1]) ? 1 : 0;
+            cleaned = cleaned[..(MaximumNameLength - cut)].TrimEnd(' ', '.');
+        }
+
+        // Windows Keeps Device Names For Itself
+        return cleaned.Length == 0 ? null
+            : ReservedName().IsMatch(cleaned) ? $"Clip {cleaned}"
+            : cleaned;
     }
 
     [GeneratedRegex(
         @"^" + AppInfo.DisplayName + @" (?<stamp>\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2})( \(\d+\))?$"
     )]
     private static partial Regex GeneratedName();
+
+    [GeneratedRegex(@"^(CON|PRN|AUX|NUL|COM[0-9¹²³]|LPT[0-9¹²³])(\.|$)", RegexOptions.IgnoreCase)]
+    private static partial Regex ReservedName();
 
     private static bool SelfTestPasses()
     {
@@ -66,6 +81,11 @@ public static partial class ClipNames
             && FileSafe(" Ace: 1v5? ") == "Ace 1v5"
             && FileSafe("Clutch...") == "Clutch"
             && FileSafe("<>|") is null
-            && FileSafe(null) is null;
+            && FileSafe(null) is null
+            && FileSafe("CON") == "Clip CON"
+            && FileSafe("nul.txt") == "Clip nul.txt"
+            && FileSafe("lpt9") == "Clip lpt9"
+            && FileSafe("Console") == "Console"
+            && FileSafe(new string('x', 400))?.Length == MaximumNameLength;
     }
 }

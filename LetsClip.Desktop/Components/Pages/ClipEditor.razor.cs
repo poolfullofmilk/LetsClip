@@ -63,6 +63,7 @@ public partial class ClipEditor : IAsyncDisposable
 
     // A Clip Or File Is Changing Behind The Held Frame
     private bool _swapping;
+    private bool _exporting;
     private LoadedClip? _loaded;
     private DotNetObjectReference<ClipEditor>? _page;
     private bool _playError;
@@ -208,6 +209,9 @@ public partial class ClipEditor : IAsyncDisposable
 
     private void Show(LoadedClip loaded)
     {
+        // Another Clip Has No Export Of Its Own Running
+        _exporting &= loaded.Path == _path;
+
         // One Step, So Nothing On Screen Changes Piecemeal
         (_clip, _media, _path, _frames) = (loaded.Clip, loaded.Media, loaded.Path, loaded.Frames);
         (_stripUrl, _duration, _range) = (loaded.StripUrl, loaded.Media.Duration, loaded.Range);
@@ -511,10 +515,15 @@ public partial class ClipEditor : IAsyncDisposable
     #endregion
 
     #region Cut And Restore
-    private async Task SaveCutAsync(TrimRange range)
+    private void SetExporting(bool exporting)
+    {
+        _exporting = exporting;
+    }
+
+    private async Task SaveCutAsync(string path, TrimRange range)
     {
         // The Clip Becomes The Kept Part, Its Original Stays Hidden
-        if (_path is not { } path)
+        if (path != _path)
         {
             return;
         }
@@ -531,7 +540,7 @@ public partial class ClipEditor : IAsyncDisposable
     private bool CanSaveCut()
     {
         // Only A Shorter Selection Has Anything To Cut
-        return _ready && _range.CutsShort(_duration);
+        return _ready && !_exporting && _range.CutsShort(_duration);
     }
 
     private async Task RestoreOriginalAsync()

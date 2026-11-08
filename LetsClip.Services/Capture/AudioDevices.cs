@@ -29,6 +29,45 @@ public static partial class AudioDevices
         return List(DataFlow.Capture);
     }
 
+    public static IDisposable WatchChanges(Action changed)
+    {
+        var enumerator = new MMDeviceEnumerator();
+        var notifications = enumerator.CreateNotificationClient(useSynchronizationContext: false);
+        notifications.DeviceAdded += (_, _) => changed();
+        notifications.DeviceRemoved += (_, _) => changed();
+        notifications.DeviceStateChanged += (_, _) => changed();
+        notifications.DefaultDeviceChanged += (_, _) => changed();
+        return new DeviceWatch(enumerator, notifications);
+    }
+
+    public static bool IsOutputPlaying()
+    {
+        try
+        {
+            using var enumerator = new MMDeviceEnumerator();
+            if (
+                !enumerator.TryGetDefaultAudioEndpoint(
+                    DataFlow.Render,
+                    Role.Console,
+                    out var output
+                )
+            )
+            {
+                return false;
+            }
+
+            using (output)
+            {
+                return output.AudioMeterInformation.MasterPeakValue > 0;
+            }
+        }
+        catch (COMException)
+        {
+            // Unknown Reads As Idle, A Short Wait Costs Nothing
+            return false;
+        }
+    }
+
     public static MMDevice? Find(MMDeviceEnumerator enumerator, string id)
     {
         // The Picked Device While Active, Else The Default
@@ -116,6 +155,19 @@ public static partial class AudioDevices
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex Spaces();
+
+    private sealed class DeviceWatch(
+        MMDeviceEnumerator enumerator,
+        MMDeviceNotificationClient notifications
+    ) : IDisposable
+    {
+        public void Dispose()
+        {
+            notifications.Dispose();
+            enumerator.Dispose();
+            GC.SuppressFinalize(this);
+        }
+    }
 
     private static bool SelfTestPasses()
     {

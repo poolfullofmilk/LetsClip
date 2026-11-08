@@ -39,6 +39,7 @@
     --tonal-info-hover: color-mix(in srgb, var(--mud-palette-secondary) 30%, transparent);
     --lifted-surface: color-mix(in srgb, var(--mud-palette-white) 9%, var(--mud-palette-surface));
     --grabber: color-mix(in srgb, var(--mud-palette-white) 35%, var(--mud-palette-surface));
+    --grabber-inset: inset 0 0 10px rgb(0 0 0 / 55%);
     --scrollbar-thumb: color-mix(in srgb, var(--mud-palette-white) 18%, transparent);
     --scrollbar-thumb-hover: color-mix(in srgb, var(--mud-palette-white) 32%, transparent);
     --icon-shadow: 0 2px 8px rgb(0 0 0 / 60%);
@@ -450,7 +451,8 @@
 
 /* Keyboard Focus Shows Wherever Focus Lands */
 [data-keyclick]:focus-visible,
-.timeline-handle:focus-visible {
+.timeline-handle:focus-visible,
+.info-icon :focus-visible {
     outline: 2px solid var(--mud-palette-info);
     outline-offset: 2px;
 }
@@ -477,6 +479,11 @@
     .mud-dialog .mud-dialog-actions {
         padding: 0 24px 24px;
     }
+
+/* Snackbars Drop Like Panels, Not Material's Three Layers */
+.mud-snackbar {
+    box-shadow: var(--mud-elevation-4);
+}
 
 /* Chips Carry The Slightest Shadow, Icon Clear Of Text */
 .mud-chip {
@@ -894,7 +901,7 @@ mark {
     align-items: center;
     justify-content: center;
     width: 100%;
-    min-height: 220px;
+    min-height: 96px;
 }
 
 /* A Volume Change Shows Its Level, Then Fades */
@@ -1018,8 +1025,9 @@ mark {
     position: absolute;
     top: 0;
     bottom: 0;
-    border-top: 3px solid var(--grabber);
-    border-bottom: 3px solid var(--grabber);
+    border-top: 5px solid var(--grabber);
+    border-bottom: 5px solid var(--grabber);
+    box-shadow: var(--grabber-inset);
     pointer-events: none;
 }
 
@@ -1045,13 +1053,13 @@ mark {
     /* A Pixel Of Shadow Covers A Fractional Seam */
     .timeline-handle[data-handle="start"] {
         margin-left: calc(-1 * var(--handle-width));
-        border-radius: var(--radius-thumb) 0 0 var(--radius-thumb);
-        box-shadow: 1px 0 0 var(--grabber), var(--mud-elevation-1);
+        border-radius: var(--radius-inner) 0 0 var(--radius-inner);
+        box-shadow: 1px 0 0 var(--grabber), var(--icon-shadow);
     }
 
     .timeline-handle[data-handle="end"] {
-        border-radius: 0 var(--radius-thumb) var(--radius-thumb) 0;
-        box-shadow: -1px 0 0 var(--grabber), var(--mud-elevation-1);
+        border-radius: 0 var(--radius-inner) var(--radius-inner) 0;
+        box-shadow: -1px 0 0 var(--grabber), var(--icon-shadow);
     }
 
     /* Centred By Layout, So The Line Snaps To Pixels */
@@ -1064,6 +1072,7 @@ mark {
         margin: auto;
         border-radius: var(--radius-pill);
         background-color: var(--mud-palette-white);
+        box-shadow: var(--mud-elevation-1);
         opacity: 0.8;
     }
 

@@ -21,6 +21,10 @@ public partial class Tooltip
     [Parameter]
     public bool Disabled { get; set; }
 
+    // Off For Buttons, Clicks Would Leave It Showing
+    [Parameter]
+    public bool ShowOnFocus { get; set; }
+
     // Most Tooltips Wrap One Button In A Row
     [Parameter]
     public string RootClass { get; set; } = "d-flex";

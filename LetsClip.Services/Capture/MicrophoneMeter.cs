@@ -79,6 +79,7 @@ public sealed class MicrophoneMeter : IDisposable
                 .WithBufferLength(MicrophoneMilliseconds)
                 .Build();
             _recorder.DataAvailable += OnData;
+            _recorder.RecordingStopped += (_, _) => _ended.TrySetResult();
             _recorder.StartRecording();
             _player.Play();
             s_logger.Info(
@@ -204,7 +205,12 @@ public sealed class MicrophoneMeter : IDisposable
 
     private void StopAll()
     {
-        // Microphone First, So Nothing Writes To A Closed Pipe
+        // Filters First, A Blocked Pipe Write Then Frees Everything
+        if (_filters is { } running)
+        {
+            FFmpeg.Kill(running);
+        }
+
         try
         {
             if (_recorder is { } recorder)
@@ -220,12 +226,7 @@ public sealed class MicrophoneMeter : IDisposable
             // A Vanished Device Can Fail Its Own Teardown
         }
 
-        if (_filters is { } filters)
-        {
-            FFmpeg.Kill(filters);
-            filters.Dispose();
-        }
-
+        _filters?.Dispose();
         (_recorder, _player, _filters, _toFilters, _heard) = (null, null, null, null, null);
     }
 

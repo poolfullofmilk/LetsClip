@@ -26,7 +26,14 @@ public partial class ExportPanel : IDisposable
 
     // A Shorter Selection Is Also Cut Into The Clip
     [Parameter]
-    public EventCallback<TrimRange> OnSaveCut { get; set; }
+    public required Func<string, TrimRange, Task> SaveCut { get; set; }
+
+    // The Clip Is Being Replaced, Nothing May Read It
+    [Parameter]
+    public bool Busy { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> ExportingChanged { get; set; }
 
     [Inject]
     public required CaptureController Controller { get; set; }
@@ -38,6 +45,7 @@ public partial class ExportPanel : IDisposable
     private ExportProgress? _progress;
     private string? _result;
     private string? _error;
+    private bool _disposed;
 
     // Limits This Selection Would Feel, Then Unlimited
     private IReadOnlyList<double> Limits => SizeBudget.LimitsFor(Shape);
@@ -87,6 +95,7 @@ public partial class ExportPanel : IDisposable
 
     private bool CanExport =>
         !IsExporting
+        && !Busy
         && Range.IsValidFor(Media.Duration)
         && Budget.Verdict != BudgetVerdict.TooSmall;
 
@@ -162,6 +171,8 @@ public partial class ExportPanel : IDisposable
         _result = null;
         _cancel = new CancellationTokenSource();
         _progress = new ExportProgress("Starting", 0);
+        var duration = Media.Duration;
+        await ExportingChanged.InvokeAsync(true);
 
         // Progress Lands On The UI Thread, Throttled To Whole Percents
         var progress = new Progress<ExportProgress>(report =>
@@ -181,12 +192,12 @@ public partial class ExportPanel : IDisposable
                 token
             );
 
-            // The Exported Selection, Even If The Handles Moved Since
-            if (request.Range.CutsShort(Media.Duration))
+            // The Exported Selection, Only While Its Own Clip Is Open
+            if (!_disposed && request.Range.CutsShort(duration))
             {
                 _progress = new ExportProgress("Saving the Cut", 1);
                 StateHasChanged();
-                await OnSaveCut.InvokeAsync(request.Range);
+                await SaveCut(request.SourcePath, request.Range);
             }
         }
         catch (OperationCanceledException)
@@ -203,6 +214,10 @@ public partial class ExportPanel : IDisposable
             _progress = null;
             _cancel.Dispose();
             _cancel = null;
+            if (!_disposed)
+            {
+                await ExportingChanged.InvokeAsync(false);
+            }
         }
     }
 
@@ -228,6 +243,7 @@ public partial class ExportPanel : IDisposable
     public void Dispose()
     {
         // Leaving The Editor Ends A Running Export And Its File
+        _disposed = true;
         _cancel?.Cancel();
         GC.SuppressFinalize(this);
     }

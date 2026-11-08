@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Text.Json;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
+using LetsClip.Services.Capture;
 using NLog;
 
 namespace LetsClip.Services.Media;
@@ -14,6 +15,7 @@ public sealed class ClipLibrary : IDisposable
 
     // A Cut Clip's Full Original Waits Here, Hidden Beside It
     private const string OriginalsFolder = ".Originals";
+    private const string StripSuffix = ".strip.jpg";
 
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
     private static readonly string s_metadataDirectory = Path.Combine(
@@ -22,9 +24,17 @@ public sealed class ClipLibrary : IDisposable
     );
     private static readonly TimeSpan s_debounce = TimeSpan.FromMilliseconds(600);
 
+    // A Lost Watcher Or Missing Drive Is Tried Again
+    private static readonly TimeSpan s_rewatch = TimeSpan.FromSeconds(15);
+
+    // Each Change Reads, Edits And Writes Alone
+    private static readonly Lock s_metadataGate = new();
+
     private readonly SemaphoreSlim _probing = new(4, 4);
     private FileSystemWatcher? _watcher;
     private readonly Timer _changeTimer;
+    private readonly Timer _rewatchTimer;
+    private readonly CancellationTokenSource _closing = new();
 
     // Paths Gone From The Folder, Forgotten Once Changes Settle
     private readonly ConcurrentDictionary<string, byte> _gone = new(
@@ -42,12 +52,21 @@ public sealed class ClipLibrary : IDisposable
             Timeout.InfiniteTimeSpan,
             Timeout.InfiniteTimeSpan
         );
+        _rewatchTimer = new Timer(
+            _ => Rewatch(),
+            null,
+            Timeout.InfiniteTimeSpan,
+            Timeout.InfiniteTimeSpan
+        );
         Watch();
     }
 
     public event Action? Changed;
 
     public string Folder { get; private set; }
+
+    // Missing Or Unreadable, Never The Same As Empty
+    public bool IsUnavailable { get; private set; }
 
     public void SetFolder(string folder)
     {
@@ -66,11 +85,13 @@ public sealed class ClipLibrary : IDisposable
         string[] paths;
         try
         {
-            paths = Directory.Exists(Folder) ? Directory.GetFiles(Folder, "*.mp4") : [];
+            IsUnavailable = !Directory.Exists(Folder);
+            paths = IsUnavailable ? [] : Directory.GetFiles(Folder, "*.mp4");
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            // An Unreadable Folder Lists Nothing, The Page Shows Where
+            // An Unreadable Folder Lists Nothing, The Page Says So
+            IsUnavailable = true;
             s_logger.Warn($"Failed To List Clips {exception.GetType().Name}");
             return [];
         }
@@ -107,7 +128,7 @@ public sealed class ClipLibrary : IDisposable
             try
             {
                 var made = 0;
-                foreach (var clip in missing)
+                foreach (var clip in missing.TakeWhile(_ => !_closing.IsCancellationRequested))
                 {
                     if (await ThumbnailAsync(clip.Path, clip.Duration) is not null)
                     {
@@ -165,7 +186,7 @@ public sealed class ClipLibrary : IDisposable
             File.Exists(thumbnail) ? thumbnail : null,
             metadata.Title,
             metadata.Game,
-            File.Exists(OriginalPathOf(path)),
+            !metadata.ForeignOriginal && File.Exists(OriginalPathOf(path)),
             metadata.Width,
             metadata.Height
         );
@@ -179,10 +200,22 @@ public sealed class ClipLibrary : IDisposable
 
     public static void UpdateMetadata(string path, Func<ClipMetadata, ClipMetadata> change)
     {
-        if (MetadataOf(path) is { } metadata)
+        lock (s_metadataGate)
         {
-            WriteMetadata(path, change(metadata));
+            if (MetadataOf(path) is { } metadata)
+            {
+                WriteMetadata(path, change(metadata));
+            }
         }
+    }
+
+    public static string? OwnedOriginalOf(string path)
+    {
+        // A Replaced Clip's Old Backup Is Left Where It Is
+        var original = OriginalPathOf(path);
+        return File.Exists(original) && MetadataOf(path) is { ForeignOriginal: false }
+            ? original
+            : null;
     }
 
     public static string OriginalPathOf(string path)
@@ -240,26 +273,29 @@ public sealed class ClipLibrary : IDisposable
             }
 
             // The First Cut Keeps The Full Clip, Later Ones Replace
-            var original = OriginalPathOf(path);
-            var earlierStart = File.Exists(original) ? metadata.CutStart ?? 0 : 0;
-            if (!File.Exists(original))
+            var original = OwnedOriginalOf(path);
+            var earlierStart = original is null ? 0 : metadata.CutStart ?? 0;
+            if (original is null)
             {
-                var folder = Directory.CreateDirectory(Path.GetDirectoryName(original)!);
-                folder.Attributes |= FileAttributes.Hidden;
-                File.Move(path, original);
+                KeepFullClip(path, temporary);
+            }
+            else
+            {
+                File.Move(temporary, path, overwrite: true);
             }
 
             // Restore Needs The Cut In The Original's Own Time
-            File.Move(temporary, path, overwrite: true);
             await ReplacedAsync(
                 path,
-                metadata with
-                {
-                    TrimStart = null,
-                    TrimEnd = null,
-                    CutStart = earlierStart + range.Start,
-                    CutEnd = earlierStart + range.End,
-                },
+                stored =>
+                    stored with
+                    {
+                        TrimStart = null,
+                        TrimEnd = null,
+                        CutStart = earlierStart + range.Start,
+                        CutEnd = earlierStart + range.End,
+                        ForeignOriginal = false,
+                    },
                 media.Duration
             );
             s_logger.Info(
@@ -272,44 +308,107 @@ public sealed class ClipLibrary : IDisposable
         }
     }
 
+    private static void KeepFullClip(string path, string temporary)
+    {
+        // A Stale Backup Is Set Aside, Never Overwritten
+        var original = OriginalPathOf(path);
+        var folder = Directory.CreateDirectory(Path.GetDirectoryName(original)!);
+        folder.Attributes |= FileAttributes.Hidden;
+        if (File.Exists(original))
+        {
+            var stem = Path.GetFileNameWithoutExtension(original);
+            File.Move(original, ClipSaver.UniquePath(folder.FullName, stem));
+        }
+
+        // One Step, The Source Always Keeps A Name
+        try
+        {
+            File.Replace(temporary, path, original);
+        }
+        catch (IOException) when (!File.Exists(path) && File.Exists(original))
+        {
+            File.Move(original, path);
+            throw;
+        }
+    }
+
     public static async Task RestoreAsync(string path)
     {
         // The Full Clip Comes Back, Its Handles On The Cut
-        var original = OriginalPathOf(path);
-        var metadata = MetadataOf(path);
-        if (!File.Exists(original) || metadata is null)
+        if (OwnedOriginalOf(path) is not { } original || MetadataOf(path) is not { } metadata)
         {
-            return;
+            throw new InvalidDataException("This clip has no original of its own");
         }
 
         File.Move(original, path, overwrite: true);
-        if (!Directory.EnumerateFileSystemEntries(Path.GetDirectoryName(original)!).Any())
+        RemoveEmptyFolder(Path.GetDirectoryName(original)!);
+
+        // Past Here The Clip Is Back, Only Its Details Follow
+        MediaInfo? media = null;
+        try
         {
-            Directory.Delete(Path.GetDirectoryName(original)!);
+            media = await MediaProbe.ProbeAsync(path, CancellationToken.None);
+        }
+        catch (Exception exception) when (exception is TimeoutException or Win32Exception)
+        {
+            s_logger.Warn($"Failed To Probe A Restored Clip {exception.GetType().Name}");
         }
 
-        var media = await MediaProbe.ProbeAsync(path, CancellationToken.None);
         await ReplacedAsync(
             path,
-            metadata with
-            {
-                TrimStart = metadata.CutStart,
-                TrimEnd = metadata.CutEnd,
-                CutStart = null,
-                CutEnd = null,
-            },
+            stored =>
+                stored with
+                {
+                    TrimStart = stored.CutStart,
+                    TrimEnd = stored.CutEnd,
+                    CutStart = null,
+                    CutEnd = null,
+                },
             media?.Duration ?? metadata.Duration
         );
         s_logger.Info($"Restored The Original Of {Path.GetFileName(path)}");
     }
 
-    private static async Task ReplacedAsync(string path, ClipMetadata metadata, double duration)
+    private static void RemoveEmptyFolder(string folder)
     {
-        // New Pictures, So Its Card Is Never Blank
-        TryDelete(ThumbnailPathOf(path));
-        TryDelete(StripPathOf(path));
-        WriteMetadata(path, metadata with { Duration = duration });
-        await ThumbnailAsync(path, duration);
+        try
+        {
+            if (!Directory.EnumerateFileSystemEntries(folder).Any())
+            {
+                Directory.Delete(folder);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // An Empty Hidden Folder Harms Nothing
+        }
+    }
+
+    private static async Task ReplacedAsync(
+        string path,
+        Func<ClipMetadata, ClipMetadata> change,
+        double duration
+    )
+    {
+        // Applied To What Is Stored Now, A Rename Meanwhile Survives
+        lock (s_metadataGate)
+        {
+            if (ReadStored(path) is { } stored)
+            {
+                WriteMetadata(path, change(stored) with { Duration = duration });
+            }
+        }
+
+        // The File Is Already Replaced, A Picture Only Decorates It
+        try
+        {
+            await ThumbnailAsync(path, duration);
+        }
+        catch (Exception exception)
+            when (exception is IOException or TimeoutException or Win32Exception)
+        {
+            s_logger.Warn($"Failed To Make A Thumbnail {exception.GetType().Name}");
+        }
     }
 
     public static bool CanWriteTo(string folder)
@@ -404,37 +503,83 @@ public sealed class ClipLibrary : IDisposable
         // Each Run Writes Its Own Temporary File
         Directory.CreateDirectory(AppInfo.ThumbnailsDirectory);
         var temporary = $"{target}.{Guid.NewGuid():N}.tmp.jpg";
-        var result = await FFmpeg.RunAsync(
-            FFmpeg.FFmpegPath,
-            ["-hide_banner", "-nostdin", "-loglevel", "error", "-y", .. arguments, temporary],
-            timeout,
-            token
-        );
-        if (!result.Succeeded || !File.Exists(temporary))
+        try
+        {
+            var result = await FFmpeg.RunAsync(
+                FFmpeg.FFmpegPath,
+                ["-hide_banner", "-nostdin", "-loglevel", "error", "-y", .. arguments, temporary],
+                timeout,
+                token
+            );
+            if (!result.Succeeded || !File.Exists(temporary))
+            {
+                return null;
+            }
+
+            File.Move(temporary, target, overwrite: true);
+            DeleteOlderPictures(target);
+            return target;
+        }
+        finally
         {
             TryDelete(temporary);
-            return null;
         }
+    }
 
-        File.Move(temporary, target, overwrite: true);
-        return target;
+    private static void DeleteOlderPictures(string target)
+    {
+        // Other Generations Of This Clip's Same Kind Of Picture
+        var isStrip = target.EndsWith(StripSuffix, StringComparison.Ordinal);
+        var name = Path.GetFileName(target);
+        foreach (var older in PicturesOf(name[..FilePaths.KeyLength]))
+        {
+            if (older != target && older.EndsWith(StripSuffix, StringComparison.Ordinal) == isStrip)
+            {
+                TryDelete(older);
+            }
+        }
+    }
+
+    private static IEnumerable<string> PicturesOf(string key)
+    {
+        // Pictures A Running Render Still Writes Are Left Alone
+        return Directory
+            .EnumerateFiles(AppInfo.ThumbnailsDirectory, $"{key}*.jpg")
+            .Where(file => !file.EndsWith(".tmp.jpg", StringComparison.Ordinal));
+    }
+
+    private static string PicturePathOf(string path, string suffix)
+    {
+        // Named By The File's Generation, Replaced Files Get New Ones
+        var file = new FileInfo(path);
+        var generation = file.Exists ? $"-{file.Length:x}-{file.LastWriteTimeUtc.Ticks:x}" : "";
+        return Path.Combine(
+            AppInfo.ThumbnailsDirectory,
+            $"{FilePaths.KeyOf(path)}{generation}{suffix}"
+        );
     }
 
     private static string ThumbnailPathOf(string path)
     {
-        return Path.Combine(AppInfo.ThumbnailsDirectory, FilePaths.KeyOf(path) + ".jpg");
+        return PicturePathOf(path, ".jpg");
     }
 
     private static string StripPathOf(string path)
     {
-        return Path.ChangeExtension(ThumbnailPathOf(path), ".strip.jpg");
+        return PicturePathOf(path, StripSuffix);
     }
 
     private static void Forget(string path)
     {
         // A Deleted Clip Takes Its Pictures And Metadata With It
-        TryDelete(ThumbnailPathOf(path));
-        TryDelete(StripPathOf(path));
+        if (Directory.Exists(AppInfo.ThumbnailsDirectory))
+        {
+            foreach (var picture in PicturesOf(FilePaths.KeyOf(path)))
+            {
+                TryDelete(picture);
+            }
+        }
+
         TryDelete(MetadataPathOf(path));
     }
 
@@ -457,7 +602,8 @@ public sealed class ClipLibrary : IDisposable
             file.LastWriteTimeUtc,
             (int)Math.Round(media.FrameRate),
             Width: media.Width,
-            Height: media.Height
+            Height: media.Height,
+            ForeignOriginal: File.Exists(OriginalPathOf(file.FullName))
         );
         WriteMetadata(file.FullName, metadata);
         return metadata;
@@ -475,9 +621,11 @@ public sealed class ClipLibrary : IDisposable
             return metadata;
         }
 
-        var sized = metadata with { Width = media.Width, Height = media.Height };
-        WriteMetadata(file.FullName, sized);
-        return sized;
+        UpdateMetadata(
+            file.FullName,
+            current => current with { Width = media.Width, Height = media.Height }
+        );
+        return metadata with { Width = media.Width, Height = media.Height };
     }
 
     private async Task<MediaInfo?> ProbeOnceAsync(FileInfo file, CancellationToken token)
@@ -502,20 +650,21 @@ public sealed class ClipLibrary : IDisposable
 
     private static ClipMetadata? ReadMetadata(FileInfo file)
     {
+        // Another File Under The Same Name Is Probed Again
+        return
+            ReadStored(file.FullName) is { } metadata
+            && metadata.FileSize == file.Length
+            && metadata.FileWriteTimeUtc == file.LastWriteTimeUtc
+            && metadata.Duration > 0
+            ? metadata
+            : null;
+    }
+
+    private static ClipMetadata? ReadStored(string path)
+    {
         try
         {
-            var metadata = JsonSerializer.Deserialize<ClipMetadata>(
-                File.ReadAllText(MetadataPathOf(file.FullName))
-            );
-
-            // Another File Under The Same Name Is Probed Again
-            return
-                metadata is not null
-                && metadata.FileSize == file.Length
-                && metadata.FileWriteTimeUtc == file.LastWriteTimeUtc
-                && metadata.Duration > 0
-                ? metadata
-                : null;
+            return JsonSerializer.Deserialize<ClipMetadata>(File.ReadAllText(MetadataPathOf(path)));
         }
         catch (Exception exception)
             when (exception is IOException or UnauthorizedAccessException or JsonException)
@@ -527,24 +676,28 @@ public sealed class ClipLibrary : IDisposable
 
     public static void WriteMetadata(string path, ClipMetadata metadata)
     {
+        var target = MetadataPathOf(path);
+        var temporary = $"{target}.{Guid.NewGuid():N}.tmp";
         try
         {
-            var file = new FileInfo(path);
-            var stamped = metadata with
+            lock (s_metadataGate)
             {
-                FileSize = file.Length,
-                FileWriteTimeUtc = file.LastWriteTimeUtc,
-            };
-            Directory.CreateDirectory(s_metadataDirectory);
-            var target = MetadataPathOf(path);
-            var temporary = target + ".tmp";
-            File.WriteAllText(temporary, JsonSerializer.Serialize(stamped));
-            File.Move(temporary, target, overwrite: true);
+                var file = new FileInfo(path);
+                var stamped = metadata with
+                {
+                    FileSize = file.Length,
+                    FileWriteTimeUtc = file.LastWriteTimeUtc,
+                };
+                Directory.CreateDirectory(s_metadataDirectory);
+                File.WriteAllText(temporary, JsonSerializer.Serialize(stamped));
+                File.Move(temporary, target, overwrite: true);
+            }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             // Metadata Only Remembers The Trim, The Clip Itself Is Safe
             s_logger.Warn($"Failed To Save Clip Metadata {exception.GetType().Name}");
+            TryDelete(temporary);
         }
     }
 
@@ -592,6 +745,7 @@ public sealed class ClipLibrary : IDisposable
                 Debounce(change.Name);
             };
             watcher.Changed += (_, change) => Debounce(change.Name);
+            watcher.Error += (_, _) => OnWatcherLost();
             watcher.EnableRaisingEvents = true;
             _watcher = watcher;
         }
@@ -600,6 +754,23 @@ public sealed class ClipLibrary : IDisposable
         {
             // Without A Watcher The Page Still Refreshes When Opened
             s_logger.Warn($"Failed To Watch Clips {exception.GetType().Name}");
+            _rewatchTimer.Change(s_rewatch, Timeout.InfiniteTimeSpan);
+        }
+    }
+
+    private void OnWatcherLost()
+    {
+        // Overflowed Or Its Drive Left, Rescan And Watch Afresh
+        Debounce(null);
+        _rewatchTimer.Change(s_rewatch, Timeout.InfiniteTimeSpan);
+    }
+
+    private void Rewatch()
+    {
+        if (!_closing.IsCancellationRequested)
+        {
+            Watch();
+            Changed?.Invoke();
         }
     }
 
@@ -628,9 +799,10 @@ public sealed class ClipLibrary : IDisposable
 
     public void Dispose()
     {
+        _closing.Cancel();
         _watcher?.Dispose();
         _changeTimer.Dispose();
-        _probing.Dispose();
+        _rewatchTimer.Dispose();
         GC.SuppressFinalize(this);
     }
 }

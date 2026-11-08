@@ -1,8 +1,15 @@
 @* Info Icon *@
 <Tooltip Content="ChildContent"
          Placement="Placement.Left"
+         ShowOnFocus
          RootClass="d-inline-flex cursor-default info-icon">
-    <MudIcon Icon="@AppTheme.InfoIcon"
-             Color="Color.Info"
-             Size="Size.Small" />
+    <MudElement HtmlTag="span"
+                Class="d-inline-flex"
+                tabindex="0"
+                role="img"
+                aria-label="@Label">
+        <MudIcon Icon="@AppTheme.InfoIcon"
+                 Color="Color.Default"
+                 Size="Size.Small" />
+    </MudElement>
 </Tooltip>

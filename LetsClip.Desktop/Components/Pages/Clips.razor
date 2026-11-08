@@ -146,6 +146,15 @@
                 {
                     <Loading Class="page-loading" />
                 }
+                else if (s_clips.Count == 0 && Controller.Library.IsUnavailable)
+                {
+                    <MudPaper Elevation="4"
+                              Class="rounded-panel">
+                        <EmptyState Icon="@Icons.Material.Rounded.FolderOff"
+                                    Color="Color.Warning"
+                                    Text="Clips Folder Not Available" />
+                    </MudPaper>
+                }
                 else if (s_clips.Count == 0)
                 {
                     <MudPaper Elevation="4"
@@ -226,7 +235,7 @@
                                                 Class="d-flex align-center gap-1"
                                                 ClickPropagation="false">
                                         @* Clip Info *@
-                                        <InfoIcon>
+                                        <InfoIcon Label="@FactsText(clip)">
                                             <MudElement HtmlTag="div"
                                                         Class="info-facts">
                                                 @foreach (var fact in FactsOf(clip))

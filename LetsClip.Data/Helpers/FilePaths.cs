@@ -6,6 +6,8 @@ namespace LetsClip.Data.Helpers;
 
 public static class FilePaths
 {
+    public const int KeyLength = 32;
+
     static FilePaths()
     {
         Debug.Assert(SelfTestPasses());
@@ -38,7 +40,9 @@ public static class FilePaths
     {
         // One File Name Safe Key Per Path, Any Spelling
         var normalized = Path.GetFullPath(path).ToUpperInvariant();
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized)))[..32];
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized)))[
+            ..KeyLength
+        ];
     }
 
     private static string? Normal(string? path)

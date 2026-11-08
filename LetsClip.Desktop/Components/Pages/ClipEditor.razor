@@ -41,12 +41,13 @@ else
             <IconButton Icon="@Icons.Material.Rounded.Save"
                         Text="Save Cut"
                         Disabled="@(!CanSaveCut())"
-                        OnClick="() => SaveCutAsync(_range)" />
+                        OnClick="() => SaveCutAsync(_path!, _range)" />
             @if (_clip?.HasOriginal == true)
             {
                 @* Restore Button *@
                 <IconButton Icon="@Icons.Material.Rounded.Restore"
                             Text="Restore Original"
+                            Disabled="@(_exporting || _swapping)"
                             OnClick="RestoreOriginalAsync" />
             }
             @* Show In Folder Button *@
@@ -57,6 +58,7 @@ else
             <IconButton Icon="@Icons.Material.Rounded.Delete"
                         Text="Delete Clip"
                         Color="Color.Error"
+                        Disabled="@(_exporting || _swapping)"
                         OnClick="DeleteAsync" />
         </MudStack>
 
@@ -266,7 +268,9 @@ else
                         </Panel>
                         <ExportPanel @key="clip.Path"
                                      Clip="clip"
-                                     OnSaveCut="SaveCutAsync"
+                                     SaveCut="SaveCutAsync"
+                                     Busy="_swapping"
+                                     ExportingChanged="SetExporting"
                                      Range="_range"
                                      Media="media" />
                     </MudStack>

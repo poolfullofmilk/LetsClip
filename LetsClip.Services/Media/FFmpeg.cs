@@ -23,6 +23,9 @@ public static partial class FFmpeg
 
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
 
+    // A Killed Process's Pipes Close At Once, A Limit
+    private static readonly TimeSpan s_drainLimit = TimeSpan.FromSeconds(2);
+
     // Children Die With The App, Even After A Crash
     private const uint KillOnJobClose = 0x2000;
     private const int ExtendedLimitInformation = 9;
@@ -153,6 +156,7 @@ public static partial class FFmpeg
         {
             Kill(process);
             await process.WaitForExitAsync(CancellationToken.None);
+            await Task.WhenAny(Task.WhenAll(outputTask, errorTask), Task.Delay(s_drainLimit));
             token.ThrowIfCancellationRequested();
             throw new TimeoutException($"{Path.GetFileName(executable)} Took Too Long");
         }

@@ -6,4 +6,8 @@ public partial class InfoIcon
 {
     [Parameter]
     public required RenderFragment ChildContent { get; set; }
+
+    // What Screen Readers Hear Instead Of The Tooltip
+    [Parameter]
+    public required string Label { get; set; }
 }

@@ -64,16 +64,13 @@
                         Class="mb-3" />
             }
             <MudDivider />
-            <SettingRow Title="Save Sound"
-                        Switch="Controller.Settings.SaveSound"
-                        SwitchChanged="SetSaveSound">
+            <SettingRow Title="Save Sound">
                 @* Save Sound Volume *@
-                <VolumeButton Text="Play Sound"
+                <VolumeButton Text="@(Controller.Settings.SaveSound ? "Mute Save Sound" : "Unmute Save Sound")"
                               Filled
-                              OnClick="PlaySaveSound"
-                              Value="Controller.Settings.SaveSoundVolume"
-                              ValueChanged="SetSaveSoundVolume"
-                              Min="VolumeButton.Step" />
+                              OnClick="ToggleSaveSound"
+                              Value="@(Controller.Settings.SaveSound ? Controller.Settings.SaveSoundVolume : 0)"
+                              ValueChanged="SetSaveSoundVolume" />
             </SettingRow>
         </Panel>
 

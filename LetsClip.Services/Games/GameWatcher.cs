@@ -34,7 +34,8 @@ public sealed partial class GameWatcher : IDisposable
     private int _checking;
     private bool _failing;
     private Process? _game;
-    private volatile IReadOnlyDictionary<string, string> _games = new Dictionary<string, string>();
+    private volatile IReadOnlyDictionary<string, GameEntry> _games =
+        new Dictionary<string, GameEntry>();
 
     public GameWatcher()
     {
@@ -45,7 +46,7 @@ public sealed partial class GameWatcher : IDisposable
 
     public string? GameName { get; private set; }
 
-    public void SetGames(IReadOnlyDictionary<string, string> games)
+    public void SetGames(IReadOnlyDictionary<string, GameEntry> games)
     {
         _games = games;
 
@@ -215,10 +216,11 @@ public sealed partial class GameWatcher : IDisposable
                     process.Id != Environment.ProcessId
                     && _games.TryGetValue(
                         GameScanner.NormalizeProcessKey(process.ProcessName),
-                        out var name
+                        out var game
                     )
                     && process.MainWindowHandle is not 0 and var window
                     && !IsIconic(window)
+                    && IsSameProgram(process, game)
                 )
                 {
                     // Turned Off Meanwhile, The Game Waits For The Next Start
@@ -230,18 +232,19 @@ public sealed partial class GameWatcher : IDisposable
                         }
 
                         _game = process;
-                        GameName = name;
+                        GameName = game.Name;
                     }
 
-                    s_logger.Info($"Found {name} Running");
-                    GameChanged?.Invoke(name);
+                    s_logger.Info($"Found {game.Name} Running");
+                    GameChanged?.Invoke(game.Name);
                     return;
                 }
             }
 
             _failing = false;
         }
-        catch (Exception exception) when (exception is InvalidOperationException or Win32Exception)
+        catch (Exception exception)
+            when (exception is InvalidOperationException or Win32Exception or FileNotFoundException)
         {
             // A Process Gone Mid Check Waits For The Next Tick
             if (!_failing)
@@ -263,6 +266,22 @@ public sealed partial class GameWatcher : IDisposable
                 _timer.Change(s_interval, Timeout.InfiniteTimeSpan);
             }
         }
+    }
+
+    private static bool IsSameProgram(Process process, GameEntry game)
+    {
+        // Library Games Have Launchers, Only Added Exes Are Compared
+        if (game.IsInstalledGame || !File.Exists(game.Path) || PathOf(process) is not { } running)
+        {
+            return true;
+        }
+
+        // Updates Move Exes, Another Product Under That Name Differs
+        var expected = FileVersionInfo.GetVersionInfo(game.Path).ProductName?.Trim();
+        var actual = FileVersionInfo.GetVersionInfo(running).ProductName?.Trim();
+        return string.IsNullOrEmpty(expected)
+            || string.IsNullOrEmpty(actual)
+            || string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase);
     }
 
     private bool GameClosed()

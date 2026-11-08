@@ -26,6 +26,10 @@ public sealed class CaptureController : IDisposable
 
     // Starts And Stops Run One At A Time, Whoever Asks
     private readonly SemaphoreSlim _steps = new(1, 1);
+    private readonly CancellationTokenSource _closing = new();
+
+    // A Recorded Game's Own Monitor Sets Its Limits
+    private MonitorInfo? _gameMonitor;
     private CaptureHolds _holds;
     private string? _lastGame;
     private IReadOnlyDictionary<string, AddedGame>? _installedGames;
@@ -68,7 +72,7 @@ public sealed class CaptureController : IDisposable
     public IReadOnlyList<int> FrameRateChoices =>
         [
             .. UserSettings.FrameRateChoices.Where(rate =>
-                rate <= Math.Max(30, SelectedMonitor?.RefreshRate ?? 60)
+                rate <= Math.Max(30, (_gameMonitor ?? SelectedMonitor)?.RefreshRate ?? 60)
             ),
         ];
 
@@ -79,7 +83,7 @@ public sealed class CaptureController : IDisposable
     {
         get
         {
-            var own = SelectedMonitor is { } monitor
+            var own = (_gameMonitor ?? SelectedMonitor) is { } monitor
                 ? Math.Min(monitor.Width, monitor.Height)
                 : 1080;
             return [.. UserSettings.ResolutionChoices.Where(lines => lines < own), own];
@@ -165,7 +169,28 @@ public sealed class CaptureController : IDisposable
     private async Task LoadGamesAsync()
     {
         // The Library Scan Reads Many Folders, Once, Off The Caller
-        _installedGames = await Task.Run(GameScanner.Scan);
+        try
+        {
+            _installedGames = await Task.Run(GameScanner.Scan);
+        }
+        catch (Exception exception)
+            when (exception
+                    is IOException
+                        or UnauthorizedAccessException
+                        or ArgumentException
+                        or InvalidOperationException
+            )
+        {
+            // A Failed Scan Still Settles, Added Apps Keep Working
+            s_logger.Warn($"Failed To Scan For Games {exception.GetType().Name}");
+            _installedGames = new Dictionary<string, AddedGame>();
+        }
+
+        if (_closing.IsCancellationRequested)
+        {
+            return;
+        }
+
         ApplyGames();
         Changed?.Invoke();
     }
@@ -182,11 +207,11 @@ public sealed class CaptureController : IDisposable
         Games.SetEnabled(Settings.GamesOnly && _holds == CaptureHolds.None);
     }
 
-    private Dictionary<string, string> KnownGames()
+    private Dictionary<string, GameEntry> KnownGames()
     {
         return GameList()
             .Where(game => !game.IsRemoved)
-            .ToDictionary(game => game.Key, game => game.Name, StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(game => game.Key, StringComparer.OrdinalIgnoreCase);
     }
 
     public IReadOnlyList<GameEntry> GameList()
@@ -328,7 +353,16 @@ public sealed class CaptureController : IDisposable
         s_logger.Info(
             $"Retrying In {seconds} s, Failure {failures} In A Row, {failure}{(_quietRetry ? ", Out Of Sight" : "")}"
         );
-        await Task.Delay(TimeSpan.FromSeconds(seconds));
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(seconds), _closing.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // LetsClip Is Closing, Nothing Starts Again
+            return;
+        }
+
         if (retry != Volatile.Read(ref _retry))
         {
             return;
@@ -347,6 +381,11 @@ public sealed class CaptureController : IDisposable
         await _steps.WaitAsync();
         try
         {
+            if (_closing.IsCancellationRequested)
+            {
+                return;
+            }
+
             change?.Invoke();
             ApplyGames();
             var wanted = _holds == CaptureHolds.None ? WantedOptions() : null;
@@ -402,6 +441,7 @@ public sealed class CaptureController : IDisposable
         var settings = Settings;
         var window = settings.GamesOnly ? Games.GameWindow() : 0;
         var monitor = window != 0 ? MonitorCatalog.MonitorOf(Monitors, window) : null;
+        _gameMonitor = monitor;
         if ((settings.GamesOnly && window == 0) || (monitor ?? SelectedMonitor) is not { } shown)
         {
             return null;
@@ -424,10 +464,10 @@ public sealed class CaptureController : IDisposable
 
     public void Dispose()
     {
+        _closing.Cancel();
         Games.Dispose();
         Recorder.Dispose();
         Library.Dispose();
-        _steps.Dispose();
         GC.SuppressFinalize(this);
     }
 }

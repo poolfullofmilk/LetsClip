@@ -22,13 +22,13 @@ public readonly record struct TrimRange(double Start, double End)
 
     public bool IsValidFor(double duration)
     {
-        // Start Before End Inside The Clip, At Least One Step
+        // Start Before End Inside The Clip, One Step Or All
         return double.IsFinite(Start)
             && double.IsFinite(End)
             && duration > 0
             && Start >= 0
             && End <= duration + Tolerance
-            && End - Start >= Step - Tolerance;
+            && End - Start >= Math.Min(Step, duration) - Tolerance;
     }
 
     public bool CutsShort(double duration)
@@ -62,6 +62,10 @@ public readonly record struct TrimRange(double Start, double End)
             && !Whole(10).CutsShort(10)
             && !new TrimRange(0, 9.96).CutsShort(10)
             && Fit(4, 3, 10) == Whole(10)
-            && Fit(1, 30, 10) == new TrimRange(1, 10);
+            && Fit(1, 30, 10) == new TrimRange(1, 10)
+            && Whole(0.05).IsValidFor(0.05)
+            && !new TrimRange(0, 0.04).IsValidFor(0.05)
+            && new TrimRange(3, 5).SeekStart == 2.999
+            && Whole(5).SeekStart == 0;
     }
 }

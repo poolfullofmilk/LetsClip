@@ -4,7 +4,7 @@
             RootClass="@RootClass"
             Placement="Placement"
             Disabled="@(Disabled || (string.IsNullOrEmpty(Text) && Content is null))"
-            ShowOnFocus="false"
+            ShowOnFocus="ShowOnFocus"
             Arrow>
     @ChildContent
 </MudTooltip>

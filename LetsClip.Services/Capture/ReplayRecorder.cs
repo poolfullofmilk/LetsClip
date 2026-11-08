@@ -866,8 +866,6 @@ public sealed class ReplayRecorder : IDisposable
         }
 
         session?.Shutdown();
-        _transition.Dispose();
-        _saveTurn.Dispose();
         GC.SuppressFinalize(this);
     }
 }

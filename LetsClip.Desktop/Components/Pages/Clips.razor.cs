@@ -199,6 +199,11 @@ public partial class Clips : IDisposable
         yield return ("Size", Formatter.FormatSize(clip.SizeBytes));
     }
 
+    private static string FactsText(ClipInfo clip)
+    {
+        return string.Join(", ", FactsOf(clip).Select(fact => $"{fact.Label} {fact.Value}"));
+    }
+
     #region Game Filter
     private static string GameOf(ClipInfo clip)
     {

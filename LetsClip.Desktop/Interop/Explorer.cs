@@ -40,11 +40,11 @@ public static class Explorer
         // To The Recycle Bin, So A Mistake Comes Back
         try
         {
+            var original = ClipLibrary.OwnedOriginalOf(path);
             FileSystem.DeleteFile(path, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
 
             // A Cut Clip's Hidden Original Goes With It
-            var original = ClipLibrary.OriginalPathOf(path);
-            if (File.Exists(original))
+            if (original is not null)
             {
                 FileSystem.DeleteFile(
                     original,

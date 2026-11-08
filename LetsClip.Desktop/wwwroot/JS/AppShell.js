@@ -99,8 +99,11 @@ window.addEventListener(
 window.letsClip = (() => {
     // Changes Run Through Here Animate, Named Cards Slide
     const transition = (dotnet, method) => {
+        const change = () => dotnet.invokeMethodAsync(method).catch(() => {});
+        // No Transition Support Still Makes The Change
+        if (!document.startViewTransition) return void change();
         // A Newer Change Skips This One, Which Rejects Ready
-        document.startViewTransition(() => dotnet.invokeMethodAsync(method).catch(() => {})).ready.catch(() => {});
+        document.startViewTransition(change).ready.catch(() => {});
     };
 
     // The Shortest Selection, Matching TrimRange.Step
@@ -245,6 +248,8 @@ window.letsClip = (() => {
     };
 
     const setEdge = (range, edge, time) => {
+        // Too Short To Trim, The Whole Clip Stays
+        if (duration() <= step) return;
         if (edge === "start") range.start = fit(time, 0, range.end - step);
         else range.end = fit(time, range.start + step, duration());
     };
@@ -264,6 +269,11 @@ window.letsClip = (() => {
         selection.style.width = percent(end - start);
         handleOf("start").style.left = percent(start);
         handleOf("end").style.left = percent(end);
+        // The Handles Stay The One Truth Between Inputs
+        handleOf("start").dataset.time = start;
+        handleOf("end").dataset.time = end;
+        // Playing On Stops At The End Point As It Is Now
+        if (state.stopAt !== null) state.stopAt = end;
         showTimes({ start, end });
     };
 
@@ -298,7 +308,7 @@ window.letsClip = (() => {
         const handle = event.target instanceof Element ? event.target.closest("[data-handle]") : null;
         if (!state || !handle) return;
         const edge = handle.dataset.handle;
-        const range = state.keyed && performance.now() - state.keyed.at < 600 ? state.keyed.range : readRange();
+        const range = readRange();
         const jump = event.shiftKey ? 1 : step;
         const time = { ArrowLeft: range[edge] - jump, ArrowDown: range[edge] - jump, ArrowRight: range[edge] + jump, ArrowUp: range[edge] + jump, Home: 0, End: duration() }[event.key];
         if (time === undefined) return;
@@ -307,7 +317,6 @@ window.letsClip = (() => {
         setEdge(range, edge, time);
         paint(range);
         showEdge(range, edge);
-        state.keyed = { range, at: performance.now() };
         commit(range);
     };
 
@@ -443,7 +452,7 @@ window.letsClip = (() => {
             const plain = !event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey;
             if (plain && event.key === "Escape") done(false);
             else if (plain && event.key === "Enter") done(true);
-            else dotnet.invokeMethodAsync("OnKeys", event.code, event.ctrlKey, event.altKey, event.shiftKey, event.metaKey).catch(() => {});
+            else dotnet.invokeMethodAsync("OnKeys", event.code, event.key, event.ctrlKey, event.altKey, event.shiftKey, event.metaKey).catch(() => {});
         };
         const listening = new AbortController();
         const { signal } = listening;

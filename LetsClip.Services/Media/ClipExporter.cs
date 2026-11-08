@@ -445,8 +445,7 @@ public static class ClipExporter
         // Progress Arrives As out_time_us Lines, Throttled To Whole Percents
         var lastPercent = -1;
         var lastMicroseconds = -1L;
-        // Never Disposed, The Pipe Reader Can Outlive A Killed Pass
-        var stall = CancellationTokenSource.CreateLinkedTokenSource(token);
+        using var stall = CancellationTokenSource.CreateLinkedTokenSource(token);
         stall.CancelAfter(firstProgress ?? s_stall);
         ProcessResult result;
         try

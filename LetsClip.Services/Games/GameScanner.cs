@@ -315,23 +315,23 @@ internal static partial class GameScanner
                     )
                 )
                 {
-                    var installMatch = InstallDirectoryRegex()
-                        .Match(File.ReadAllText(manifestPath));
-                    if (!installMatch.Success)
-                    {
-                        continue;
-                    }
-
-                    var gameRoot = Path.Combine(
-                        steamAppsDirectory,
-                        "common",
-                        installMatch.Groups["installDirectory"].Value
+                    // One Bad Manifest Costs Only Its Own Game
+                    roots.AddRange(
+                        RootsFrom(game =>
+                        {
+                            var installMatch = InstallDirectoryRegex()
+                                .Match(File.ReadAllText(manifestPath));
+                            var gameRoot = Path.Combine(
+                                steamAppsDirectory,
+                                "common",
+                                installMatch.Groups["installDirectory"].Value
+                            );
+                            if (installMatch.Success && Directory.Exists(gameRoot))
+                            {
+                                game.Add(gameRoot);
+                            }
+                        })
                     );
-
-                    if (Directory.Exists(gameRoot))
-                    {
-                        roots.Add(gameRoot);
-                    }
                 }
             }
         });
@@ -348,15 +348,20 @@ internal static partial class GameScanner
                 )
             )
             {
-                using var jsonDocument = JsonDocument.Parse(File.ReadAllText(itemFilePath));
-                var installLocation = jsonDocument
-                    .RootElement.GetProperty("InstallLocation")
-                    .GetString();
-
-                if (Directory.Exists(installLocation))
-                {
-                    roots.Add(installLocation);
-                }
+                // One Bad Manifest Costs Only Its Own Game
+                roots.AddRange(
+                    RootsFrom(game =>
+                    {
+                        using var jsonDocument = JsonDocument.Parse(File.ReadAllText(itemFilePath));
+                        var installLocation = jsonDocument
+                            .RootElement.GetProperty("InstallLocation")
+                            .GetString();
+                        if (Directory.Exists(installLocation))
+                        {
+                            game.Add(installLocation);
+                        }
+                    })
+                );
             }
         });
     }

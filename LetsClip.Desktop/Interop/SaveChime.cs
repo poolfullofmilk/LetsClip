@@ -22,21 +22,27 @@ public static partial class SaveChime
         (1568, 0.07),
     ];
 
-    // The Chime Starts A Moment Late, Its Mute Covers That
-    private static readonly TimeSpan s_muted = TimeSpan.FromSeconds(Length + 0.4);
+    // An Idle Output Wakes Slowly And Swallows What Comes First
+    private const double WakeLength = 0.5;
 
-    // One Pinned Wave Per Tenth, Kept While Windows Reads It
-    private static readonly byte[]?[] s_waves = new byte[11][];
+    // The Chime Starts A Moment Late, Its Mute Covers That
+    private const double MuteMargin = 0.4;
+
+    // One Pinned Wave Per Tenth, Awake Or Waking
+    private const int Tenths = 11;
+    private static readonly byte[]?[] s_waves = new byte[Tenths * 2][];
 
     public static void Play(ReplayRecorder recorder, double volume)
     {
         // The Loopback Hears Silence, So No Clip Holds The Chime
-        recorder.MuteSystemAudio(s_muted);
-        var level = (int)Math.Round(Math.Clamp(volume, 0, 1) * 10);
+        var lead = AudioDevices.IsOutputPlaying() ? 0 : WakeLength;
+        recorder.MuteSystemAudio(TimeSpan.FromSeconds(lead + Length + MuteMargin));
+        var tenth = (int)Math.Round(Math.Clamp(volume, 0, 1) * 10);
+        var slot = tenth + (lead > 0 ? Tenths : 0);
         var wave =
-            Volatile.Read(ref s_waves[level])
-            ?? Interlocked.CompareExchange(ref s_waves[level], Render(level / 10.0), null)
-            ?? s_waves[level]!;
+            Volatile.Read(ref s_waves[slot])
+            ?? Interlocked.CompareExchange(ref s_waves[slot], Render(tenth / 10.0, lead), null)
+            ?? s_waves[slot]!;
 
         // Safe From Any Thread, No Output Device Plays Nothing
         _ = PlaySoundW(
@@ -46,15 +52,17 @@ public static partial class SaveChime
         );
     }
 
-    private static byte[] Render(double volume)
+    private static byte[] Render(double volume, double lead)
     {
+        var leadFrames = (int)(SampleRate * lead);
         var frames = (int)(SampleRate * Length);
+        var total = leadFrames + frames;
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream);
 
         // A Plain 16 Bit Mono WAV Header
         writer.Write("RIFF"u8);
-        writer.Write(36 + (frames * 2));
+        writer.Write(36 + (total * 2));
         writer.Write("WAVEfmt "u8);
         writer.Write(16);
         writer.Write((short)1);
@@ -64,7 +72,14 @@ public static partial class SaveChime
         writer.Write((short)2);
         writer.Write((short)16);
         writer.Write("data"u8);
-        writer.Write(frames * 2);
+        writer.Write(total * 2);
+
+        // Inaudible, Pure Zeros Leave Some Outputs Asleep
+        for (var frame = 0; frame < leadFrames; frame++)
+        {
+            writer.Write((short)(frame % 2 == 0 ? 1 : -1));
+        }
+
         for (var frame = 0; frame < frames; frame++)
         {
             var time = frame / (double)SampleRate;

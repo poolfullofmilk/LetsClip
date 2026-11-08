@@ -1,4 +1,6 @@
+using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
 using LetsClip.Data.Helpers;
@@ -175,14 +177,20 @@ public static class Updater
     {
         s_logger.Info($"Started Update {executablePath}");
         Process.Start(
-            new ProcessStartInfo(executablePath, $"{AfterUpdateArgument} {Environment.ProcessId}")
+            new ProcessStartInfo(executablePath)
             {
                 UseShellExecute = false,
+                ArgumentList =
+                {
+                    AfterUpdateArgument,
+                    Environment.ProcessId.ToString(CultureInfo.InvariantCulture),
+                    Environment.ProcessPath!,
+                },
             }
         );
     }
 
-    public static void FinishPreviousVersion(string[] arguments)
+    public static string? WaitForPreviousVersion(string[] arguments)
     {
         var index = Array.IndexOf(arguments, AfterUpdateArgument);
         if (
@@ -192,41 +200,56 @@ public static class Updater
             || !int.TryParse(arguments[index + 1], out var processId)
         )
         {
+            return null;
+        }
+
+        // Newer Versions Name Themselves, Older Ones Are Asked
+        var previousPath = index + 2 < arguments.Length ? arguments[index + 2] : null;
+        try
+        {
+            using var previous = Process.GetProcessById(processId);
+            previousPath ??= previous.MainModule?.FileName;
+
+            // Still Running After The Wait, Its Exe Stays
+            if (!previous.WaitForExit(s_previousExitWait))
+            {
+                s_logger.Warn($"Found Previous Version {processId} Still Running");
+                return null;
+            }
+        }
+        catch (Exception exception) when (exception is ArgumentException or Win32Exception)
+        {
+            // Already Gone, Or It Would Not Say Where It Lives
+        }
+
+        return previousPath;
+    }
+
+    public static void DeletePreviousVersion(string? previousPath)
+    {
+        // Only After This Version Started, Only The Exe It Replaced
+        if (
+            previousPath is null
+            || FilePaths.AreSame(previousPath, Environment.ProcessPath)
+            || !FilePaths.AreSame(
+                Path.GetDirectoryName(previousPath),
+                Path.GetDirectoryName(Environment.ProcessPath)
+            )
+            || !Path.GetFileName(previousPath)
+                .StartsWith(ExecutablePrefix, StringComparison.OrdinalIgnoreCase)
+        )
+        {
             return;
         }
 
         try
         {
-            // Still Running After The Wait, Old Exes Stay
-            using var previous = Process.GetProcessById(processId);
-            if (!previous.WaitForExit(s_previousExitWait))
-            {
-                s_logger.Warn($"Found Previous Version {processId} Still Running");
-                return;
-            }
+            File.Delete(previousPath);
         }
-        catch (ArgumentException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            // Already Gone
-        }
-
-        var oldPaths = Directory
-            .EnumerateFiles(
-                Path.GetDirectoryName(Environment.ProcessPath)!,
-                $"{ExecutablePrefix}*.exe"
-            )
-            .Where(path => !FilePaths.AreSame(path, Environment.ProcessPath));
-        foreach (var oldPath in oldPaths)
-        {
-            try
-            {
-                File.Delete(oldPath);
-            }
-            catch (Exception exception)
-                when (exception is IOException or UnauthorizedAccessException)
-            {
-                // A Locked Old Exe Is Left For Next Time
-            }
+            // A Locked Old Exe Harms Nothing
+            s_logger.Warn($"Failed To Delete The Previous Version {exception.GetType().Name}");
         }
     }
 }

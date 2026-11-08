@@ -13,5 +13,6 @@ public sealed record ClipMetadata(
     int Width = 0,
     int Height = 0,
     double? CutStart = null,
-    double? CutEnd = null
+    double? CutEnd = null,
+    bool ForeignOriginal = false
 );

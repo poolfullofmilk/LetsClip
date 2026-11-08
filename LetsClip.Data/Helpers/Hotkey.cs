@@ -82,14 +82,23 @@ public readonly record struct Hotkey(HotkeyModifiers Modifiers, int VirtualKey)
         return hotkey.IsUsable ? hotkey : Default;
     }
 
-    public static Hotkey? FromBrowser(string code, bool control, bool alt, bool shift, bool meta)
+    public static Hotkey? FromBrowser(
+        string code,
+        string key,
+        bool control,
+        bool alt,
+        bool shift,
+        bool meta
+    )
     {
-        // KeyboardEvent.code Names The Physical Key, Whatever The Layout
+        // Letters Follow The Layout, The Rest Their Physical Key
         var name = code switch
         {
-            _ when code.StartsWith("Key", StringComparison.Ordinal) && code.Length == 4 => code[
-                3..
-            ],
+            _ when code.StartsWith("Key", StringComparison.Ordinal) && code.Length == 4 => key
+                is [var letter]
+            && char.IsAsciiLetter(letter)
+                ? key.ToUpperInvariant()
+                : code[3..],
             _ when code.StartsWith("Digit", StringComparison.Ordinal) => code[5..],
             _ when code.StartsWith("Numpad", StringComparison.Ordinal) => "Num" + code[6..],
             _ when code.StartsWith("Arrow", StringComparison.Ordinal) => code[5..],
@@ -159,8 +168,10 @@ public readonly record struct Hotkey(HotkeyModifiers Modifiers, int VirtualKey)
             && Parse("Hyper+F8") == Default
             && Parse("") == Default
             && Parse("Alt+1").ToString() == "Alt+1"
-            && FromBrowser("KeyS", true, true, false, false)?.ToString() == "Ctrl+Alt+S"
-            && FromBrowser("Numpad5", true, false, false, false)?.ToString() == "Ctrl+Num5"
-            && FromBrowser("ShiftLeft", false, false, true, false) is null;
+            && FromBrowser("KeyS", "s", true, true, false, false)?.ToString() == "Ctrl+Alt+S"
+            && FromBrowser("KeyQ", "a", true, false, false, false)?.ToString() == "Ctrl+A"
+            && FromBrowser("KeyQ", "й", true, false, false, false)?.ToString() == "Ctrl+Q"
+            && FromBrowser("Numpad5", "5", true, false, false, false)?.ToString() == "Ctrl+Num5"
+            && FromBrowser("ShiftLeft", "Shift", false, false, true, false) is null;
     }
 }

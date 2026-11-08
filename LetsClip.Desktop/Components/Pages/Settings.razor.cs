@@ -22,6 +22,9 @@ public partial class Settings : IDisposable
     // Renewed Each Second, So A Restarted Session Is Muted Too
     private static readonly TimeSpan s_loopbackMute = TimeSpan.FromSeconds(2);
 
+    // One Plug Fires Several Events, One Refresh Follows
+    private static readonly TimeSpan s_deviceSettle = TimeSpan.FromMilliseconds(400);
+
     [Inject]
     public required CaptureController Controller { get; set; }
 
@@ -41,6 +44,11 @@ public partial class Settings : IDisposable
     private IReadOnlyList<AudioDeviceInfo> _microphones = [];
     private DotNetObjectReference<Settings>? _reference;
     private MicrophoneMeter? _meter;
+    private bool _testStarting;
+    private int _testStart;
+    private IDisposable? _deviceWatch;
+    private Timer? _deviceTimer;
+    private bool _closed;
     private Timer? _chimeTimer;
     private bool _capturingKey;
     private Hotkey? _pendingKey;
@@ -78,11 +86,39 @@ public partial class Settings : IDisposable
         Controller.Changed += OnChanged;
         Shell.HotkeyChanged += OnChanged;
 
+        await RefreshDevicesAsync();
+        await MeasureSpaceAsync();
+        _deviceTimer = new Timer(_ => OnDevicesSettled());
+        _deviceWatch = await Task.Run(() => AudioDevices.WatchChanges(OnDevicesChanged));
+        if (_closed)
+        {
+            _deviceWatch.Dispose();
+        }
+    }
+
+    private async Task RefreshDevicesAsync()
+    {
         // Device Lists Come From WASAPI Off The UI Thread
         (_playback, _microphones) = await Task.Run(() =>
             (AudioDevices.Playback(), AudioDevices.Microphones())
         );
-        await MeasureSpaceAsync();
+    }
+
+    private void OnDevicesChanged()
+    {
+        if (!_closed)
+        {
+            _deviceTimer?.Change(s_deviceSettle, Timeout.InfiniteTimeSpan);
+        }
+    }
+
+    private void OnDevicesSettled()
+    {
+        _ = InvokeAsync(async () =>
+        {
+            await RefreshDevicesAsync();
+            StateHasChanged();
+        });
     }
 
     private async Task MeasureSpaceAsync()
@@ -136,7 +172,7 @@ public partial class Settings : IDisposable
     private async Task RestartMicrophoneTestAsync()
     {
         // A Running Test Follows What Was Just Picked
-        if (_meter is not null)
+        if (_meter is not null || _testStarting)
         {
             StopMicrophoneTest();
             await ToggleMicrophoneTestAsync();
@@ -147,7 +183,7 @@ public partial class Settings : IDisposable
     {
         _microphoneError = null;
 
-        if (_meter is not null)
+        if (_meter is not null || _testStarting)
         {
             StopMicrophoneTest();
             return;
@@ -156,16 +192,27 @@ public partial class Settings : IDisposable
         // Opening The Devices Takes A Moment, Off The UI Thread
         var id = Controller.Settings.MicrophoneDeviceId;
         var noiseCancellation = Controller.Settings.NoiseCancellation;
+        var start = ++_testStart;
+        _testStarting = true;
         try
         {
-            _meter = await Task.Run(() => new MicrophoneMeter(id, noiseCancellation));
+            var meter = await Task.Run(() => new MicrophoneMeter(id, noiseCancellation));
+
+            // Stopped Or Left Meanwhile, It Never Starts
+            if (start != _testStart)
+            {
+                meter.Dispose();
+                return;
+            }
+
+            (_meter, _testStarting) = (meter, false);
             Snackbar.Add(
                 "You hear yourself as clips will, headphones avoid an echo",
                 Severity.Info
             );
-            _ = WarnIfSilentAsync(_meter);
-            _ = KeepOutOfClipsAsync(_meter);
-            _ = StopWhenLostAsync(_meter);
+            _ = WarnIfSilentAsync(meter);
+            _ = KeepOutOfClipsAsync(meter);
+            _ = StopWhenLostAsync(meter);
         }
         catch (Exception exception)
             when (exception
@@ -176,7 +223,11 @@ public partial class Settings : IDisposable
             )
         {
             s_logger.Warn($"Failed To Test Microphone {exception.GetType().Name}");
-            _microphoneError = "The microphone could not be opened, check it in Windows";
+            if (start == _testStart)
+            {
+                _testStarting = false;
+                _microphoneError = "The microphone could not be opened, check it in Windows";
+            }
         }
     }
 
@@ -218,28 +269,46 @@ public partial class Settings : IDisposable
 
     private void StopMicrophoneTest()
     {
+        // A Start Still Under Way Is Told It Lost
+        _testStart++;
+        _testStarting = false;
         _meter?.Dispose();
         _meter = null;
     }
     #endregion
 
     #region Saving
-    private void SetSaveSound(bool enabled)
+    private void ToggleSaveSound()
     {
+        // Turning It On Plays It, So The Press Answers
+        var enabled = !Controller.Settings.SaveSound;
         Controller.UpdateSettings(settings => settings with { SaveSound = enabled });
+        _chimeTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        if (enabled)
+        {
+            PlaySaveSound();
+        }
     }
 
     private void SetSaveSoundVolume(double level)
     {
-        Controller.UpdateSettings(settings => settings with { SaveSoundVolume = level });
+        // Zero Turns It Off, The Last Level Stays
+        Controller.UpdateSettings(settings =>
+            settings with
+            {
+                SaveSound = level > 0,
+                SaveSoundVolume = level > 0 ? level : settings.SaveSoundVolume,
+            }
+        );
         _chimeTimer ??= new Timer(_ => PlaySaveSound());
-        _chimeTimer.Change(s_chimeDelay, Timeout.InfiniteTimeSpan);
+        _chimeTimer.Change(
+            level > 0 ? s_chimeDelay : Timeout.InfiniteTimeSpan,
+            Timeout.InfiniteTimeSpan
+        );
     }
 
     private void PlaySaveSound()
     {
-        // A Click Plays At Once, Dropping A Pending Slide
-        _chimeTimer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         SaveChime.Play(Controller.Recorder, Controller.Settings.SaveSoundVolume);
     }
 
@@ -258,10 +327,10 @@ public partial class Settings : IDisposable
     }
 
     [JSInvokable]
-    public void OnKeys(string code, bool control, bool alt, bool shift, bool meta)
+    public void OnKeys(string code, string key, bool control, bool alt, bool shift, bool meta)
     {
         // Each Press Replaces The Last, A Slip Is Pressed Again
-        _pendingKey = Hotkey.FromBrowser(code, control, alt, shift, meta);
+        _pendingKey = Hotkey.FromBrowser(code, key, control, alt, shift, meta);
         _hotkeyError = _pendingKey is { IsUsable: true }
             ? null
             : "Use Ctrl, Alt or Win with a key, or a function key alone";
@@ -381,6 +450,9 @@ public partial class Settings : IDisposable
 
     public void Dispose()
     {
+        _closed = true;
+        _deviceWatch?.Dispose();
+        _deviceTimer?.Dispose();
         Controller.Changed -= OnChanged;
         Shell.HotkeyChanged -= OnChanged;
         StopMicrophoneTest();

@@ -153,8 +153,18 @@ public sealed record UserSettings(
             FrameRate = FrameRateChoices.Contains(FrameRate) ? FrameRate : 30,
             Resolution = Resolution >= ResolutionChoices[0] ? Resolution : 1080,
             Quality = Enum.IsDefined(Quality) ? Quality : CaptureQuality.Normal,
-            RemovedGames = RemovedGames?.OfType<string>().ToArray() ?? [],
-            AddedGames = AddedGames?.OfType<AddedGame>().ToArray() ?? [],
+            RemovedGames =
+                RemovedGames?.Where(key => !string.IsNullOrWhiteSpace(key)).ToArray() ?? [],
+            AddedGames =
+                AddedGames
+                    ?.Where(game =>
+                        !string.IsNullOrWhiteSpace(game?.Key)
+                        && !string.IsNullOrWhiteSpace(game.Name)
+                    )
+                    .DistinctBy(game => game.Key, StringComparer.OrdinalIgnoreCase)
+                    .ToArray()
+                ?? [],
+            ClipSort = Enum.IsDefined(ClipSort) ? ClipSort : ClipSort.Newest,
             SystemAudioDeviceId = SystemAudioDeviceId ?? "",
             MicrophoneDeviceId = MicrophoneDeviceId ?? "",
             Hotkey = HotkeyGesture.Parse(Hotkey).ToString(),

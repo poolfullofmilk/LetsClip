@@ -25,7 +25,7 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs eventArgs)
     {
         base.OnStartup(eventArgs);
-        Updater.FinishPreviousVersion(eventArgs.Args);
+        var previousVersion = Updater.WaitForPreviousVersion(eventArgs.Args);
         LogManager
             .Setup()
             .LoadConfiguration(configuration =>
@@ -57,7 +57,7 @@ public partial class App : Application
 
         try
         {
-            Start(eventArgs.Args.Contains("--tray"));
+            Start(eventArgs.Args.Contains("--tray"), previousVersion);
         }
         catch (Exception exception)
         {
@@ -73,7 +73,7 @@ public partial class App : Application
         }
     }
 
-    private void Start(bool startsInTray)
+    private void Start(bool startsInTray, string? previousVersion)
     {
         if (!HasWebView())
         {
@@ -172,6 +172,7 @@ public partial class App : Application
         }
 
         _ = controller.StartAutomaticallyAsync();
+        Updater.DeletePreviousVersion(previousVersion);
     }
 
     private static bool HasWebView()
