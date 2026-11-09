@@ -26,7 +26,7 @@
                 <MudBadge Dot
                           Color="Color.Error"
                           Overlap
-                          Visible="@(_availableUpdate is not null)"
+                          Visible="@(s_availableUpdate is not null)"
                           Class="d-flex">
                     <MudMenu Icon="@Icons.Material.Rounded.MoreVert"
                              AriaLabel="More"
@@ -37,7 +37,7 @@
                         @* Check Updates *@
                         <MudMenuItem Icon="@Icons.Material.Rounded.SystemUpdateAlt"
                                      Label="Check for Updates"
-                                     Class="@(_availableUpdate is null ? null : "update-dot")"
+                                     Class="@(s_availableUpdate is null ? null : "update-dot")"
                                      OnClick="() => CheckForUpdatesAsync(true)" />
                         @* Open Logs *@
                         <MudMenuItem Icon="@Icons.Material.Rounded.Description"

@@ -6,7 +6,8 @@
                    aria-label="@Text"
                    Variant="@(Filled ? Variant.Filled : Variant.Text)"
                    Color="Color"
-                   Size="Size.Small"
+                   Size="@(Square ? Size.Medium : Size.Small)"
+                   Class="@(Square ? "square" : null)"
                    Disabled="Disabled"
                    OnClick="OnClick" />
 </Tooltip>

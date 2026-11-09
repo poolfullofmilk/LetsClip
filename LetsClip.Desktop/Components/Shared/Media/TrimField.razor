@@ -1,26 +1,21 @@
 @* Trim Field *@
-<MudStack Row
-          Reverse="ButtonFirst"
-          AlignItems="AlignItems.Center"
-          Spacing="2">
-    <MudElement HtmlTag="div"
-                Class="trim-field"
-                data-edge="@Label"
-                data-seconds="@Formatter.FormatSeconds(Value)">
-        @* Time Field *@
-        <MudTextField @key="_version"
-                      T="string"
-                      Label="@Label"
-                      Value="@Formatter.FormatDuration(Value)"
-                      ValueChanged="CommitAsync"
-                      Variant="Variant.Outlined"
-                      Margin="Margin.Dense"
-                      Disabled="Disabled"
-                      Class="my-0" />
-    </MudElement>
-    @* Set Here Button *@
-    <IconButton Icon="@Icon"
-                Text="@($"Set {Label} Here")"
-                Disabled="Disabled"
-                OnClick="OnSet" />
-</MudStack>
+<MudElement HtmlTag="div"
+            Class="trim-field"
+            data-edge="@Label"
+            data-seconds="@Formatter.FormatSeconds(Value)">
+    @* Time Field *@
+    <MudTextField @key="_version"
+                  T="string"
+                  Label="@Label"
+                  Value="@Formatter.FormatDuration(Value)"
+                  ValueChanged="CommitAsync"
+                  Variant="Variant.Outlined"
+                  Margin="Margin.Dense"
+                  Adornment="Adornment.End"
+                  AdornmentIcon="@Icon"
+                  AdornmentAriaLabel="@($"Set {Label} Here")"
+                  OnAdornmentClick="() => OnSet.InvokeAsync()"
+                  IconSize="Size.Small"
+                  Disabled="Disabled"
+                  Class="my-0" />
+</MudElement>

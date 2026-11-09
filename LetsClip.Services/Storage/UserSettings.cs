@@ -23,20 +23,20 @@ public sealed record UserSettings(
     double SaveSoundVolume = 1,
     bool SystemAudio = true,
     string SystemAudioDeviceId = "",
-    bool Microphone = false,
+    bool Microphone = true,
     string MicrophoneDeviceId = "",
     bool NoiseCancellation = true,
     string Hotkey = "F10",
     string? ClipsFolder = null,
     DiscordPlan ExportDiscordPlan = DiscordPlan.Off,
     bool ExportAudio = true,
-    bool HasSeenTrayHint = false,
+    bool DeleteOriginals = true,
     int DefaultsVersion = 0,
     ClipSort ClipSort = ClipSort.Newest
 )
 {
     // Raised When New Defaults Reach Existing Users Once
-    public const int CurrentDefaults = 1;
+    public const int CurrentDefaults = 2;
 
     // Every Clip Opens At Half Volume, Its Microphone Test Too
     public const double OpeningVolume = 0.5;
@@ -74,19 +74,28 @@ public sealed record UserSettings(
                 JsonSerializer.Deserialize<UserSettings>(json)
                 ?? new UserSettings(DefaultsVersion: CurrentDefaults);
 
-            // Version 1 Gives Everyone F10 And Automatic Audio, Once
             if (settings.DefaultsVersion >= CurrentDefaults)
             {
                 return settings.Normalized();
             }
 
+            // Version 1 Gives Everyone F10 And Automatic Audio, Once
             var defaults = new UserSettings();
-            var updated = (
-                settings with
+            if (settings.DefaultsVersion < 1)
+            {
+                settings = settings with
                 {
                     Hotkey = defaults.Hotkey,
                     SystemAudioDeviceId = defaults.SystemAudioDeviceId,
                     MicrophoneDeviceId = defaults.MicrophoneDeviceId,
+                };
+            }
+
+            // Version 2 Turns The Microphone On For Everyone, Once
+            var updated = (
+                settings with
+                {
+                    Microphone = defaults.Microphone,
                     DefaultsVersion = CurrentDefaults,
                 }
             ).Normalized();
@@ -145,13 +154,16 @@ public sealed record UserSettings(
 
     private UserSettings Normalized()
     {
-        // Values From Disk Are Checked, Anything Odd Falls Back
+        // Values From Disk Are Checked, Anything Odd Takes Its Default
+        var defaults = new UserSettings();
         return this with
         {
-            ReplaySeconds = ReplayChoices.Contains(ReplaySeconds) ? ReplaySeconds : 30,
-            FrameRate = FrameRateChoices.Contains(FrameRate) ? FrameRate : 30,
-            Resolution = Resolution >= ResolutionChoices[0] ? Resolution : 1080,
-            Quality = Enum.IsDefined(Quality) ? Quality : CaptureQuality.Normal,
+            ReplaySeconds = ReplayChoices.Contains(ReplaySeconds)
+                ? ReplaySeconds
+                : defaults.ReplaySeconds,
+            FrameRate = FrameRateChoices.Contains(FrameRate) ? FrameRate : defaults.FrameRate,
+            Resolution = Resolution >= ResolutionChoices[0] ? Resolution : defaults.Resolution,
+            Quality = Enum.IsDefined(Quality) ? Quality : defaults.Quality,
             RemovedGames =
                 RemovedGames?.Where(key => !string.IsNullOrWhiteSpace(key)).ToArray() ?? [],
             AddedGames =
@@ -163,17 +175,17 @@ public sealed record UserSettings(
                     .DistinctBy(game => game.Key, StringComparer.OrdinalIgnoreCase)
                     .ToArray()
                 ?? [],
-            ClipSort = Enum.IsDefined(ClipSort) ? ClipSort : ClipSort.Newest,
+            ClipSort = Enum.IsDefined(ClipSort) ? ClipSort : defaults.ClipSort,
             SystemAudioDeviceId = SystemAudioDeviceId ?? "",
             MicrophoneDeviceId = MicrophoneDeviceId ?? "",
             Hotkey = HotkeyGesture.Parse(Hotkey).ToString(),
             ClipsFolder = Path.IsPathFullyQualified(ClipsFolder ?? "") ? ClipsFolder : null,
             ExportDiscordPlan = Enum.IsDefined(ExportDiscordPlan)
                 ? ExportDiscordPlan
-                : DiscordPlan.Off,
+                : defaults.ExportDiscordPlan,
             SaveSoundVolume = double.IsFinite(SaveSoundVolume)
                 ? Math.Clamp(Math.Round(SaveSoundVolume, 1), 0.1, 1)
-                : 1,
+                : defaults.SaveSoundVolume,
         };
     }
 }

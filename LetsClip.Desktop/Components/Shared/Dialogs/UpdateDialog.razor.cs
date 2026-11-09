@@ -31,10 +31,10 @@ public partial class UpdateDialog
     private long _total;
     private int _percent;
 
-    private string Title => $"LetsClip {Release.Tag} Is Out";
+    private string Title => $"LetsClip {Release.Tag} is Out";
 
     private string ProgressText =>
-        _total > 0 && _received >= _total ? "Starting the new version"
+        _total > 0 && _received >= _total ? "Starting the New Version"
         : _total > 0 ? $"{Formatter.FormatSize(_received)} of {Formatter.FormatSize(_total)}"
         : Formatter.FormatSize(_received);
 
@@ -65,7 +65,7 @@ public partial class UpdateDialog
         {
             // An Unverified Download Never Runs, The Release Page Opens Instead
             s_logger.Error(exception, "Failed To Verify Update");
-            Snackbar.Add("The download did not match GitHub's checksum", Severity.Warning);
+            Snackbar.Add("The download did not match its checksum", Severity.Warning);
             OpenReleasePage();
         }
         catch (UnauthorizedAccessException exception)

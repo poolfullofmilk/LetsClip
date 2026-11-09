@@ -252,4 +252,56 @@ public static class Updater
             s_logger.Warn($"Failed To Delete The Previous Version {exception.GetType().Name}");
         }
     }
+
+    public static void DeleteOldUnpackedVersions()
+    {
+        // Each Version Unpacks 430 MB Into %Temp%\.net, Never Removed
+        var current = new DirectoryInfo(
+            Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory)
+        );
+        if (
+            AppInfo.SandboxRoot is not null
+            || current.Parent is not { } version
+            || !version.Name.StartsWith(ExecutablePrefix, StringComparison.OrdinalIgnoreCase)
+            || version.Parent is not { Name: ".net" } root
+        )
+        {
+            return;
+        }
+
+        var unpackedFolders = root.EnumerateDirectories(ExecutablePrefix + "*")
+            .SelectMany(folder => folder.EnumerateDirectories())
+            .Where(unpacked => !FilePaths.AreSame(unpacked.FullName, current.FullName))
+            .ToList();
+        foreach (var unpacked in unpackedFolders)
+        {
+            DeleteUnpacked(unpacked);
+        }
+    }
+
+    private static void DeleteUnpacked(DirectoryInfo unpacked)
+    {
+        var version = unpacked.Parent!;
+        try
+        {
+            // Open Files Block A Rename, So A Running Copy Stays
+            if (!unpacked.Name.EndsWith("-old", StringComparison.Ordinal))
+            {
+                unpacked.MoveTo(unpacked.FullName + "-old");
+            }
+
+            unpacked.Delete(recursive: true);
+            if (!version.EnumerateFileSystemInfos().Any())
+            {
+                version.Delete();
+            }
+
+            s_logger.Info($"Deleted The Unpacked {version.Name}");
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // In Use Or Locked, The Next Start Tries Again
+            s_logger.Debug($"Kept The Unpacked {version.Name}, {exception.GetType().Name}");
+        }
+    }
 }

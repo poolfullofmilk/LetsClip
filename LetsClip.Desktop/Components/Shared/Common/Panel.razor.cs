@@ -10,6 +10,10 @@ public partial class Panel
     [Parameter]
     public string? Class { get; set; }
 
+    // A Link's Target, Like Settings' Storage
+    [Parameter]
+    public string? Id { get; set; }
+
     [Parameter]
     public RenderFragment? ChildContent { get; set; }
 }

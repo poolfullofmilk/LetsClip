@@ -16,6 +16,12 @@ public partial class CapturePanel : IDisposable
     [Inject]
     public required DesktopShell Shell { get; set; }
 
+    [Inject]
+    public required IDialogService DialogService { get; set; }
+
+    [Inject]
+    public required ISnackbar Snackbar { get; set; }
+
     private string? _saveError;
 
     private CaptureStatus Status => Controller.Recorder.Status;
@@ -154,17 +160,51 @@ public partial class CapturePanel : IDisposable
 
     private void SetResolution(int lines)
     {
+        var recommended = Controller.RecommendedResolution;
+        WarnOnRaise(
+            lines > Controller.Resolution && lines > recommended,
+            $"Above {ResolutionLabel(recommended)} looks a little sharper, costs more CPU and disk, and a Discord plan exports at 1080p anyway"
+        );
         Controller.UpdateSettings(settings => settings with { Resolution = lines });
     }
 
     private void SetQuality(CaptureQuality quality)
     {
+        // VMAF Measured Under One Noticeable Step For Much More Disk
+        WarnOnRaise(
+            quality > Controller.Settings.Quality && quality > CaptureController.RecommendedQuality,
+            quality == CaptureQuality.Max
+                ? "Max looks almost the same as Normal and takes up to 70% more disk"
+                : "High looks almost the same as Normal and takes about 30% more disk",
+            everywhere: true
+        );
         Controller.UpdateSettings(settings => settings with { Quality = quality });
     }
 
     private void SetFrameRate(int rate)
     {
+        var recommended = Controller.RecommendedFrameRate;
+        WarnOnRaise(
+            rate > Controller.FrameRate && rate > recommended,
+            $"Above {FrameRateLabel(recommended)} costs two to four times the CPU, and a Discord plan exports at 60 FPS anyway"
+        );
         Controller.UpdateSettings(settings => settings with { FrameRate = rate });
+    }
+
+    private void WarnOnRaise(bool raised, string cost, bool everywhere = false)
+    {
+        // Only Raising Past The Recommended Pick, Never Stepping Down
+        if (!raised)
+        {
+            return;
+        }
+
+        Snackbar.Add(
+            everywhere || Controller.HasHardwareEncoder
+                ? cost
+                : "Without a graphics card encoder this records on the CPU and can slow games down",
+            Severity.Warning
+        );
     }
 
     private void UseRecommended()

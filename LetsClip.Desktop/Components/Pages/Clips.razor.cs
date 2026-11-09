@@ -56,9 +56,7 @@ public partial class Clips : IDisposable
     {
         get
         {
-            var shown = (s_clips ?? []).Where(clip =>
-                s_shownGames?.Contains(GameOf(clip)) != false
-            );
+            var shown = (s_clips ?? []).Where(clip => s_shownGames?.Contains(clip.Source) != false);
             var ordered = Controller.Settings.ClipSort switch
             {
                 ClipSort.Oldest => shown.OrderBy(clip => clip.RecordedAt),
@@ -73,7 +71,7 @@ public partial class Clips : IDisposable
     private static IReadOnlyList<string> Games =>
         [
             .. (s_clips ?? [])
-                .Select(GameOf)
+                .Select(clip => clip.Source)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Order(StringComparer.CurrentCultureIgnoreCase),
         ];
@@ -205,11 +203,6 @@ public partial class Clips : IDisposable
     }
 
     #region Game Filter
-    private static string GameOf(ClipInfo clip)
-    {
-        return clip.Game ?? ClipInfo.MonitorTitle;
-    }
-
     private void OpenFilter()
     {
         // The Popover Edits A Copy Until Apply

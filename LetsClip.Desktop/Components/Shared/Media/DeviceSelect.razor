@@ -6,14 +6,14 @@
                   ValueChanged="ValueChanged"
                   ToStringFunc="LabelOf"
                   Label="Device"
-                  Disabled="@Disabled">
+                  Disabled="@(Disabled || Devices is [])">
         <MudSelectItem T="string"
                        Value="@AudioDevices.AutomaticId"
                        Class="divided">
             <ItemLabel Text="Automatic"
                        Checked="@IsChecked(AudioDevices.AutomaticId)" />
         </MudSelectItem>
-        @foreach (var device in Devices)
+        @foreach (var device in Listed)
         {
             <MudSelectItem T="string"
                            Value="device.Id">

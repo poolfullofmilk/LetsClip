@@ -26,6 +26,7 @@ public sealed class DesktopShell
     private MonitorOverlay? _flash;
     private DispatcherTimer? _flashTimer;
     private WindowMessages? _messages;
+    private string? _pendingClip;
 
     public event Action<string>? OpenClipRequested;
 
@@ -42,7 +43,19 @@ public sealed class DesktopShell
 
     public void RequestOpenClip(string path)
     {
-        OpenClipRequested?.Invoke(path);
+        // A Page Still Loading Opens It Once It Listens
+        if (OpenClipRequested is null)
+        {
+            _pendingClip = path;
+            return;
+        }
+
+        OpenClipRequested(path);
+    }
+
+    public string? TakePendingClip()
+    {
+        return Interlocked.Exchange(ref _pendingClip, null);
     }
 
     #region Hotkey

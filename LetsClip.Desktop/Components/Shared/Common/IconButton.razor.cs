@@ -21,6 +21,10 @@ public partial class IconButton
     [Parameter]
     public bool Filled { get; set; }
 
+    // A Full Button's Height And Corners, For The Player
+    [Parameter]
+    public bool Square { get; set; }
+
     [Parameter]
     public bool Disabled { get; set; }
 

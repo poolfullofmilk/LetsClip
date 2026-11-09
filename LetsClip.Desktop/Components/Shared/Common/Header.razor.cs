@@ -12,4 +12,8 @@ public partial class Header
 
     [Parameter]
     public RenderFragment? ChildContent { get; set; }
+
+    // A Page Filling The Window Scrolls Below Its Header
+    [Parameter]
+    public bool Scrolls { get; set; }
 }

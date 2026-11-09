@@ -13,13 +13,15 @@ public sealed record ClipInfo(
     string? Game,
     bool HasOriginal,
     int Width,
-    int Height
+    int Height,
+    int? Monitor = null
 )
 {
-    // Clips Without A Game Recorded The Monitor
-    public const string MonitorTitle = "Monitor";
+    // The Game, Else The Monitor By Its Place
+    public string Source => Game ?? (Monitor is { } number ? $"Monitor {number}" : "Monitor");
 
-    // A Given Name, Else The Game, Else Monitor
-    public string Title =>
-        CustomTitle ?? Game ?? (ClipNames.DateOf(Name) is null ? Name : MonitorTitle);
+    // Without A Given Name, A Copied File Keeps Its Own
+    public string DefaultTitle => Game is null && ClipNames.DateOf(Name) is null ? Name : Source;
+
+    public string Title => CustomTitle ?? DefaultTitle;
 }

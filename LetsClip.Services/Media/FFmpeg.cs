@@ -88,15 +88,17 @@ public static partial class FFmpeg
             startInfo.ArgumentList.Add(argument);
         }
 
+        var starting = Stopwatch.GetTimestamp();
         var process =
             Process.Start(startInfo)
             ?? throw new InvalidOperationException($"Failed To Start {executable}");
         _ = AssignProcessToJobObject(s_job, process.Handle);
         KeepFullSpeed(process.Handle);
 
-        // The Exact Command, So A Run Can Be Repeated
+        // The Exact Command, And A Start Slower Than 100 ms
+        var took = Stopwatch.GetElapsedTime(starting).TotalMilliseconds;
         s_logger.Debug(
-            $"Started {Path.GetFileName(executable)} {process.Id}: {string.Join(' ', startInfo.ArgumentList.Select(argument => argument.Contains(' ') ? $"\"{argument}\"" : argument))}"
+            $"Started {Path.GetFileName(executable)} {process.Id}{(took >= 100 ? $" In {took:0} ms" : "")}: {string.Join(' ', startInfo.ArgumentList.Select(argument => argument.Contains(' ') ? $"\"{argument}\"" : argument))}"
         );
         return process;
     }

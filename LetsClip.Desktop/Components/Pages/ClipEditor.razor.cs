@@ -18,7 +18,7 @@ namespace LetsClip.Desktop.Components.Pages;
 
 public partial class ClipEditor : IAsyncDisposable
 {
-    private const double SeekStep = 5;
+    private const double SeekStep = 2;
 
     // Writes Wait For Dragging Or Typing To Settle
     private static readonly TimeSpan s_saveDelay = TimeSpan.FromMilliseconds(400);
@@ -215,12 +215,7 @@ public partial class ClipEditor : IAsyncDisposable
         // One Step, So Nothing On Screen Changes Piecemeal
         (_clip, _media, _path, _frames) = (loaded.Clip, loaded.Media, loaded.Path, loaded.Frames);
         (_stripUrl, _duration, _range) = (loaded.StripUrl, loaded.Media.Duration, loaded.Range);
-        (_titleText, _swapping, _playError, _paused) = (
-            loaded.Clip.CustomTitle ?? "",
-            false,
-            false,
-            true
-        );
+        (_titleText, _swapping, _playError, _paused) = (loaded.Clip.Title, false, false, true);
 
         // A Cut Or Restore Leaves The Player As It Was
         if (loaded.Opening)
@@ -417,7 +412,7 @@ public partial class ClipEditor : IAsyncDisposable
     private string Percent(double seconds)
     {
         var share = _duration > 0 ? Math.Clamp(seconds / _duration, 0, 1) : 0;
-        return Exact(share * 100) + "%";
+        return $"round({Exact(share * 100)}%, var(--device-pixel))";
     }
 
     private static string Exact(double value)
@@ -476,9 +471,9 @@ public partial class ClipEditor : IAsyncDisposable
             return;
         }
 
-        // Empty Means No Name, The Clip Reads As Its Game
+        // Empty Or The Shown Default Stores No Name
         var typed = text.Trim();
-        var title = typed.Length == 0 ? null : typed;
+        var title = typed.Length == 0 || typed == clip.DefaultTitle ? null : typed;
         if (title == clip.CustomTitle)
         {
             return;
@@ -501,7 +496,7 @@ public partial class ClipEditor : IAsyncDisposable
     {
         // Leaving Writes At Once, Trimmed Like The Saved Name
         SaveNow();
-        _titleText = _clip?.CustomTitle ?? "";
+        _titleText = _clip?.Title ?? "";
     }
 
     private async Task TitleKeyAsync(KeyboardEventArgs key)
@@ -522,16 +517,23 @@ public partial class ClipEditor : IAsyncDisposable
 
     private async Task SaveCutAsync(string path, TrimRange range)
     {
-        // The Clip Becomes The Kept Part, Its Original Stays Hidden
+        // Cut To The Kept Part, The Original Kept If Asked
         if (path != _path)
         {
             return;
         }
 
-        if (await ReplaceFileAsync(() => ClipLibrary.CutAsync(path, range, CancellationToken.None)))
+        var keepOriginal = !Controller.Settings.DeleteOriginals;
+        if (
+            await ReplaceFileAsync(() =>
+                ClipLibrary.CutAsync(path, range, keepOriginal, CancellationToken.None)
+            )
+        )
         {
             Snackbar.Add(
-                "Saved the cut, Restore Original brings back the whole clip",
+                keepOriginal
+                    ? "Saved the cut, Restore Original brings back the whole clip"
+                    : "Saved the cut",
                 Severity.Success
             );
         }

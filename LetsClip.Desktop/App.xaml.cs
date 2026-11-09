@@ -121,7 +121,9 @@ public partial class App : Application
         );
         var controller = new CaptureController();
         s_logger.Info($"Settings {System.Text.Json.JsonSerializer.Serialize(controller.Settings)}");
-        StartupRegistration.Apply(controller.Settings.StartWithWindows);
+
+        // Its Shortcut Write Took Up To 0.8 s, Off Thread
+        _ = Task.Run(() => StartupRegistration.Apply(controller.Settings.StartWithWindows));
         var shell = new DesktopShell();
         var services = new ServiceCollection();
         services.AddWpfBlazorWebView();
@@ -142,7 +144,7 @@ public partial class App : Application
                 .BottomRight;
 
             // Slightly See-Through With A Quick Fade
-            configuration.SnackbarConfiguration.MaximumOpacity = 85;
+            configuration.SnackbarConfiguration.MaximumOpacity = 90;
             configuration.SnackbarConfiguration.ShowTransitionDuration = 150;
             configuration.SnackbarConfiguration.HideTransitionDuration = 150;
         });
@@ -173,6 +175,13 @@ public partial class App : Application
 
         _ = controller.StartAutomaticallyAsync();
         Updater.DeletePreviousVersion(previousVersion);
+        _ = Task.Run(Updater.DeleteOldUnpackedVersions);
+
+        // How Long Windows And This Start Took
+        using var self = System.Diagnostics.Process.GetCurrentProcess();
+        s_logger.Info(
+            $"Ready {(DateTime.Now - self.StartTime).TotalMilliseconds:0} ms After The Process Started"
+        );
     }
 
     private static bool HasWebView()

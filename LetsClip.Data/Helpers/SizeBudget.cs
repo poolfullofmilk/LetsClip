@@ -7,7 +7,7 @@ namespace LetsClip.Data.Helpers;
 public static class SizeBudget
 {
     private const double SafetyMargin = 0.05;
-    private const double AudioBitsPerSecond = 128_000;
+    public const double AudioBitsPerSecond = 128_000;
 
     // A Copy Starts Up To A Second Earlier
     private const double KeyframeSeconds = 1;

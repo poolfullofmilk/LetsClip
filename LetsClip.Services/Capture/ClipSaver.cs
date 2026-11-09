@@ -19,6 +19,7 @@ public static class ClipSaver
         DateTimeOffset recordedAt,
         int frameRate,
         string? game,
+        int? monitor,
         ClipLibrary library
     )
     {
@@ -87,7 +88,7 @@ public static class ClipSaver
 
             var finalPath = UniquePath(clipsFolder, ClipNames.For(recordedAt));
             File.Move(temporary, finalPath);
-            // The Capture Rate And Game Are Kept, Thumbnails Come Later
+            // Keeps The Capture Rate, Game And Monitor, Thumbnails Come Later
             ClipLibrary.WriteMetadata(
                 finalPath,
                 new ClipMetadata(
@@ -101,7 +102,8 @@ public static class ClipSaver
                     null,
                     game,
                     media.Width,
-                    media.Height
+                    media.Height,
+                    Monitor: monitor
                 )
             );
             return await library.GetAsync(finalPath, CancellationToken.None)

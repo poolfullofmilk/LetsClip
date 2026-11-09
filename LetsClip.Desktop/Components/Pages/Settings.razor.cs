@@ -16,6 +16,9 @@ public partial class Settings : IDisposable
 {
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
 
+    // The Storage Panel, Where Kept Originals Are Set
+    public const string StorageRoute = "settings#storage";
+
     // A Slid Volume Plays Once Settled, Restarts Cut The Chime
     private static readonly TimeSpan s_chimeDelay = TimeSpan.FromMilliseconds(300);
 
@@ -40,8 +43,12 @@ public partial class Settings : IDisposable
     [Inject]
     public required ISnackbar Snackbar { get; set; }
 
-    private IReadOnlyList<AudioDeviceInfo> _playback = [];
-    private IReadOnlyList<AudioDeviceInfo> _microphones = [];
+    [Inject]
+    public required NavigationManager Navigation { get; set; }
+
+    // Null Until Windows Answers, So None Never Flashes While Loading
+    private IReadOnlyList<AudioDeviceInfo>? _playback;
+    private IReadOnlyList<AudioDeviceInfo>? _microphones;
     private DotNetObjectReference<Settings>? _reference;
     private MicrophoneMeter? _meter;
     private bool _testStarting;
@@ -56,6 +63,8 @@ public partial class Settings : IDisposable
     private string? _hotkeyError;
     private string? _microphoneError;
     private (long Used, long Free)? _space;
+    private long _originalsBytes;
+    private bool _revealStorage;
 
     private string? SpaceText =>
         _space is var (used, free)
@@ -88,11 +97,23 @@ public partial class Settings : IDisposable
 
         await RefreshDevicesAsync();
         await MeasureSpaceAsync();
+
+        // Revealed Once Loaded, So Storage Lands Where It Stays
+        _revealStorage = new Uri(Navigation.Uri).Fragment == "#storage";
         _deviceTimer = new Timer(_ => OnDevicesSettled());
         _deviceWatch = await Task.Run(() => AudioDevices.WatchChanges(OnDevicesChanged));
         if (_closed)
         {
             _deviceWatch.Dispose();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_revealStorage)
+        {
+            _revealStorage = false;
+            await JavaScript.InvokeVoidAsync("letsClip.reveal", "storage");
         }
     }
 
@@ -125,15 +146,42 @@ public partial class Settings : IDisposable
     {
         // Walks The Folder, Off The UI Thread
         var folder = Controller.Settings.ClipsDirectory;
-        _space = await Task.Run(() => ClipLibrary.SpaceOf(folder));
+        (_space, _originalsBytes) = await Task.Run(() =>
+            (ClipLibrary.SpaceOf(folder), ClipLibrary.OriginalsSizeOf(folder))
+        );
     }
 
-    private async Task ShowGamesAsync()
+    private void SetDeleteOriginals(bool enabled)
     {
-        await DialogService.ShowAsync<GamesDialog>(
-            (string?)null,
-            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true }
+        Controller.UpdateSettings(settings => settings with { DeleteOriginals = enabled });
+    }
+
+    private async Task DeleteOriginalsAsync()
+    {
+        // Names The Clips That Lose Their Way Back
+        var folder = Controller.Settings.ClipsDirectory;
+        var listed = await Task.Run(() => Controller.Library.ListAsync(CancellationToken.None));
+        List<ClipInfo> clips = [.. listed.Where(clip => clip.HasOriginal)];
+        if (
+            !await YesNoDialog.ConfirmAsync(
+                DialogService,
+                "Delete Kept Originals",
+                clips.Count > 0
+                    ? "These cut clips can no longer be restored"
+                    : "Cut clips can no longer be restored",
+                clips: clips
+            )
+        )
+        {
+            return;
+        }
+
+        var freed = await Task.Run(() => ClipLibrary.DeleteOriginals(folder));
+        Snackbar.Add(
+            $"Deleted the kept originals, {Formatter.FormatSize(freed)} freed",
+            Severity.Success
         );
+        await MeasureSpaceAsync();
     }
 
     #region Audio Devices

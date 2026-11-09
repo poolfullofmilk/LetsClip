@@ -20,11 +20,11 @@ public static partial class Formatter
 
     public static string FormatSize(long bytes)
     {
-        // Decimal Units, The Same Megabyte The Size Target Uses
+        // Decimal Units Like The Size Target, Never A ,0
         return bytes switch
         {
-            >= 1_000_000_000 => (bytes / 1e9).ToString("0.00", Shown) + " GB",
-            >= 1_000_000 => (bytes / 1e6).ToString("0.0", Shown) + " MB",
+            >= 1_000_000_000 => (bytes / 1e9).ToString("0.##", Shown) + " GB",
+            >= 1_000_000 => (bytes / 1e6).ToString("0.#", Shown) + " MB",
             _ => Math.Max(1, (long)Math.Round(bytes / 1e3)).ToString(Shown) + " KB",
         };
     }
@@ -93,14 +93,9 @@ public static partial class Formatter
         return time.ToLocalTime().ToString("d-M-yyyy 'at' H'h'mm", s_invariant);
     }
 
-    public static string FormatMegabytes(double megabytes)
-    {
-        return megabytes.ToString("0.#", Shown) + " MB";
-    }
-
     public static string FormatBitrate(double bitsPerSecond)
     {
-        return (bitsPerSecond / 1e6).ToString("0.0", Shown) + " Mbps";
+        return (bitsPerSecond / 1e6).ToString("0.#", Shown) + " Mbps";
     }
 
     private static bool SelfTestPasses()
@@ -114,10 +109,13 @@ public static partial class Formatter
             && FormatDateTime(morning.AddDays(1), today) == "7-11-2026 at 8:05"
             && FormatFileDate(morning) == "6-11-2026 at 8h05"
             && FormatFileDate(evening) == "4-11-2026 at 22h43"
-            && FormatSize(20_000_000) == $"20{Point}0 MB"
+            && FormatSize(20_000_000) == "20 MB"
+            && FormatSize(20_540_000) == $"20{Point}5 MB"
+            && FormatSize(2_000_000_000) == "2 GB"
             && FormatSize(999_499) == "999 KB"
             && FormatSize(1_250_000_000) == $"1{Point}25 GB"
             && FormatBitrate(11_570_000) == $"11{Point}6 Mbps"
+            && FormatBitrate(30_010_000) == "30 Mbps"
             && FormatDuration(0) == "0s"
             && FormatDuration(0.25) == $"0{Point}3s"
             && FormatSeconds(0.25) == $"0{Point}3"

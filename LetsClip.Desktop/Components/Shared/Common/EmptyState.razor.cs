@@ -9,7 +9,7 @@ public partial class EmptyState
     public required string Icon { get; set; }
 
     [Parameter]
-    public Color Color { get; set; } = Color.Info;
+    public Color Color { get; set; } = Color.Default;
 
     [Parameter]
     public required string Text { get; set; }

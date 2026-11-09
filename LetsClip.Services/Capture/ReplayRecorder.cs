@@ -222,7 +222,7 @@ public sealed class ReplayRecorder : IDisposable
     {
         if (!FFmpeg.IsAvailable)
         {
-            throw new CaptureBlockedException("FFmpeg is missing beside LetsClip, reinstall it");
+            throw new CaptureBlockedException("Part of LetsClip is missing, reinstall it");
         }
 
         // The Saved Monitor Is Found By Device Path, Never Number
@@ -254,7 +254,7 @@ public sealed class ReplayRecorder : IDisposable
 
         // AMF Can Hang After A Killed Session, Two Starts
         var encoders = VideoEncoders
-            .Candidates(MonitorCatalog.AdapterVendors())
+            .Candidates()
             .SelectMany(encoder =>
                 Enumerable.Repeat(encoder, encoder.IsHardware && !encoder.GpuFrames ? 2 : 1)
             );
@@ -384,7 +384,7 @@ public sealed class ReplayRecorder : IDisposable
     {
         // A Fallback Keeps Trying Better Encoders, Out Of Sight
         var better = VideoEncoders
-            .Candidates(MonitorCatalog.AdapterVendors())
+            .Candidates()
             .TakeWhile(encoder => encoder != current.Encoder)
             .ToList();
         for (var attempt = 0; better.Count > 0; attempt++)
@@ -482,7 +482,7 @@ public sealed class ReplayRecorder : IDisposable
         // Only A Hung Encoder Loses To A Fresh Capture
         var (width, height) = current.Size;
         var encoders = VideoEncoders
-            .Candidates(MonitorCatalog.AdapterVendors())
+            .Candidates()
             .Where(encoder => encoder == current.Encoder || !encoder.IsHardware);
         foreach (var encoder in encoders)
         {
@@ -527,7 +527,7 @@ public sealed class ReplayRecorder : IDisposable
     #endregion
 
     #region Saving
-    public async Task<SaveOutcome> SaveAsync()
+    public async Task<SaveOutcome> SaveAsync(int? monitor)
     {
         CaptureSession? session;
         double end;
@@ -562,7 +562,7 @@ public sealed class ReplayRecorder : IDisposable
             await _saveTurn.WaitAsync();
             try
             {
-                var clip = await SaveFromAsync(session, end, recordedAt);
+                var clip = await SaveFromAsync(session, end, recordedAt, monitor);
                 ClipSaved?.Invoke(clip);
                 s_logger.Info(
                     $"Saved {Path.GetFileName(clip.Path)} Of {Formatter.FormatDuration(clip.Duration)}, {Formatter.FormatSize(clip.SizeBytes)}, In {Stopwatch.GetElapsedTime(pressed).TotalSeconds:0.0} s"
@@ -601,7 +601,8 @@ public sealed class ReplayRecorder : IDisposable
     private async Task<ClipInfo> SaveFromAsync(
         CaptureSession session,
         double end,
-        DateTimeOffset recordedAt
+        DateTimeOffset recordedAt,
+        int? monitor
     )
     {
         // Waits For The Press's Segment, A Still Window Sends None
@@ -619,6 +620,8 @@ public sealed class ReplayRecorder : IDisposable
             await Task.Delay(100);
         }
 
+        // Most Of A Save Is This Wait, Logged Apart
+        s_logger.Debug($"Waited {waited.ElapsedMilliseconds} ms For The Press's Segments");
         var from = end - session.Options.Seconds;
         var video = session.Video?.Segments.Covering(from, end) ?? [];
         var to = Math.Min(end, session.NewestEnd);
@@ -656,6 +659,7 @@ public sealed class ReplayRecorder : IDisposable
                 recordedAt,
                 session.Options.FrameRate,
                 session.Options.GameName,
+                monitor,
                 _library
             );
         }
@@ -682,7 +686,7 @@ public sealed class ReplayRecorder : IDisposable
             DirectoryNotFoundException => "The clips folder is not available",
             IOException => "The clip could not be written",
             TimeoutException => "Saving took too long, try again",
-            Win32Exception => "FFmpeg could not start, reinstall LetsClip",
+            Win32Exception => "The recorder could not start, reinstall LetsClip",
             _ => exception.Message,
         };
     }
@@ -814,7 +818,7 @@ public sealed class ReplayRecorder : IDisposable
     #endregion
 
     #region Sizing
-    private static (int Width, int Height) OutputSize(MonitorInfo monitor, int resolution)
+    internal static (int Width, int Height) OutputSize(MonitorInfo monitor, int resolution)
     {
         // A 16 By 9 Box, Or The Monitor's Own Size
         return resolution >= Math.Min(monitor.Width, monitor.Height)

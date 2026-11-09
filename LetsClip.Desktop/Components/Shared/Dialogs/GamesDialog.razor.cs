@@ -25,6 +25,15 @@ public partial class GamesDialog : IDisposable
 
     private bool IsLoading => _apps is null || !Controller.GamesScanned;
 
+    // Settings And The Capture Panel Open It Alike
+    public static Task ShowAsync(IDialogService dialogService)
+    {
+        return dialogService.ShowAsync<GamesDialog>(
+            (string?)null,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true }
+        );
+    }
+
     // Library Games Under Games, Everything Else Under Apps
     private IReadOnlyList<AddedGame> ShownRows =>
         [
@@ -109,15 +118,15 @@ public partial class GamesDialog : IDisposable
 
     private void SetRecorded(AddedGame row, bool on)
     {
-        // Listed Ones Switch In Place, An App Joins The List
-        if (_listed.ContainsKey(row.Key))
-        {
-            Controller.SetRemoved(row.Key, !on);
-        }
-        else if (on)
-        {
-            Controller.AddGame(row);
-        }
+        Controller.SetRecorded([row], on);
+    }
+
+    // Every Shown Row At Once, None Once All Are On
+    private bool AllShownRecorded => ShownRows.All(IsRecorded);
+
+    private void ToggleAll()
+    {
+        Controller.SetRecorded(ShownRows, !AllShownRecorded);
     }
 
     private void BrowseForGame()
@@ -130,7 +139,7 @@ public partial class GamesDialog : IDisposable
         // The Added Exe Shows Where It Lands
         var game = GameWatcher.GameOf(path);
         _showApps = !IsInstalledGame(game);
-        Controller.AddGame(game);
+        Controller.SetRecorded([game], true);
     }
 
     public void Dispose()

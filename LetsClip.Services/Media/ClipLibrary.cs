@@ -188,7 +188,8 @@ public sealed class ClipLibrary : IDisposable
             metadata.Game,
             !metadata.ForeignOriginal && File.Exists(OriginalPathOf(path)),
             metadata.Width,
-            metadata.Height
+            metadata.Height,
+            metadata.Monitor
         );
     }
 
@@ -227,7 +228,12 @@ public sealed class ClipLibrary : IDisposable
         );
     }
 
-    public static async Task CutAsync(string path, TrimRange range, CancellationToken token)
+    public static async Task CutAsync(
+        string path,
+        TrimRange range,
+        bool keepOriginal,
+        CancellationToken token
+    )
     {
         // Stream Copied, The MP4 Edit List Hides The Keyframe Pre-Roll
         // A Hair Early, So The Start Frame Itself Is Kept
@@ -272,16 +278,22 @@ public sealed class ClipLibrary : IDisposable
                 throw new IOException($"Failed To Cut The Clip, {result.LastError}");
             }
 
-            // The First Cut Keeps The Full Clip, Later Ones Replace
+            // The First Cut Keeps The Full Clip If Asked
             var original = OwnedOriginalOf(path);
             var earlierStart = original is null ? 0 : metadata.CutStart ?? 0;
-            if (original is null)
+            if (keepOriginal && original is null)
             {
                 KeepFullClip(path, temporary);
             }
             else
             {
                 File.Move(temporary, path, overwrite: true);
+            }
+
+            // Not Kept, An Earlier Original Goes Too, Leaving No History
+            if (!keepOriginal && original is not null)
+            {
+                DeleteOriginal(original);
             }
 
             // Restore Needs The Cut In The Original's Own Time
@@ -292,8 +304,8 @@ public sealed class ClipLibrary : IDisposable
                     {
                         TrimStart = null,
                         TrimEnd = null,
-                        CutStart = earlierStart + range.Start,
-                        CutEnd = earlierStart + range.End,
+                        CutStart = keepOriginal ? earlierStart + range.Start : null,
+                        CutEnd = keepOriginal ? earlierStart + range.End : null,
                         ForeignOriginal = false,
                     },
                 media.Duration
@@ -305,6 +317,22 @@ public sealed class ClipLibrary : IDisposable
         finally
         {
             await FFmpeg.DeleteOutputAsync(temporary);
+        }
+    }
+
+    private static void DeleteOriginal(string original)
+    {
+        // The Cut Landed, A Locked Original Waits For Settings' Delete
+        try
+        {
+            File.Delete(original);
+            RemoveEmptyFolder(Path.GetDirectoryName(original)!);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            s_logger.Warn(
+                $"Failed To Delete The Original Of {Path.GetFileName(original)}, {exception.GetType().Name}"
+            );
         }
     }
 
@@ -367,6 +395,51 @@ public sealed class ClipLibrary : IDisposable
             media?.Duration ?? metadata.Duration
         );
         s_logger.Info($"Restored The Original Of {Path.GetFileName(path)}");
+    }
+
+    public static long OriginalsSizeOf(string folder)
+    {
+        // Every Kept Original, Stale Ones Set Aside Too
+        return OriginalsIn(folder).Sum(file => file.Length);
+    }
+
+    public static long DeleteOriginals(string folder)
+    {
+        // Cut Clips Stay, Only Their Way Back Goes
+        var freed = 0L;
+        foreach (var original in OriginalsIn(folder))
+        {
+            try
+            {
+                var length = original.Length;
+                original.Delete();
+                freed += length;
+            }
+            catch (Exception exception)
+                when (exception is IOException or UnauthorizedAccessException)
+            {
+                // One In Use Stays, The Next Delete Takes It
+                s_logger.Warn($"Failed To Delete An Original {exception.GetType().Name}");
+            }
+        }
+
+        RemoveEmptyFolder(Path.Combine(folder, OriginalsFolder));
+        s_logger.Info($"Deleted The Kept Originals, {Formatter.FormatSize(freed)} Freed");
+        return freed;
+    }
+
+    private static List<FileInfo> OriginalsIn(string folder)
+    {
+        var originals = new DirectoryInfo(Path.Combine(folder, OriginalsFolder));
+        try
+        {
+            return originals.Exists ? [.. originals.EnumerateFiles("*.mp4")] : [];
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // An Unreadable Folder Counts As None
+            return [];
+        }
     }
 
     private static void RemoveEmptyFolder(string folder)
@@ -467,7 +540,7 @@ public sealed class ClipLibrary : IDisposable
         // Sparse Keyframes Repeat Their Last, So No Tile Stays Black
         var rate = FFmpeg.Seconds(12 / Math.Max(duration - 1, 0.5));
         return RenderAsync(
-            StripPathOf(path),
+            PicturePathOf(path, StripSuffix),
             [
                 "-skip_frame",
                 "nokey",
@@ -562,11 +635,6 @@ public sealed class ClipLibrary : IDisposable
     private static string ThumbnailPathOf(string path)
     {
         return PicturePathOf(path, ".jpg");
-    }
-
-    private static string StripPathOf(string path)
-    {
-        return PicturePathOf(path, StripSuffix);
     }
 
     private static void Forget(string path)

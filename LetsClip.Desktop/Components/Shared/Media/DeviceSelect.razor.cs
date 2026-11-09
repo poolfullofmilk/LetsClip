@@ -6,8 +6,9 @@ namespace LetsClip.Desktop.Components.Shared.Media;
 
 public partial class DeviceSelect
 {
+    // Null While Windows Is Asked, Empty When It Has None
     [Parameter]
-    public required IReadOnlyList<AudioDeviceInfo> Devices { get; set; }
+    public required IReadOnlyList<AudioDeviceInfo>? Devices { get; set; }
 
     [Parameter]
     public required string SavedId { get; set; }
@@ -18,20 +19,28 @@ public partial class DeviceSelect
     [Parameter]
     public bool Disabled { get; set; }
 
+    // Shown In The Field When Windows Has No Such Device
+    [Parameter]
+    public required string Missing { get; set; }
+
     // The Microphone's Level Runs Along The Field
     [Parameter]
     public RenderFragment? ChildContent { get; set; }
 
+    private IReadOnlyList<AudioDeviceInfo> Listed => Devices ?? [];
+
     // A Gone Device Records Through Automatic Until It Returns
     private string Shown =>
-        Devices.Any(device => device.Id == SavedId) ? SavedId : AudioDevices.AutomaticId;
+        Listed.Any(device => device.Id == SavedId) ? SavedId : AudioDevices.AutomaticId;
 
     // The Closed Field Reads Like Its Item
-    private string? Detail => Devices.FirstOrDefault(device => device.Id == SavedId)?.Adapter;
+    private string? Detail => Listed.FirstOrDefault(device => device.Id == SavedId)?.Adapter;
 
     private string LabelOf(string? id)
     {
-        return Devices.FirstOrDefault(device => device.Id == id)?.Name ?? "Automatic";
+        return Devices is []
+            ? Missing
+            : Listed.FirstOrDefault(device => device.Id == id)?.Name ?? "Automatic";
     }
 
     private bool IsChecked(string id)
@@ -40,7 +49,7 @@ public partial class DeviceSelect
         return id == Shown
             || (
                 Shown == AudioDevices.AutomaticId
-                && Devices.Any(device => device.Id == id && device.IsDefault)
+                && Listed.Any(device => device.Id == id && device.IsDefault)
             );
     }
 }

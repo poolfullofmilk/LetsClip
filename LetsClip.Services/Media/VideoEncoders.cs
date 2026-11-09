@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using LetsClip.Data.Enums;
+using LetsClip.Services.Capture;
 using NLog;
 
 namespace LetsClip.Services.Media;
@@ -23,11 +24,11 @@ public static class VideoEncoders
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
     private static readonly ConcurrentDictionary<string, bool> s_tested = new();
 
-    public static IReadOnlyList<VideoEncoder> Candidates(IEnumerable<int> adapterVendors)
+    public static IReadOnlyList<VideoEncoder> Candidates()
     {
         // Hardware Of Each Installed Vendor First, The CPU Always Last
         var candidates = new List<VideoEncoder>();
-        foreach (var vendor in adapterVendors)
+        foreach (var vendor in MonitorCatalog.AdapterVendors())
         {
             // Quick Sync Converts On The GPU First, CPU Second
             VideoEncoder[] encoders = vendor switch
@@ -145,7 +146,20 @@ public static class VideoEncoders
                 "-forced_idr",
                 "1",
             ],
-            _ => ["-preset", "veryfast", "-crf", level, "-maxrate", peak, "-bufsize", peak],
+            // Four Threads Halve x264's Memory And Still Hold 1080p60
+            _ =>
+            [
+                "-preset",
+                "veryfast",
+                "-crf",
+                level,
+                "-maxrate",
+                peak,
+                "-bufsize",
+                peak,
+                "-threads",
+                "4",
+            ],
         };
         return ["-c:v", encoder.Codec, .. specific, .. shared];
     }

@@ -34,15 +34,28 @@
     --row-hover: color-mix(in srgb, var(--mud-palette-black) var(--row-hover-amount), transparent);
     --popover-opacity: 92%;
     --inset-fill: color-mix(in srgb, var(--mud-palette-black) 22%, transparent);
-    --shade: color-mix(in srgb, var(--mud-palette-black) 58%, transparent);
+    --shade: color-mix(in srgb, var(--mud-palette-black) 50%, transparent);
     --tonal-info: color-mix(in srgb, var(--mud-palette-secondary) 20%, transparent);
     --tonal-info-hover: color-mix(in srgb, var(--mud-palette-secondary) 30%, transparent);
-    --lifted-surface: color-mix(in srgb, var(--mud-palette-white) 9%, var(--mud-palette-surface));
-    --grabber: color-mix(in srgb, var(--mud-palette-white) 35%, var(--mud-palette-surface));
-    --grabber-inset: inset 0 0 10px rgb(0 0 0 / 55%);
-    --scrollbar-thumb: color-mix(in srgb, var(--mud-palette-white) 18%, transparent);
-    --scrollbar-thumb-hover: color-mix(in srgb, var(--mud-palette-white) 32%, transparent);
+    --lifted-surface: color-mix(in srgb, var(--mud-palette-white) 10%, var(--mud-palette-surface));
+    /* The Frame Is The Line Step, The Grip Text Grey */
+    --grabber: color-mix(in srgb, var(--mud-palette-white) 15%, var(--mud-palette-surface));
+    --grip: color-mix(in srgb, var(--mud-palette-white) 85%, var(--mud-palette-surface));
+    /* A Solid Dark Arrow Under An Icon Grey 2 */
+    --jump-arrow: color-mix(in srgb, var(--mud-palette-white) 20%, var(--mud-palette-surface));
+    --jump-digit: color-mix(in srgb, var(--mud-palette-white) 60%, var(--mud-palette-surface));
+    /* A Full Button's Height, Which Square Icon Buttons Share */
+    --action-size: calc(var(--mud-typography-button-size) * var(--mud-typography-button-lineheight) + 12px);
+    --picture-shadow: 0 2px 12px 1px rgb(0 0 0 / 80%);
+    /* One Screen Pixel In CSS Pixels, Kept Current By Script */
+    --device-pixel: 1px;
+    /* The Scrollbar As Drawn, Whole Screen Pixels Rounded Down */
+    --scrollbar-width: round(down, 10px, var(--device-pixel));
+    --scrollbar-thumb: color-mix(in srgb, var(--mud-palette-white) 15%, transparent);
+    --scrollbar-thumb-hover: color-mix(in srgb, var(--mud-palette-white) 35%, transparent);
     --icon-shadow: 0 2px 8px rgb(0 0 0 / 60%);
+    /* The Theme's Slight Lift, For A Glyph Without A Box */
+    --lift-drop: 0 1px 9px rgb(0 0 0 / 16%);
     --quick: 120ms ease-out;
     --fade: 150ms ease-out;
 }
@@ -65,6 +78,12 @@
     /* A Picked Item Reads Light Blue, Never Dimmed Grey */
     .mud-popover .mud-selected-item.mud-primary-text {
         color: var(--mud-palette-info) !important;
+    }
+
+    /* Items Darken Like Every Row, The Picked One Too */
+    .mud-popover :is(.mud-list-item-clickable, .mud-menu-item):not(.mud-list-item-disabled, .mud-menu-item-disabled):hover,
+    .mud-popover .mud-selected-item {
+        background-color: var(--row-hover) !important;
     }
 
 /* Thin Scrollbars With No Arrows, Like The Rest Of Windows */
@@ -104,8 +123,10 @@
 }
 
 /* Shared Radii */
+/* A Panel Scrolled Into View Keeps The Page's Bottom Gap */
 .rounded-panel {
     border-radius: var(--radius-panel) !important;
+    scroll-margin-bottom: var(--page-bottom);
 }
 
 .rounded-inner {
@@ -135,6 +156,21 @@
     min-height: 0;
 }
 
+/* Below A Header Only Content Scrolls, To The Window's Edges */
+.page-scroll {
+    flex: 1 1 0;
+    min-height: 0;
+    margin: -8px calc(-1 * var(--page-gutter)) calc(-1 * var(--page-bottom)) -16px;
+    padding: 8px calc(var(--page-gutter) - var(--scrollbar-width)) var(--page-bottom) 16px;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+}
+
+/* A Filling Split Lets Its Main Column Reach The Bottom */
+.split.page-fill > .main-panel {
+    align-self: stretch;
+}
+
 /* Dialog Tables Scroll Inside A Box Rounded Like Fields */
 .mud-table.fit {
     display: flex;
@@ -152,10 +188,6 @@
 .split.fill {
     align-items: stretch;
 }
-
-    .split.fill > .side-panel {
-        overflow-y: auto;
-    }
 
 /* A Closed Select Reads Like Its Item */
 .field-detail {
@@ -244,12 +276,6 @@
     gap: 24px;
 }
 
-/* Panel Selects Hold Short Values Like 20 MB */
-.short-width {
-    flex: none !important;
-    width: 150px;
-}
-
 /* Automatic Sits Apart From The Devices Below It */
 .mud-list-item.divided {
     border-bottom: 1px solid var(--mud-palette-lines-default);
@@ -283,6 +309,20 @@
     /* Switches Drop Their Hover Padding, So They End Flush */
     .setting-row .mud-switch-span {
         margin-inline: -9px;
+    }
+
+/* The Game Row's Links Run Under It, Never Wrapping */
+.game-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-content: center;
+    justify-items: end;
+    column-gap: 16px;
+}
+
+    .game-row > .mud-link {
+        grid-column: 1 / -1;
+        white-space: nowrap;
     }
 
 /* Two Columns Side By Side At Every Window Width */
@@ -405,13 +445,14 @@
     min-height: 320px;
 }
 
-    /* Fills The Window Below The 40 Px Header */
+    /* Fills The Scrolling Room Below The Header */
     .loading-state.page-loading {
-        height: calc(100vh - var(--page-top) - var(--page-bottom) - 40px);
+        height: 100%;
     }
 
 /* Tooltips Rise On A Lighter Surface, Long Ones Wrap */
 .mud-tooltip.mud-tooltip-default {
+    width: max-content;
     max-width: 320px !important;
     padding: 6px 10px;
     border-radius: var(--radius-inner);
@@ -487,7 +528,13 @@
 
 /* Chips Carry The Slightest Shadow, Icon Clear Of Text */
 .mud-chip {
+    border-radius: var(--radius-pill) !important;
     box-shadow: var(--mud-elevation-1);
+}
+
+/* Switch Tracks Run Rounded Like Every Thin Bar */
+.mud-switch-track {
+    border-radius: var(--radius-pill) !important;
 }
 
     .mud-chip .mud-chip-icon {
@@ -554,6 +601,42 @@
     height: 26px;
     padding: 3px;
     border-radius: 50%;
+}
+
+/* Square Icon Buttons Match Full Buttons, As Tall, As Rounded */
+.mud-icon-button.square {
+    width: var(--action-size);
+    height: var(--action-size);
+    padding: 0;
+    border-radius: var(--mud-default-borderradius);
+}
+
+/* The Clip's Own Value Struck Through, The Export's Beside It */
+.changed-value {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    column-gap: 8px;
+    color: var(--mud-palette-text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+    .changed-value > * {
+        white-space: nowrap;
+    }
+
+    /* An Equal Value Shows Once, Grey, A Changed One Green */
+    .changed-value:not([data-changed]) > :not(:last-child) {
+        display: none;
+    }
+
+    .changed-value[data-changed] > :last-child {
+        color: var(--mud-palette-success);
+    }
+
+/* A Select Is Picked, Never Typed In */
+.mud-select input {
+    caret-color: transparent;
 }
 
 /* Blue Buttons, Picks And Info Alerts Are Tonal */
@@ -721,13 +804,13 @@
         transform: translateY(-50%);
     }
 
-/* Name Fits Its Text Or Placeholder, Long Ones Get Dots */
-.name-field {
+/* A Field As Wide As Its Value, Its List Grows */
+.content-field {
     flex: 0 1 auto;
     min-width: 0;
 }
 
-    .name-field input {
+    .content-field input {
         field-sizing: content;
         text-align: end;
         text-overflow: ellipsis;
@@ -762,6 +845,12 @@
 .games-table .game-switch {
     width: 64px;
     text-align: end;
+}
+
+/* A Table's Title Takes The Room Left, Then Dots */
+.title-cell {
+    width: 100%;
+    max-width: 0;
 }
 
 /* The Game Filter Opens Under Its Button, Its List Scrolls */
@@ -863,7 +952,7 @@ mark {
     overflow: hidden;
     border-radius: var(--radius-pill);
     background-color: var(--shade);
-    box-shadow: var(--mud-elevation-1);
+    box-shadow: var(--picture-shadow);
     opacity: 0;
     transition: opacity var(--fade);
 }
@@ -879,19 +968,28 @@ mark {
 /* #region Editor */
 /* Rows Under The Player Keep Fixed Heights For The Sizing */
 .editor {
-    --controls-height: 36px;
-    --timeline-height: 64px;
-    --trim-row-height: 40px;
-    --trim-gap: 6px;
+    /* A Field's Line, A Gap, Then The Clock Under Play */
+    --controls-height: 66px;
+    --timeline-height: 72px;
+    /* Start And End Fit 1m59,9s Beside Their Set Here Icon */
+    --trim-field-width: 116px;
+    /* Both Fields Mirrored Beside The Transport Centre Play */
+    --controls-min-width: calc(4 * var(--trim-field-width) + 3 * var(--action-size) + 6 * 8px);
 }
 
-/* The Side Panel Takes What The Clip Leaves */
+/* The Side Panel Takes What The Clip Or Controls Leave */
 .split.editor {
     container-type: size;
 }
 
+    /* Scrolls Like A Page, Scrollbar In The Gutter, Shadows Clear */
     .split.editor > .side-panel {
-        width: clamp(300px, calc(100cqw - 24px - 48px - (100cqh - 48px - 36px - var(--trim-gap) - var(--controls-height) - var(--timeline-height) - var(--trim-row-height)) * var(--clip-aspect)), 480px);
+        --side-content: clamp(300px, calc(100cqw - 24px - 48px - max((100cqh - 48px - 24px - var(--controls-height) - var(--timeline-height)) * var(--clip-aspect), var(--controls-min-width))), 480px);
+        width: calc(var(--side-content) + 16px + var(--page-gutter));
+        margin: -8px calc(-1 * var(--page-gutter)) calc(-1 * var(--page-bottom)) -16px;
+        padding: 8px calc(var(--page-gutter) - var(--scrollbar-width)) var(--page-bottom) 16px;
+        overflow-y: auto;
+        scrollbar-gutter: stable;
     }
 
 /* The Player Takes The Height Left, The Clip Centred */
@@ -975,7 +1073,12 @@ mark {
 
 /* Thumbnails In A Track, Handles Outside The Kept Part */
 .timeline {
-    --handle-width: 12px;
+    /* Whole Screen Pixels, Every Part Snaps Alike At Any Scale */
+    --grip-gap: round(5px, var(--device-pixel));
+    --grip-width: round(3px, var(--device-pixel));
+    --grip-height: round(22px, calc(2 * var(--device-pixel)));
+    --bar-width: round(5px, var(--device-pixel));
+    --handle-width: calc(2 * var(--grip-gap) + var(--grip-width));
     flex-shrink: 0;
     height: var(--timeline-height);
     position: relative;
@@ -1021,27 +1124,40 @@ mark {
         margin-right: calc(-1 * var(--handle-width));
     }
 
+/* Handles And Bars Form One Frame, Shadowed Out And In */
 .timeline-selection {
     position: absolute;
     top: 0;
     bottom: 0;
-    border-top: 5px solid var(--grabber);
-    border-bottom: 5px solid var(--grabber);
-    box-shadow: var(--grabber-inset);
+    box-sizing: content-box;
+    margin-left: calc(-1 * var(--handle-width));
+    padding: var(--bar-width) var(--handle-width);
+    border-radius: var(--radius-inner);
+    box-shadow: var(--picture-shadow);
+    overflow: hidden;
     pointer-events: none;
 }
 
-/* Each Handle's Inner Edge Is The Time */
+    /* The Kept Part, Rounded Less, Its Spread Paints The Frame */
+    .timeline-selection::before {
+        content: "";
+        position: absolute;
+        inset: var(--bar-width) var(--handle-width);
+        border-radius: var(--radius-thumb);
+        box-shadow: 0 0 0 100px var(--grabber), inset var(--picture-shadow);
+    }
+
+/* Each Handle's Inner Edge On The Frame Is The Time */
 .timeline-handle {
     position: absolute;
     top: 0;
     bottom: 0;
     width: var(--handle-width);
-    background-color: var(--grabber);
     cursor: ew-resize;
 }
 
-    /* Handles Wait For The First Frame, Grabs Show No Ring */
+    /* The Frame Waits For The First Frame, Grabs Never Ring */
+    .timeline.loading .timeline-selection,
     .timeline.loading .timeline-handle {
         visibility: hidden;
     }
@@ -1050,30 +1166,27 @@ mark {
         outline: none !important;
     }
 
-    /* A Pixel Of Shadow Covers A Fractional Seam */
+    /* Rounded Like The Frame, For The Focus Ring */
     .timeline-handle[data-handle="start"] {
         margin-left: calc(-1 * var(--handle-width));
         border-radius: var(--radius-inner) 0 0 var(--radius-inner);
-        box-shadow: 1px 0 0 var(--grabber), var(--icon-shadow);
     }
 
     .timeline-handle[data-handle="end"] {
         border-radius: 0 var(--radius-inner) var(--radius-inner) 0;
-        box-shadow: -1px 0 0 var(--grabber), var(--icon-shadow);
     }
 
-    /* Centred By Layout, So The Line Snaps To Pixels */
+    /* Centred By Layout, A Whole Gap Either Side */
     .timeline-handle::after {
         content: "";
         position: absolute;
         inset: 0;
-        width: 3px;
-        height: 18px;
+        width: var(--grip-width);
+        height: var(--grip-height);
         margin: auto;
         border-radius: var(--radius-pill);
-        background-color: var(--mud-palette-white);
-        box-shadow: var(--mud-elevation-1);
-        opacity: 0.8;
+        background-color: var(--grip);
+        box-shadow: var(--picture-shadow);
     }
 
 /* The Playhead Draws Over The Handles */
@@ -1082,41 +1195,69 @@ mark {
     z-index: 1;
     top: 0;
     bottom: 0;
-    width: 3px;
-    margin-left: -1.5px;
+    width: var(--grip-width);
+    margin-left: calc(var(--grip-width) / -2);
     border-radius: var(--radius-pill);
-    background-color: var(--mud-palette-white);
+    background-color: var(--grip);
     box-shadow: var(--mud-elevation-1);
     pointer-events: none;
 }
 
-/* Time On The Left, Transport Centred, Length On The Right */
+/* Start And End Left, Transport Centred, Sound Right */
 .player-controls {
     display: grid;
     flex-shrink: 0;
-    grid-template-columns: 1fr auto 1fr;
+    grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
     align-items: center;
     gap: 8px;
     height: var(--controls-height);
 }
 
+    /* Every Group Is A Centred 40 Px Line */
+    .player-controls .control-line {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 40px;
+    }
+
+    /* The Jumps Draw Larger, Lifted Like Play Beside Them */
+    .player-controls .transport .square:not(.mud-button-filled) .mud-icon-root {
+        width: round(31.28px, var(--device-pixel));
+        height: round(31.28px, var(--device-pixel));
+        filter: drop-shadow(var(--lift-drop));
+    }
+
+    /* Solid Once Enabled, So The 2 Covers The Arrow Cleanly */
+    .player-controls .transport .square:not(:disabled) .jump-arrow {
+        fill: var(--jump-arrow);
+        opacity: 1;
+    }
+
+    .player-controls .transport .square:not(:disabled) .jump-digit {
+        stroke: var(--jump-digit);
+    }
+
+    /* The Clock Stands Clear Of Play */
+    .player-controls .transport {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
 .player-time {
+    line-height: 20px;
+    text-align: center;
     font-variant-numeric: tabular-nums;
 }
 
-/* Start And End Fit 1m30,5s, Labels Clear The Timeline */
-.trim-row {
-    flex-shrink: 0;
-    height: var(--trim-row-height);
-    margin-top: var(--trim-gap);
-}
-
 .trim-field {
-    width: 104px;
+    width: var(--trim-field-width);
 }
 
-    /* Typed Times Read At The Size Of Their Labels */
+    /* Typed Times At Label Size, As Tall As Every Field */
     .trim-field .mud-input {
+        min-height: 40px;
         font-size: var(--mud-typography-body2-size);
         font-variant-numeric: tabular-nums;
     }

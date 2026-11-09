@@ -23,21 +23,29 @@ public partial class MainLayout : IDisposable
     [Inject]
     public required ISnackbar Snackbar { get; set; }
 
+    // Once Per Run, A Rebuilt Page Keeps The Red Dot
+    private static bool s_checkedForUpdates;
+    private static ReleaseInfo? s_availableUpdate;
+
     private SelfHealingBoundary? _errorBoundary;
-    private ReleaseInfo? _availableUpdate;
 
     protected override void OnInitialized()
     {
         Shell.OpenClipRequested += OnOpenClipRequested;
+        if (Shell.TakePendingClip() is { } pending)
+        {
+            OnOpenClipRequested(pending);
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender)
+        if (!firstRender || s_checkedForUpdates)
         {
             return;
         }
 
+        s_checkedForUpdates = true;
         await CheckForUpdatesAsync(false);
     }
 
@@ -68,7 +76,7 @@ public partial class MainLayout : IDisposable
         }
 
         // The Red Dot Stays On The More Menu Until Restart
-        _availableUpdate = latest;
+        s_availableUpdate = latest;
         StateHasChanged();
         await DialogService.ShowAsync<UpdateDialog>(
             null,

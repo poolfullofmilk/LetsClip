@@ -1,10 +1,49 @@
 <MudDialog>
 
     <DialogContent>
-        @* Delete Question *@
-        <MudText Typo="Typo.body1">
-            It goes to the Recycle Bin, its exports stay
-        </MudText>
+        @* Question *@
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.body1">
+                @Question
+            </MudText>
+            @if (Clips is { Count: > 0 } clips)
+            {
+                @* Clips Table *@
+                <MudTable T="ClipInfo"
+                          Items="clips"
+                          Dense
+                          Outlined
+                          Elevation="0"
+                          Class="fit"
+                          Style="max-height:40vh">
+
+                    <RowTemplate>
+                        <MudTd Class="title-cell">
+                            <MudText Typo="Typo.body2"
+                                     Class="ellipsis">
+                                @context.Title
+                            </MudText>
+                        </MudTd>
+                        <MudTd>
+                            <MudText Typo="Typo.body2"
+                                     Align="Align.End"
+                                     Class="mud-text-secondary mud-typography-nowrap">
+                                @Formatter.FormatDateTime(context.RecordedAt)
+                            </MudText>
+                        </MudTd>
+                    </RowTemplate>
+
+                </MudTable>
+            }
+            @if (Link is { } link)
+            {
+                <MudLink Typo="Typo.body1"
+                         Color="Color.Info"
+                         OnClick="() => Follow(link.Route)">
+                    @link.Text
+                </MudLink>
+            }
+        </MudStack>
     </DialogContent>
     <DialogActions>
         @* No Button *@

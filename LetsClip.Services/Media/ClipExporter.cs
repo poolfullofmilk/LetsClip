@@ -42,6 +42,11 @@ public static class ClipExporter
 
     private const string RejectedMessage = "The exported file did not check out, nothing was kept";
 
+    private static int s_running;
+
+    // The Window Keeps Its Page While Any Export Runs
+    public static bool IsExporting => Volatile.Read(ref s_running) > 0;
+
     public static (int Width, int Height) OutputSize(int width, int height, int lines = 1080)
     {
         // A 16 By 9 Box In Its Orientation, Never Upscaled
@@ -61,6 +66,7 @@ public static class ClipExporter
     )
     {
         // Each Export Writes Its Own Temporary File And Work Folder
+        Interlocked.Increment(ref s_running);
         try
         {
             return await RunAsync(request, progress, token);
@@ -83,6 +89,10 @@ public static class ClipExporter
         {
             s_logger.Warn($"Failed To Export {exception.GetType().Name}");
             throw new ExportException("Export failed, the file could not be written");
+        }
+        finally
+        {
+            Interlocked.Decrement(ref s_running);
         }
     }
 
@@ -126,7 +136,7 @@ public static class ClipExporter
         var clip = new ExportShape(duration, width, height, frameRate, withAudio);
         var budget = SizeBudget.Plan(limit, clip);
         s_logger.Info(
-            $"Exporting {Path.GetFileName(request.SourcePath)} From {Formatter.FormatDuration(request.Range.Start)} To {Formatter.FormatDuration(request.Range.End)} At {width} × {height}, {frameRate} FPS, {(withAudio ? "With Audio" : "Without Audio")}, Aiming Under {Formatter.FormatMegabytes(limit)}, {budget.Verdict}"
+            $"Exporting {Path.GetFileName(request.SourcePath)} From {Formatter.FormatDuration(request.Range.Start)} To {Formatter.FormatDuration(request.Range.End)} At {width} × {height}, {frameRate} FPS, {(withAudio ? "With Audio" : "Without Audio")}, Aiming Under {Formatter.FormatSize((long)(limit * 1_000_000))}, {budget.Verdict}"
         );
         if (budget.Verdict == BudgetVerdict.TooSmall)
         {
@@ -135,7 +145,7 @@ public static class ClipExporter
 
         // The Graphics Card Measured Faster And Sharper, x264 Falls Back
         var encoders = new List<VideoEncoder>();
-        foreach (var candidate in VideoEncoders.Candidates(MonitorCatalog.AdapterVendors()))
+        foreach (var candidate in VideoEncoders.Candidates())
         {
             if (
                 candidate.IsHardware

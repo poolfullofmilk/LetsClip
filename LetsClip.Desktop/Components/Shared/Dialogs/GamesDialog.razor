@@ -99,6 +99,13 @@
         </MudStack>
     </DialogContent>
     <DialogActions>
+        @* Select All Button *@
+        <MudButton Variant="Variant.Text"
+                   Disabled="@(IsLoading || ShownRows.Count == 0)"
+                   OnClick="ToggleAll">
+            @(AllShownRecorded ? "Select None" : "Select All")
+        </MudButton>
+        <MudSpacer />
         @* Browse Button *@
         <MudButton Variant="Variant.Filled"
                    Color="Color.Info"

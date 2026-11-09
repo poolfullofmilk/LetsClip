@@ -111,7 +111,8 @@ public static class MediaProbe
             video?.Width ?? 0,
             video?.Height ?? 0,
             frameRate,
-            audio?.CodecName
+            audio?.CodecName,
+            audio?.BitRate ?? 0
         );
     }
 
@@ -141,7 +142,8 @@ public static class MediaProbe
         double? Duration,
         string? AvgFrameRate,
         string? RFrameRate,
-        ProbeDisposition? Disposition
+        ProbeDisposition? Disposition,
+        long? BitRate
     );
 
     private sealed record ProbeDisposition(int AttachedPic);

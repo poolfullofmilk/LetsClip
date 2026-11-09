@@ -1,11 +1,14 @@
+using System.Globalization;
 using LetsClip.Data.Enums;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
 using LetsClip.Desktop.Components.Shared.Common;
+using LetsClip.Desktop.Components.Shared.Dialogs;
 using LetsClip.Desktop.Interop;
 using LetsClip.Services.Capture;
 using LetsClip.Services.Media;
 using Microsoft.AspNetCore.Components;
+using Microsoft.JSInterop;
 using MudBlazor;
 using NLog;
 
@@ -24,6 +27,10 @@ public partial class ExportPanel : IDisposable
     [Parameter]
     public required MediaInfo Media { get; set; }
 
+    // The Clip's Own Rows, Name And Recorded, Above The Export's
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
     // A Shorter Selection Is Also Cut Into The Clip
     [Parameter]
     public required Func<string, TrimRange, Task> SaveCut { get; set; }
@@ -31,6 +38,10 @@ public partial class ExportPanel : IDisposable
     // The Clip Is Being Replaced, Nothing May Read It
     [Parameter]
     public bool Busy { get; set; }
+
+    // A Shorter Selection, Ready Player And No Export Running
+    [Parameter]
+    public bool CanSaveCut { get; set; }
 
     [Parameter]
     public EventCallback<bool> ExportingChanged { get; set; }
@@ -41,16 +52,30 @@ public partial class ExportPanel : IDisposable
     [Inject]
     public required ISnackbar Snackbar { get; set; }
 
+    [Inject]
+    public required IDialogService DialogService { get; set; }
+
+    [Inject]
+    public required IJSRuntime JavaScript { get; set; }
+
     private CancellationTokenSource? _cancel;
     private ExportProgress? _progress;
     private string? _result;
     private string? _error;
     private bool _disposed;
+    private bool _revealResult;
 
-    private DiscordPlan Plan => Controller.Settings.ExportDiscordPlan;
+    // The Saved Plan, Off While The Selection Already Fits
+    private DiscordPlan Plan =>
+        Changes(Controller.Settings.ExportDiscordPlan)
+            ? Controller.Settings.ExportDiscordPlan
+            : DiscordPlan.Off;
 
-    // Off, Or Already Small Enough, Is An Exact Copy
-    private bool KeepsClip => SizeBudget.KeepsClip(Plan, Range.Length, SourceBytesPerSecond);
+    // Off Copies Exactly, A Plan Only Past Its Limit
+    private bool KeepsClip => Plan == DiscordPlan.Off;
+
+    private bool AnyPlanChanges =>
+        Enum.GetValues<DiscordPlan>().Any(plan => plan != DiscordPlan.Off && Changes(plan));
 
     // The Selection As The Size Budget Reads It
     private ExportShape Shape =>
@@ -58,7 +83,11 @@ public partial class ExportPanel : IDisposable
 
     private bool WithAudio => Controller.Settings.ExportAudio && Media.HasAudio;
 
-    private double SourceBytesPerSecond => Clip.SizeBytes / Media.Duration;
+    private double ClipBitsPerSecond => Clip.SizeBytes * 8 / Media.Duration;
+
+    // A Muted Copy Leaves The Sound's Bytes Behind
+    private double SourceBytesPerSecond =>
+        (ClipBitsPerSecond - (WithAudio ? 0 : Media.AudioBitsPerSecond)) / 8;
 
     private bool IsExporting => _progress is not null;
 
@@ -81,27 +110,36 @@ public partial class ExportPanel : IDisposable
             ? (Media.Width, Media.Height)
             : ClipExporter.OutputSize(Media.Width, Media.Height);
 
-    // Odd Probes Read As 60, An Encode Stops At 60
-    private double FrameRate
-    {
-        get
-        {
-            var rate = Media.FrameRate is > 1 and < 241 ? Math.Round(Media.FrameRate) : 60;
-            return KeepsClip ? rate : Math.Min(rate, 60);
-        }
-    }
+    // Odd Probes Read As 60
+    private double ClipFrameRate =>
+        Media.FrameRate is > 1 and < 241 ? Math.Round(Media.FrameRate) : 60;
+
+    // An Encode Stops At 60
+    private double FrameRate => KeepsClip ? ClipFrameRate : Math.Min(ClipFrameRate, 60);
 
     // Null While The Export Is An Exact Copy
     private ExportBudget? Budget =>
-        KeepsClip || SizeBudget.LimitOf(Plan) is not { } limit
-            ? null
-            : SizeBudget.Plan(limit, Shape);
+        SizeBudget.LimitOf(Plan) is { } limit ? SizeBudget.Plan(limit, Shape) : null;
 
-    // The Clip's Own, Or The Most An Encode Gets
+    // Copies Weigh Their Share, Encodes At Most Their Plan
+    private string ExportSizeText =>
+        SizeBudget.LimitOf(Plan) is { } limit
+            ? Formatter.FormatSize((long)(limit * 1_000_000))
+            : Formatter.FormatSize((long)Math.Round(SourceBytesPerSecond * Range.Length));
+
+    // A Copy's Share Follows Drags, About Since Keyframes Lead In
+    private string? CopyBytesPerSecond =>
+        Budget is null
+            ? SourceBytesPerSecond.ToString("0.###", CultureInfo.InvariantCulture)
+            : null;
+
+    // The Whole File's Rate, Never Raised By Muting
     private string BitrateText =>
         Budget is not { } budget ? Formatter.FormatBitrate(SourceBytesPerSecond * 8)
         : budget.VideoBitsPerSecond > 0
-            ? $"Up to {Formatter.FormatBitrate(budget.VideoBitsPerSecond)}"
+            ? Formatter.FormatBitrate(
+                budget.VideoBitsPerSecond + (WithAudio ? SizeBudget.AudioBitsPerSecond : 0)
+            )
         : "-";
 
     private string? VerdictHint =>
@@ -132,7 +170,26 @@ public partial class ExportPanel : IDisposable
 
     private static string? PlanDetail(DiscordPlan plan)
     {
-        return SizeBudget.LimitOf(plan) is { } limit ? Formatter.FormatMegabytes(limit) : null;
+        return SizeBudget.LimitOf(plan) is { } limit
+            ? Formatter.FormatSize((long)(limit * 1_000_000))
+            : null;
+    }
+
+    // A Plan The Selection Fits Would Only Copy, Like Off
+    private bool Changes(DiscordPlan plan)
+    {
+        return plan == DiscordPlan.Off
+            || !SizeBudget.KeepsClip(plan, Range.Length, SourceBytesPerSecond);
+    }
+
+    private static string SizeText(int width, int height)
+    {
+        return $"{width} × {height}";
+    }
+
+    private static string RateText(double rate)
+    {
+        return $"{rate:0} FPS";
     }
 
     private void SetPlan(DiscordPlan plan)
@@ -145,8 +202,28 @@ public partial class ExportPanel : IDisposable
         Controller.UpdateSettings(settings => settings with { ExportAudio = !WithAudio });
     }
 
+    private async Task SaveCutAsync()
+    {
+        var (path, range) = (Clip.Path, Range);
+        if (await ConfirmCutAsync("Save Cut"))
+        {
+            await SaveCut(path, range);
+        }
+    }
+
+    private async Task<bool> ConfirmCutAsync(string title)
+    {
+        return !Controller.Settings.DeleteOriginals
+            || await YesNoDialog.ConfirmCutAsync(DialogService, title);
+    }
+
     private async Task ExportAsync()
     {
+        if (IsCut && !await ConfirmCutAsync(ExportText))
+        {
+            return;
+        }
+
         _error = null;
         _result = null;
         _cancel = new CancellationTokenSource();
@@ -191,6 +268,8 @@ public partial class ExportPanel : IDisposable
         }
         finally
         {
+            // A Short Window Scrolls The Side Panel To The Export
+            _revealResult = _result is not null;
             _progress = null;
             _cancel.Dispose();
             _cancel = null;
@@ -198,6 +277,15 @@ public partial class ExportPanel : IDisposable
             {
                 await ExportingChanged.InvokeAsync(false);
             }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_revealResult)
+        {
+            _revealResult = false;
+            await JavaScript.InvokeVoidAsync("letsClip.reveal", "exported");
         }
     }
 

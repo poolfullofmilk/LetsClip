@@ -1,12 +1,18 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Interop;
 using LetsClip.Data.Enums;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
+using LetsClip.Desktop.Components;
+using LetsClip.Desktop.Components.Pages;
 using LetsClip.Desktop.Interop;
 using LetsClip.Desktop.Theming;
 using LetsClip.Services.Capture;
+using LetsClip.Services.Games;
+using LetsClip.Services.Media;
+using Microsoft.AspNetCore.Components.WebView.Wpf;
 using Microsoft.Web.WebView2.Core;
 using MudBlazor.Utilities;
 using NLog;
@@ -25,8 +31,12 @@ public partial class MainWindow : Window
 
     // A Quick Hide And Show Never Suspends
     private static readonly TimeSpan s_suspendDelay = TimeSpan.FromSeconds(1);
+
+    // Longer In The Tray, The Page Frees WebView2's 175 MB
+    private static readonly TimeSpan s_releaseDelay = TimeSpan.FromMinutes(10);
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
 
+    private readonly IServiceProvider _services;
     private readonly CaptureController _controller;
     private readonly DesktopShell _shell;
     private readonly Forms.NotifyIcon _trayIcon;
@@ -37,9 +47,15 @@ public partial class MainWindow : Window
     private readonly Drawing.Icon _problemIcon;
 
     private WindowMessages? _messages;
+    private BlazorWebView? _page;
     private CoreWebView2? _browser;
+
+    // Each Show Or Hide Counts, A Later Hide Waits Anew
+    private int _visibility;
     private string? _mappedClipsFolder;
-    private string? _lastSavedClip;
+
+    // What A Click On The Latest Balloon Does
+    private Action? _balloonClick;
     private bool _isExiting;
     private WindowState _windowedState;
     private double _pageZoom = 1;
@@ -47,11 +63,9 @@ public partial class MainWindow : Window
     public MainWindow(IServiceProvider services, CaptureController controller, DesktopShell shell)
     {
         InitializeComponent();
+        _services = services;
         _controller = controller;
         _shell = shell;
-        WebView.Services = services;
-        WebView.BlazorWebViewInitialized += (_, eventArgs) =>
-            SetUpBrowser(eventArgs.WebView.CoreWebView2);
         SourceInitialized += (_, _) =>
         {
             WindowCaptionTheme.Apply(this);
@@ -82,7 +96,7 @@ public partial class MainWindow : Window
                 ShowTrayMenu();
             }
         };
-        _trayIcon.BalloonTipClicked += (_, _) => OpenLastClip();
+        _trayIcon.BalloonTipClicked += (_, _) => (_balloonClick ?? ShowFromTray)();
 
         controller.Recorder.StatusChanged += () => Dispatcher.InvokeAsync(UpdateTray);
         controller.Recorder.SaveStarted += PlaySaveChime;
@@ -118,12 +132,7 @@ public partial class MainWindow : Window
             && _shell.HotkeyProblem is { } problem
         )
         {
-            _trayIcon.ShowBalloonTip(
-                BalloonMilliseconds,
-                "Save Hotkey Taken",
-                problem,
-                Forms.ToolTipIcon.Warning
-            );
+            ShowBalloon("Save Hotkey Taken", problem, Forms.ToolTipIcon.Warning);
         }
     }
 
@@ -165,24 +174,63 @@ public partial class MainWindow : Window
 
     private async Task SaveFromHotkeyAsync()
     {
+        // With No Game, The App In Front Is Likely Wanted
+        var front =
+            _controller.Settings.GamesOnly && _controller.Games.GameName is null
+                ? GameWatcher.ForegroundApp()
+                : null;
+
         // The Hotkey Never Steals Focus, Only Failures Speak Here
         var outcome = await Task.Run(_controller.SaveAsync);
-        if (outcome.Error is { } error)
+        if (outcome.Error is not { } error)
         {
-            await Dispatcher.InvokeAsync(() =>
-                _trayIcon.ShowBalloonTip(
-                    BalloonMilliseconds,
-                    "Clip Not Saved",
-                    error,
-                    Forms.ToolTipIcon.Warning
-                )
-            );
+            return;
         }
+
+        await Dispatcher.InvokeAsync(() =>
+        {
+            if (front is { } app && _controller.Games.GameName is null)
+            {
+                ShowBalloon(
+                    "Clip Not Saved",
+                    $"Nothing is being recorded, click to record {app.Name} from now on",
+                    Forms.ToolTipIcon.Warning,
+                    () => RecordFromNowOn(app)
+                );
+                return;
+            }
+
+            ShowBalloon("Clip Not Saved", error, Forms.ToolTipIcon.Warning);
+        });
+    }
+
+    private void RecordFromNowOn(AddedGame app)
+    {
+        // One Click Turns A Missed Clip Into A Recorded Game
+        _controller.SetRecorded([app], true);
+        _balloonClick = null;
+        TrayBalloon.ShowQuiet(
+            _trayIcon,
+            BalloonMilliseconds,
+            "Added to Games and Apps",
+            $"{app.Name} is recorded from now on"
+        );
+    }
+
+    private void ShowBalloon(
+        string title,
+        string text,
+        Forms.ToolTipIcon icon,
+        Action? onClick = null
+    )
+    {
+        _balloonClick = onClick;
+        _trayIcon.ShowBalloonTip(BalloonMilliseconds, title, text, icon);
     }
 
     private void NotifySaved(ClipInfo clip)
     {
-        _lastSavedClip = clip.Path;
+        _balloonClick = () => OpenClip(clip.Path);
         TrayBalloon.ShowQuiet(
             _trayIcon,
             BalloonMilliseconds,
@@ -200,23 +248,96 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OpenLastClip()
+    private void OpenClip(string path)
     {
+        // A Clip Saved Elsewhere Shows In Explorer Instead
+        if (!FilePaths.AreSame(Path.GetDirectoryName(path), _controller.Library.Folder))
+        {
+            ShowFromTray();
+            Explorer.ShowFile(path);
+            return;
+        }
+
+        // A Page Not Built Yet Starts On The Clip
+        if (_page is null)
+        {
+            EnsurePage(Clips.EditorOf(path));
+        }
+        else
+        {
+            _shell.RequestOpenClip(path);
+        }
+
         ShowFromTray();
-        if (_lastSavedClip is not { } path)
+    }
+
+    private void EnsurePage(string startPath = "/clips")
+    {
+        // Built On The First Show, And Again After A Release
+        if (_page is not null)
         {
             return;
         }
 
-        // A Clip Saved Elsewhere Shows In Explorer Instead
-        if (FilePaths.AreSame(Path.GetDirectoryName(path), _controller.Library.Folder))
+        var page = new BlazorWebView
         {
-            _shell.RequestOpenClip(path);
-        }
-        else
+            HostPage = @"wwwroot\index.html",
+            StartPath = startPath,
+            Services = _services,
+        };
+        page.RootComponents.Add(
+            new RootComponent { Selector = "#app", ComponentType = typeof(Routes) }
+        );
+        page.BlazorWebViewInitialized += (_, eventArgs) =>
         {
-            Explorer.ShowFile(path);
+            if (page == _page)
+            {
+                SetUpBrowser(page, eventArgs.WebView.CoreWebView2);
+            }
+        };
+        _page = page;
+        Content = page;
+    }
+
+    private async Task ReleasePageAsync()
+    {
+        if (_page is not { } page)
+        {
+            return;
         }
+
+        // A Hidden Full Screen Player Comes Back As A Window
+        if (WindowStyle == WindowStyle.None)
+        {
+            ShowFullScreen(false);
+        }
+
+        // A Suspended Page Cannot Answer Its Components' Last Calls
+        if (_browser is { IsSuspended: true } browser)
+        {
+            browser.Resume();
+        }
+
+        _page = null;
+        _browser = null;
+        _mappedClipsFolder = null;
+        var released = Stopwatch.StartNew();
+        try
+        {
+            await page.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        catch (TimeoutException)
+        {
+            // Components Close At Once, Then The Hidden Host Waits
+            page.WebView?.Dispose();
+            s_logger.Debug("Disposed WebView2 Directly, Its Host Waited On The Hidden Window");
+        }
+
+        Content = null;
+
+        s_logger.Info(
+            $"Released The Page After 10 Minutes In The Tray In {released.ElapsedMilliseconds} ms"
+        );
     }
 
     private void ShowTrayMenu()
@@ -269,19 +390,19 @@ public partial class MainWindow : Window
         (MinWidth, MinHeight) = (Math.Min(PageWidth, width), Math.Min(PageHeight, height));
         (Width, Height) = (Math.Min(Width, width), Math.Min(Height, height));
         _pageZoom = Math.Min(1, width / PageWidth);
-        if (WebView.WebView is { CoreWebView2: not null } control)
+        if (_page?.WebView is { CoreWebView2: not null } control)
         {
             control.ZoomFactor = _pageZoom;
         }
     }
 
-    private void SetUpBrowser(CoreWebView2 browser)
+    private void SetUpBrowser(BlazorWebView page, CoreWebView2 browser)
     {
         _browser = browser;
 
         // Page Background Before The First Paint, No White Flash
-        WebView.WebView.DefaultBackgroundColor = Drawing.Color.FromArgb(0x20, 0x20, 0x20);
-        WebView.WebView.ZoomFactor = _pageZoom;
+        page.WebView.DefaultBackgroundColor = Drawing.Color.FromArgb(0x20, 0x20, 0x20);
+        page.WebView.ZoomFactor = _pageZoom;
 
         // A Crashed Page Reloads Itself, Recording Never Depended On It
         browser.ProcessFailed += (_, eventArgs) =>
@@ -402,7 +523,13 @@ public partial class MainWindow : Window
 
     private async Task RestPageAsync()
     {
-        if (WebView.WebView is not { CoreWebView2: { } browser } control)
+        var visibility = ++_visibility;
+        if (IsVisible)
+        {
+            EnsurePage();
+        }
+
+        if (_page?.WebView is not { CoreWebView2: { } browser } control)
         {
             return;
         }
@@ -427,6 +554,19 @@ public partial class MainWindow : Window
         if (IsVisible)
         {
             ResumePage(browser);
+            return;
+        }
+
+        // Still Hidden Later, The Page Goes, Never During An Export
+        await Task.Delay(s_releaseDelay);
+        while (visibility == _visibility && ClipExporter.IsExporting)
+        {
+            await Task.Delay(TimeSpan.FromMinutes(1));
+        }
+
+        if (visibility == _visibility)
+        {
+            await ReleasePageAsync();
         }
     }
 
@@ -447,16 +587,6 @@ public partial class MainWindow : Window
         {
             eventArgs.Cancel = true;
             Hide();
-            if (!_controller.Settings.HasSeenTrayHint)
-            {
-                _controller.UpdateSettings(settings => settings with { HasSeenTrayHint = true });
-                _trayIcon.ShowBalloonTip(
-                    BalloonMilliseconds,
-                    "LetsClip Is Still Running",
-                    "It keeps recording in the tray, right click the icon to exit",
-                    Forms.ToolTipIcon.Info
-                );
-            }
         }
 
         base.OnClosing(eventArgs);

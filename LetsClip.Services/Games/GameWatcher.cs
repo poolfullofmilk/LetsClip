@@ -128,14 +128,7 @@ public sealed partial class GameWatcher : IDisposable
                         && process.MainWindowTitle.Length > 0
                         && !s_shellHosts.Contains(process.ProcessName)
                     )
-                    .Select(process =>
-                        PathOf(process) is { } path
-                            ? GameOf(path)
-                            : new AddedGame(
-                                GameScanner.NormalizeProcessKey(process.ProcessName),
-                                process.ProcessName
-                            )
-                    )
+                    .Select(AppOf)
                     .DistinctBy(app => app.Key),
             ];
         }
@@ -146,6 +139,45 @@ public sealed partial class GameWatcher : IDisposable
                 process.Dispose();
             }
         }
+    }
+
+    public static AddedGame? ForegroundApp()
+    {
+        // The App In Front, Offered When A Press Found Nothing
+        var window = GetForegroundWindow();
+        if (window == 0 || GetWindowThreadProcessId(window, out var processId) == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            using var process = Process.GetProcessById((int)processId);
+            return process.Id == Environment.ProcessId || s_shellHosts.Contains(process.ProcessName)
+                ? null
+                : AppOf(process);
+        }
+        catch (Exception exception)
+            when (exception
+                    is ArgumentException
+                        or InvalidOperationException
+                        or Win32Exception
+                        or FileNotFoundException
+            )
+        {
+            // Gone Meanwhile, Nothing To Offer
+            return null;
+        }
+    }
+
+    private static AddedGame AppOf(Process process)
+    {
+        return PathOf(process) is { } path
+            ? GameOf(path)
+            : new AddedGame(
+                GameScanner.NormalizeProcessKey(process.ProcessName),
+                process.ProcessName
+            );
     }
 
     private static string? PathOf(Process process)
@@ -341,4 +373,10 @@ public sealed partial class GameWatcher : IDisposable
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool IsIconic(nint window);
+
+    [LibraryImport("user32.dll")]
+    private static partial nint GetForegroundWindow();
+
+    [LibraryImport("user32.dll")]
+    private static partial uint GetWindowThreadProcessId(nint window, out uint processId);
 }

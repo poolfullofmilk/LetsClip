@@ -24,10 +24,6 @@ public partial class TrimField
     [Parameter]
     public EventCallback OnSet { get; set; }
 
-    // End Keeps Its Button Toward The Timeline's Middle
-    [Parameter]
-    public bool ButtonFirst { get; set; }
-
     private int _version;
 
     private async Task CommitAsync(string text)

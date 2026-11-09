@@ -4,15 +4,16 @@
 <PageTitle>Clips</PageTitle>
 
 <MudElement HtmlTag="div"
-            Class="split">
+            Class="split page-fill">
     <MudElement HtmlTag="div"
                 Class="side-panel">
         <CapturePanel />
     </MudElement>
 
     <MudElement HtmlTag="div"
-                Class="main-panel">
-        <Header Title="Clips">
+                Class="main-panel fill-column">
+        <Header Title="Clips"
+                Scrolls>
             <TitleContent>
                 <MudText Typo="Typo.subtitle1"
                          Class="mud-text-secondary">
@@ -21,6 +22,7 @@
                 <MudSpacer />
                 @* Sort Menu *@
                 <Tooltip Text="Sort Clips"
+                         Placement="Placement.Left"
                          Disabled="@(ShownClips.Count < 2)">
                     <MudBadge Dot
                               Color="Color.Info"
@@ -53,6 +55,7 @@
                           Class="d-flex">
                     <IconButton Icon="@Icons.Material.Rounded.FilterList"
                                 Text="Filter by Game or App"
+                                Placement="Placement.Left"
                                 Disabled="@(Games.Count < 2 && !IsFiltered)"
                                 OnClick="OpenFilter" />
                 </MudBadge>
@@ -139,6 +142,7 @@
                 @* Open Folder *@
                 <IconButton Icon="@Icons.Material.Rounded.FolderOpen"
                             Text="Open Clips Folder"
+                            Placement="Placement.Left"
                             OnClick="OpenFolder" />
             </TitleContent>
             <ChildContent>
@@ -160,7 +164,6 @@
                     <MudPaper Elevation="4"
                               Class="rounded-panel">
                         <EmptyState Icon="@Icons.Material.Rounded.VideoLibrary"
-                                    Color="Color.Default"
                                     Text="No Clips" />
                     </MudPaper>
                 }
@@ -169,7 +172,6 @@
                     <MudPaper Elevation="4"
                               Class="rounded-panel">
                         <EmptyState Icon="@Icons.Material.Rounded.FilterList"
-                                    Color="Color.Default"
                                     Text="No Clips Match This Filter">
                             @* Show All Button *@
                             <MudButton Variant="Variant.Filled"

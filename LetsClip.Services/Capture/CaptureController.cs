@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using LetsClip.Data.Enums;
 using LetsClip.Data.ViewModels;
@@ -37,7 +38,7 @@ public sealed class CaptureController : IDisposable
     private int _retry;
     private volatile bool _quietRetry;
     private readonly Lazy<bool> _hasHardwareEncoder = new(() =>
-        VideoEncoders.Candidates(MonitorCatalog.AdapterVendors()).Any(encoder => encoder.IsHardware)
+        VideoEncoders.Candidates().Any(encoder => encoder.IsHardware)
     );
 
     public CaptureController()
@@ -95,14 +96,16 @@ public sealed class CaptureController : IDisposable
     // A Graphics Card Records 1080p60 Lightly, The CPU 720p30
     public int RecommendedResolution =>
         ResolutionChoices
-            .Where(lines => lines <= (_hasHardwareEncoder.Value ? 1080 : 720))
+            .Where(lines => lines <= (HasHardwareEncoder ? 1080 : 720))
             .DefaultIfEmpty(ResolutionChoices[0])
             .Max();
 
     public const CaptureQuality RecommendedQuality = CaptureQuality.Normal;
 
+    public bool HasHardwareEncoder => _hasHardwareEncoder.Value;
+
     public int RecommendedFrameRate =>
-        FrameRateChoices.Where(rate => rate <= (_hasHardwareEncoder.Value ? 60 : 30)).Max();
+        FrameRateChoices.Where(rate => rate <= (HasHardwareEncoder ? 60 : 30)).Max();
 
     // Only What Lasts Or Needs The Person Is Ever Shown
     public bool ShowsError => Recorder.Status.State == CaptureState.Error && !_quietRetry;
@@ -168,10 +171,14 @@ public sealed class CaptureController : IDisposable
     #region Games
     private async Task LoadGamesAsync()
     {
-        // The Library Scan Reads Many Folders, Once, Off The Caller
+        // The Library Scan Reads Many Folders, Off The Startup Thread
+        var scanning = Stopwatch.StartNew();
         try
         {
-            _installedGames = await Task.Run(GameScanner.Scan);
+            _installedGames = await Task.Run(GameScanner.Scan).ConfigureAwait(false);
+            s_logger.Info(
+                $"Found {_installedGames.Count} Installed Games In {scanning.ElapsedMilliseconds} ms"
+            );
         }
         catch (Exception exception)
             when (exception
@@ -191,7 +198,8 @@ public sealed class CaptureController : IDisposable
             return;
         }
 
-        ApplyGames();
+        // Applied Inside A Step, Never Racing One
+        await StepAsync(null).ConfigureAwait(false);
         Changed?.Invoke();
     }
 
@@ -243,34 +251,29 @@ public sealed class CaptureController : IDisposable
         ];
     }
 
-    public void AddGame(AddedGame game)
+    public void SetRecorded(IReadOnlyCollection<AddedGame> games, bool recorded)
     {
+        // Listed Ones Switch, Apps Join The List, In One Write
+        var listed = GameList()
+            .Select(game => game.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var keys = games.Select(game => game.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
         UpdateSettings(settings =>
             settings with
             {
-                AddedGames =
-                [
-                    .. (settings.AddedGames ?? []).Where(added => added.Key != game.Key),
-                    game,
-                ],
+                AddedGames = recorded
+                    ?
+                    [
+                        .. settings.AddedGames ?? [],
+                        .. games.Where(game => !listed.Contains(game.Key)),
+                    ]
+                    : settings.AddedGames,
                 RemovedGames =
                 [
-                    .. (settings.RemovedGames ?? []).Where(removed => removed != game.Key),
-                ],
-            }
-        );
-    }
-
-    public void SetRemoved(string key, bool removed)
-    {
-        // A Switched Off Game Keeps Its Row
-        UpdateSettings(settings =>
-            settings with
-            {
-                RemovedGames =
-                [
-                    .. (settings.RemovedGames ?? []).Where(entry => entry != key),
-                    .. removed ? [key] : Array.Empty<string>(),
+                    .. (settings.RemovedGames ?? []).Where(entry => !keys.Contains(entry)),
+                    .. recorded
+                        ? []
+                        : games.Where(game => listed.Contains(game.Key)).Select(game => game.Key),
                 ],
             }
         );
@@ -280,7 +283,43 @@ public sealed class CaptureController : IDisposable
     #region Starts And Stops
     public Task StartAutomaticallyAsync()
     {
+        // With No Game Yet, The Encoder Test Runs Unwatched
+        if (Settings.GamesOnly)
+        {
+            _ = Task.Run(WarmUpEncoderAsync);
+        }
+
         return StepAsync(null);
+    }
+
+    private async Task WarmUpEncoderAsync()
+    {
+        // First Tests After An Update Took 9 s, Then Cached
+        if (SelectedMonitor is not { } monitor || !FFmpeg.IsAvailable)
+        {
+            return;
+        }
+
+        var (width, height) = ReplayRecorder.OutputSize(monitor, Settings.Resolution);
+        try
+        {
+            await VideoEncoders.WorksAsync(
+                VideoEncoders.Candidates()[0],
+                width,
+                height,
+                FrameRate,
+                _closing.Token
+            );
+        }
+        catch (Exception exception)
+            when (exception
+                    is OperationCanceledException
+                        or Win32Exception
+                        or InvalidOperationException
+            )
+        {
+            // The Real Start Tests Again And Says Why
+        }
     }
 
     public async Task<SaveOutcome> SaveAsync()
@@ -299,7 +338,19 @@ public sealed class CaptureController : IDisposable
             await Task.Delay(100);
         }
 
-        return await Recorder.SaveAsync();
+        // A Monitor Clip Is Named By Its Monitor's Place
+        var number = Recorder.Options is { GameWindow: 0 } options
+            ? Monitors
+                .ToList()
+                .FindIndex(monitor =>
+                    string.Equals(
+                        monitor.DevicePath,
+                        options.Monitor.DevicePath,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                ) + 1
+            : 0;
+        return await Recorder.SaveAsync(number > 0 ? number : null);
     }
 
     public Task DisplaysChangedAsync()

@@ -7,7 +7,8 @@ public sealed record MediaInfo(
     int Width,
     int Height,
     double FrameRate,
-    string? AudioCodec
+    string? AudioCodec,
+    double AudioBitsPerSecond = 0
 )
 {
     public bool HasVideo => VideoCodec is not null;

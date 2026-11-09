@@ -18,6 +18,9 @@ public sealed class AudioMixer : IDisposable
     // 40 ms Chunks, Fewer Wakeups Keep The CPU Asleep
     private const int ChunkFrames = SampleRate / 25;
 
+    // E_NOTFOUND, Windows Has No Device Of That Kind At All
+    private const int NoDevice = unchecked((int)0x80070490);
+
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
 
     private readonly long _origin;
@@ -274,7 +277,12 @@ public sealed class AudioMixer : IDisposable
                     // A Missing Device Records Silence, Never Another Device
                     s_logger.Warn($"Failed To Start {kind} {exception.GetType().Name}");
                     Disconnect();
-                    Problem = $"{kind} Unavailable";
+
+                    // Automatic With No Device Records Silence, A New Default Connects
+                    Problem =
+                        FollowsDefault && exception.HResult == NoDevice
+                            ? null
+                            : $"{kind} Unavailable";
                 }
             }
         }

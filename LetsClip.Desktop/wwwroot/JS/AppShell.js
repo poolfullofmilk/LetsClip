@@ -21,6 +21,19 @@ document.addEventListener("focusout", (event) => {
     if (field && event.target.value === field.dataset.seconds) event.target.value = event.target.dataset.shown;
 });
 
+// Its Set Here Icon Wins Over A Half Typed Time
+document.addEventListener(
+    "mousedown",
+    (event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        const input = target?.closest(".mud-input-adornment") ? target.closest(".trim-field")?.querySelector("input") : null;
+        if (!input || input !== document.activeElement) return;
+        input.value = input.dataset.shown;
+        input.blur();
+    },
+    true
+);
+
 // Escape Closes An Open Menu, Focus Returns To Its Button
 window.addEventListener(
     "keydown",
@@ -36,7 +49,16 @@ window.addEventListener(
     true
 );
 
-// Resting On A Card's Picture Plays Its Clip, Silently
+// Fine Lines Snap To Screen Pixels, Following Scale Changes
+const trackDevicePixel = () => {
+    const ratio = devicePixelRatio;
+    document.documentElement.style.setProperty("--device-pixel", `${1 / ratio}px`);
+    // A Narrow Range, The Ratio Is Rarely An Exact Decimal
+    matchMedia(`(min-resolution: ${ratio - 0.001}dppx) and (max-resolution: ${ratio + 0.001}dppx)`).addEventListener("change", trackDevicePixel, { once: true });
+};
+trackDevicePixel();
+
+// Resting On A Card Plays Its Clip, Silently
 (() => {
     let previewed = null;
 
@@ -83,8 +105,11 @@ window.addEventListener(
         }, 250);
     };
 
+    // Anywhere On The Card, Never On Its Buttons
     document.addEventListener("pointerover", (event) => {
-        const holder = (event.target instanceof Element && event.target.closest(".clip-thumb")?.querySelector(".clip-preview")) || null;
+        const target = event.target instanceof Element ? event.target : null;
+        const card = target && !target.closest("button, .info-icon") ? target.closest(".hover-card") : null;
+        const holder = card?.querySelector(".clip-preview") ?? null;
         if (holder === (previewed?.holder ?? null)) return;
         stopPreview();
         if (holder && !matchMedia("(prefers-reduced-motion: reduce)").matches) startPreview(holder);
@@ -116,7 +141,8 @@ window.letsClip = (() => {
     // The Editor Attaches Only A Clip Longer Than Zero
     const duration = () => state.duration;
     const clamp = (time) => Math.min(duration(), Math.max(0, time));
-    const percent = (time) => `${Math.min(100, Math.max(0, (time / duration()) * 100))}%`;
+    // Whole Screen Pixels Of The Track, So Edges Meet Exactly
+    const percent = (time) => `round(${Math.min(100, Math.max(0, (time / duration()) * 100))}%, var(--device-pixel))`;
 
     // The Playhead Follows Each Frame, Blazor Hears Ten A Second
     const loop = () => {
@@ -266,13 +292,13 @@ window.letsClip = (() => {
         before.style.width = percent(start);
         after.style.left = percent(end);
         selection.style.left = percent(start);
-        selection.style.width = percent(end - start);
+        selection.style.width = `calc(${percent(end)} - ${percent(start)})`;
         handleOf("start").style.left = percent(start);
         handleOf("end").style.left = percent(end);
         // The Handles Stay The One Truth Between Inputs
         handleOf("start").dataset.time = start;
         handleOf("end").dataset.time = end;
-        // Playing On Stops At The End Point As It Is Now
+        // Playing On Stops At The End Point As It Stands
         if (state.stopAt !== null) state.stopAt = end;
         showTimes({ start, end });
     };
@@ -296,10 +322,23 @@ window.letsClip = (() => {
             input.value = formatTime(time);
             field.dataset.seconds = String(Math.round(time * 10) / 10).replace(".", state.separator);
         }
-        // Its Own Text Node, Which Blazor Keeps Writing To
-        const length = document.querySelector("[data-length]")?.firstChild;
-        if (length) length.nodeValue = formatTime(end - start);
+        // Length, And A Copy's Size, Struck Live Once They Differ
+        showValue(document.querySelector("[data-length]"), formatTime(end - start));
+        const size = document.querySelector("[data-bytes-per-second]");
+        if (size) showValue(size, formatSize(size.dataset.bytesPerSecond * (end - start)));
     };
+
+    // Its Own Text Node, Which Blazor Keeps Writing To
+    const showValue = (value, text) => {
+        if (!value?.firstChild) return;
+        value.firstChild.nodeValue = text;
+        const row = value.parentElement;
+        row.toggleAttribute("data-changed", text !== row.querySelector("s")?.textContent.trim());
+    };
+
+    // Decimal Units Without ,0, Like Formatter.FormatSize
+    const formatSize = (bytes) =>
+        (bytes >= 1e9 ? `${Number((bytes / 1e9).toFixed(2))} GB` : bytes >= 1e6 ? `${Number((bytes / 1e6).toFixed(1))} MB` : `${Math.max(1, Math.round(bytes / 1e3))} KB`).replace(".", state.separator);
 
     const commit = (range) => state.dotnet.invokeMethodAsync("OnRange", range.start, range.end).catch(() => {});
 
@@ -463,5 +502,8 @@ window.letsClip = (() => {
             stopKeys = () => {};
         };
     };
-    return { transition, attach, detach, play, pause, nudge, place, mark, setVolume, fullScreen, watchKeys, stopKeys: () => stopKeys() };
+    // Scrolled Just Enough To Show The Whole Panel, Never Animated
+    const reveal = (id) => document.getElementById(id)?.scrollIntoView({ block: "nearest" });
+
+    return { transition, attach, detach, play, pause, nudge, place, mark, setVolume, fullScreen, watchKeys, stopKeys: () => stopKeys(), reveal };
 })();

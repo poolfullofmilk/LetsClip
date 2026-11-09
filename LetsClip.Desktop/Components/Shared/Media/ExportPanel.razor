@@ -1,34 +1,23 @@
-@* Export Panel *@
-<Panel Title="Export"
-       Class="compact">
-    <SettingRow Title="Length">
-        <MudText Typo="Typo.body2"
-                 Class="mud-text-secondary player-time"
-                 data-length>
-            @Formatter.FormatDuration(Range.Length)
-        </MudText>
-    </SettingRow>
-    <SettingRow Title="Clip Size">
-        <MudText Typo="Typo.body2"
-                 Class="mud-text-secondary">
-            @Formatter.FormatSize(Clip.SizeBytes)
-        </MudText>
-    </SettingRow>
+@* Details Panel *@
+<Panel Title="Details"
+       Class="compact fade-in">
+    @ChildContent
     <SettingRow Title="Fit for Discord">
         @* Discord Plan Select *@
         <MudElement HtmlTag="div"
-                    Class="short-width">
+                    Class="content-field">
             <ChoiceSelect T="DiscordPlan"
                           Value="Plan"
                           ValueChanged="SetPlan"
                           ToStringFunc="PlanLabel"
-                          Disabled="@IsExporting"
+                          Disabled="@(IsExporting || !AnyPlanChanges)"
                           RelativeWidth="@DropdownWidth.Adaptive"
                           aria-label="Fit for Discord">
                 @foreach (var plan in Enum.GetValues<DiscordPlan>())
                 {
                     <MudSelectItem T="DiscordPlan"
-                                   Value="plan">
+                                   Value="plan"
+                                   Disabled="@(!Changes(plan))">
                         <ItemLabel Text="@PlanLabel(plan)"
                                    Detail="@PlanDetail(plan)" />
                     </MudSelectItem>
@@ -36,35 +25,42 @@
             </ChoiceSelect>
         </MudElement>
     </SettingRow>
-    <SettingRow Title="Resolution">
-        <MudText Typo="Typo.body2"
-                 Class="mud-text-secondary">
-            @($"{OutputSize.Width} × {OutputSize.Height}")
-        </MudText>
-    </SettingRow>
-    <SettingRow Title="Frame Rate">
-        <MudText Typo="Typo.body2"
-                 Class="mud-text-secondary">
-            @($"{FrameRate:0} FPS")
-        </MudText>
-    </SettingRow>
     @if (Media.HasAudio)
     {
         <SettingRow Title="Audio">
             @* Audio Button *@
             <IconButton Icon="@(WithAudio ? Icons.Material.Rounded.VolumeUp : Icons.Material.Rounded.VolumeOff)"
                         Text="@(WithAudio ? "Mute Audio" : "Unmute Audio")"
+                        Placement="Placement.Left"
                         Color="@(WithAudio ? Color.Default : Color.Error)"
                         Filled
                         Disabled="@IsExporting"
                         OnClick="ToggleAudio" />
         </SettingRow>
     }
+    <SettingRow Title="Length">
+        <ChangedValue Was="@Formatter.FormatDuration(Media.Duration)"
+                      Value="@Formatter.FormatDuration(Range.Length)"
+                      data-length />
+    </SettingRow>
+    <SettingRow Title="Size">
+        <ChangedValue Was="@Formatter.FormatSize(Clip.SizeBytes)"
+                      Value="@ExportSizeText"
+                      Prefix="@(Budget is null ? "About" : "Up to")"
+                      data-bytes-per-second="@CopyBytesPerSecond" />
+    </SettingRow>
+    <SettingRow Title="Resolution">
+        <ChangedValue Was="@SizeText(Media.Width, Media.Height)"
+                      Value="@SizeText(OutputSize.Width, OutputSize.Height)" />
+    </SettingRow>
+    <SettingRow Title="Frame Rate">
+        <ChangedValue Was="@RateText(ClipFrameRate)"
+                      Value="@RateText(FrameRate)" />
+    </SettingRow>
     <SettingRow Title="Bitrate">
-        <MudText Typo="Typo.body2"
-                 Class="mud-text-secondary">
-            @BitrateText
-        </MudText>
+        <ChangedValue Was="@Formatter.FormatBitrate(ClipBitsPerSecond)"
+                      Value="@BitrateText"
+                      Prefix="@(Budget is { VideoBitsPerSecond: > 0 } ? "Up to" : null)" />
     </SettingRow>
 
     <MudStack Spacing="3"
@@ -106,57 +102,68 @@
         }
         else
         {
-            @* Export Button *@
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Info"
-                       StartIcon="@Icons.Material.Rounded.Movie"
-                       Disabled="@(!CanExport)"
-                       FullWidth
-                       OnClick="ExportAsync">
-                @ExportText
-            </MudButton>
+            <MudStack Row
+                      AlignItems="AlignItems.Center"
+                      Spacing="2">
+                @* Export Button *@
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Info"
+                           StartIcon="@Icons.Material.Rounded.Movie"
+                           Disabled="@(!CanExport)"
+                           Class="flex-grow-1"
+                           OnClick="ExportAsync">
+                    @ExportText
+                </MudButton>
+                @* Save Cut Button *@
+                <IconButton Icon="@Icons.Material.Rounded.Save"
+                            Text="Save Cut"
+                            Placement="Placement.Left"
+                            Color="Color.Info"
+                            Filled
+                            Square
+                            Disabled="@(!CanSaveCut)"
+                            OnClick="SaveCutAsync" />
+            </MudStack>
         }
 
         @if (_error is { } error)
         {
             <Notice Text="@error" />
         }
-
-        @if (_result is { } result && File.Exists(result))
-        {
-            <MudPaper Elevation="0"
-                      Class="inset rounded-inner pa-3 appear">
-                <MudStack Spacing="2">
-                    <MudStack Row
-                              AlignItems="AlignItems.Center"
-                              Justify="Justify.Center"
-                              Spacing="2">
-                        <MudIcon Icon="@Icons.Material.Rounded.CheckCircle"
-                                 Color="Color.Success"
-                                 Size="Size.Small" />
-                        <MudText Typo="Typo.subtitle2"
-                                 Class="ellipsis">
-                            @Path.GetFileName(result)
-                        </MudText>
-                    </MudStack>
-                    <MudStack Row
-                              Spacing="2">
-                        @* Copy File Button *@
-                        <MudButton Variant="Variant.Filled"
-                                   Color="Color.Info"
-                                   Size="Size.Small"
-                                   StartIcon="@Icons.Material.Rounded.ContentCopy"
-                                   Class="flex-grow-1"
-                                   OnClick="CopyFile">
-                            Copy File
-                        </MudButton>
-                        @* Show In Folder Button *@
-                        <IconButton Icon="@Icons.Material.Rounded.FolderOpen"
-                                    Text="Show in Folder"
-                                    OnClick="() => Explorer.ShowFile(result)" />
-                    </MudStack>
-                </MudStack>
-            </MudPaper>
-        }
     </MudStack>
 </Panel>
+
+@if (_result is { } result && File.Exists(result))
+{
+    @* Exported Panel *@
+    <Panel Title="Exported"
+           Id="exported"
+           Class="compact fade-in mt-6">
+        <SettingRow Title="File">
+            <MudText Typo="Typo.body2"
+                     Class="mud-text-secondary ellipsis">
+                @Path.GetFileName(result)
+            </MudText>
+        </SettingRow>
+        <MudStack Row
+                  AlignItems="AlignItems.Center"
+                  Spacing="2"
+                  Class="pt-3 pb-4">
+            @* Copy File Button *@
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Info"
+                       StartIcon="@Icons.Material.Rounded.ContentCopy"
+                       Class="flex-grow-1"
+                       OnClick="CopyFile">
+                Copy File
+            </MudButton>
+            @* Show In Folder Button *@
+            <IconButton Icon="@Icons.Material.Rounded.FolderOpen"
+                        Text="Show in Folder"
+                        Placement="Placement.Left"
+                        Filled
+                        Square
+                        OnClick="() => Explorer.ShowFile(result)" />
+        </MudStack>
+    </Panel>
+}
