@@ -5,13 +5,14 @@
 - Games and Apps Only records just that window, so chats and notifications stay out, and you pick any installed game or app from one list
 - Press the key in a game LetsClip does not know yet and it offers to record that game from then on
 - One click picks the recommended quality, or record up to your monitor's own resolution and refresh rate
-- Records system audio, and your microphone with its background noise cleaned out
+- Records system audio, or only your game and Discord, and your microphone with its background noise cleaned out
 - Test your microphone live and hear how it will sound in a clip
 - Trim a clip to the exact frame and export an exact copy of it, or fit it to Discord's Free, Nitro Basic or Nitro limit, with or without sound
 - Keep just the trimmed part without losing any quality, and keep the full clip to bring back if you want
 - Clips are named after their game or app and show their resolution, bitrate and size, rename them, sort them and filter them by game
 - Rest the pointer on a clip to preview it
-- Starts with Windows in the tray, updates itself and recovers from problems on its own
+- Copy any clip as a file and paste it straight into Discord
+- Starts with Windows in the tray, updates itself in the background and recovers from problems on its own
 
 ## Quick start
 1. Download the exe from the [latest release](https://github.com/poolfullofmilk/LetsClip/releases/latest)

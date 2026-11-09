@@ -100,7 +100,8 @@ public sealed class CaptureSession(
                 OriginTimestamp,
                 Options.SystemAudioId,
                 Options.MicrophoneId,
-                Options.CleanMicrophone
+                Options.CleanMicrophone,
+                Options.GameProcess
             );
             Audio = new SegmentProcess(
                 "Audio",

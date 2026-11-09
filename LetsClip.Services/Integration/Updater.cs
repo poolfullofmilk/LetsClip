@@ -65,7 +65,7 @@ public static class Updater
 
     public static async Task<string> DownloadAsync(
         ReleaseInfo release,
-        IProgress<(long Received, long Total)> progress
+        IProgress<(long Received, long Total)>? progress
     )
     {
         var started = Stopwatch.StartNew();
@@ -108,7 +108,7 @@ public static class Updater
                     await file.WriteAsync(buffer.AsMemory(0, read), stall.Token);
                     stall.CancelAfter(s_stallTimeout);
                     received += read;
-                    progress.Report((received, total));
+                    progress?.Report((received, total));
                 }
             }
 
@@ -173,21 +173,26 @@ public static class Updater
             : throw new InvalidDataException($"Release {tag} Lists No Checksum");
     }
 
-    public static void Launch(string executablePath)
+    public static void Launch(string executablePath, bool inTray)
     {
-        s_logger.Info($"Started Update {executablePath}");
-        Process.Start(
-            new ProcessStartInfo(executablePath)
+        // An Update While Hidden Stays In The Tray
+        s_logger.Info($"Started Update {executablePath}{(inTray ? " In The Tray" : "")}");
+        var startInfo = new ProcessStartInfo(executablePath)
+        {
+            UseShellExecute = false,
+            ArgumentList =
             {
-                UseShellExecute = false,
-                ArgumentList =
-                {
-                    AfterUpdateArgument,
-                    Environment.ProcessId.ToString(CultureInfo.InvariantCulture),
-                    Environment.ProcessPath!,
-                },
-            }
-        );
+                AfterUpdateArgument,
+                Environment.ProcessId.ToString(CultureInfo.InvariantCulture),
+                Environment.ProcessPath!,
+            },
+        };
+        if (inTray)
+        {
+            startInfo.ArgumentList.Add("--tray");
+        }
+
+        Process.Start(startInfo);
     }
 
     public static string? WaitForPreviousVersion(string[] arguments)

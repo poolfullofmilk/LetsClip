@@ -5,6 +5,7 @@ using System.Windows.Threading;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
 using Microsoft.Win32;
+using MudBlazor;
 using NLog;
 using Drawing = System.Drawing;
 using Forms = System.Windows.Forms;
@@ -27,19 +28,51 @@ public sealed class DesktopShell
     private DispatcherTimer? _flashTimer;
     private WindowMessages? _messages;
     private string? _pendingClip;
+    private bool _updateOffered;
 
     public event Action<string>? OpenClipRequested;
 
     public event Action? HotkeyChanged;
 
+    public event Action? UpdateFound;
+
     public string? HotkeyProblem { get; private set; }
 
     public string HotkeyText { get; private set; } = Hotkey.Default.ToString();
+
+    // Newest Release Found, Its Red Dot Stays Until Restart
+    public ReleaseInfo? AvailableUpdate { get; private set; }
 
     public void Attach(WindowMessages messages)
     {
         _messages = messages;
     }
+
+    #region Updates
+    public void ReportUpdate(ReleaseInfo release, bool offered = false)
+    {
+        // A Newer Release Replaces The Known One, Offered Again
+        if (AvailableUpdate is null || release.Version > AvailableUpdate.Version)
+        {
+            (AvailableUpdate, _updateOffered) = (release, false);
+        }
+
+        _updateOffered |= offered;
+        UpdateFound?.Invoke();
+    }
+
+    public ReleaseInfo? TakeUnofferedUpdate()
+    {
+        // One Dialog Per Release, However Often The Page Rebuilds
+        if (AvailableUpdate is not { } release || _updateOffered)
+        {
+            return null;
+        }
+
+        _updateOffered = true;
+        return release;
+    }
+    #endregion
 
     public void RequestOpenClip(string path)
     {
@@ -149,21 +182,21 @@ public sealed class DesktopShell
     #endregion
 
     #region Files
-    public static string ClipUrl(string path)
+    public static string ClipUrl(ClipInfo clip)
     {
-        return UrlOf(ClipsHost, path);
+        // Stamped, So A Cut File Never Comes From Cache
+        return $"{UrlOf(ClipsHost, clip.Path)}?v={clip.WrittenUtc.Ticks}";
     }
 
     public static string ThumbnailUrl(string? path)
     {
-        return path is not null && File.Exists(path) ? UrlOf(ThumbnailsHost, path) : "";
+        // Named By Their Clip's Generation, Pictures Never Change In Place
+        return path is null ? "" : UrlOf(ThumbnailsHost, path);
     }
 
     private static string UrlOf(string host, string path)
     {
-        // Stamped, So A Changed File Never Comes From Cache
-        var stamp = File.GetLastWriteTimeUtc(path).Ticks;
-        return $"https://{host}/{Uri.EscapeDataString(Path.GetFileName(path))}?v={stamp}";
+        return $"https://{host}/{Uri.EscapeDataString(Path.GetFileName(path))}";
     }
 
     public static string IconUrl(string? executablePath)
@@ -205,11 +238,12 @@ public sealed class DesktopShell
         return $"https://{ThumbnailsHost}/{name}";
     }
 
-    public static bool CopyFile(string path)
+    public static void CopyFile(string path, ISnackbar snackbar)
     {
         if (!File.Exists(path))
         {
-            return false;
+            snackbar.Add("The file was moved or deleted", Severity.Warning);
+            return;
         }
 
         // The File Itself Like Explorer's Copy, Pasting Copies It
@@ -220,11 +254,11 @@ public sealed class DesktopShell
         {
             // Five Tries 50 ms Apart, Another App May Hold It
             Forms.Clipboard.SetDataObject(data, true, 5, 50);
-            return true;
+            snackbar.Add("Copied, paste it anywhere with Ctrl+V", Severity.Success);
         }
         catch (ExternalException)
         {
-            return false;
+            snackbar.Add("The clipboard is busy, try again", Severity.Warning);
         }
     }
 

@@ -85,11 +85,6 @@ public partial class CapturePanel : IDisposable
         return Formatter.FormatDuration(seconds);
     }
 
-    private static string QualityLabel(CaptureQuality quality)
-    {
-        return quality.ToString();
-    }
-
     private static string FrameRateLabel(int rate)
     {
         return $"{rate} FPS";

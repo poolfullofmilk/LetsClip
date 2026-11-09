@@ -51,14 +51,13 @@ public partial class UpdateDialog
         await SetClosableAsync(false);
         try
         {
-            // Off The Window's Thread, So The Window Never Freezes
-            var progress = new Progress<(long, long)>(ShowProgress);
-            Updater.Launch(await Task.Run(() => Updater.DownloadAsync(Release, progress)));
-
-            // The New Exe Waits For This One To Exit
+            // The Window Downloads, Starts The New Exe And Exits
             if (Application.Current.MainWindow is MainWindow window)
             {
-                await window.ExitAsync();
+                await window.InstallUpdateAsync(
+                    Release,
+                    new Progress<(long Received, long Total)>(ShowProgress)
+                );
             }
         }
         catch (InvalidDataException exception)

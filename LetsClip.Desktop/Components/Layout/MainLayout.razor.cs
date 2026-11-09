@@ -23,15 +23,12 @@ public partial class MainLayout : IDisposable
     [Inject]
     public required ISnackbar Snackbar { get; set; }
 
-    // Once Per Run, A Rebuilt Page Keeps The Red Dot
-    private static bool s_checkedForUpdates;
-    private static ReleaseInfo? s_availableUpdate;
-
     private SelfHealingBoundary? _errorBoundary;
 
     protected override void OnInitialized()
     {
         Shell.OpenClipRequested += OnOpenClipRequested;
+        Shell.UpdateFound += OnUpdateFound;
         if (Shell.TakePendingClip() is { } pending)
         {
             OnOpenClipRequested(pending);
@@ -40,47 +37,50 @@ public partial class MainLayout : IDisposable
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender || s_checkedForUpdates)
+        // Found While Hidden, Offered Once The Page Is Up
+        if (firstRender && Shell.TakeUnofferedUpdate() is { } release)
         {
-            return;
+            await ShowUpdateAsync(release);
         }
-
-        s_checkedForUpdates = true;
-        await CheckForUpdatesAsync(false);
     }
 
-    private async Task CheckForUpdatesAsync(bool askedByHand)
+    private void OnUpdateFound()
+    {
+        _ = InvokeAsync(async () =>
+        {
+            StateHasChanged();
+            if (Shell.TakeUnofferedUpdate() is { } release)
+            {
+                await ShowUpdateAsync(release);
+            }
+        });
+    }
+
+    private async Task CheckForUpdatesAsync()
     {
         var latest = await Updater.CheckAsync();
         if (latest is null)
         {
-            if (askedByHand)
-            {
-                Snackbar.Add("Unable to check for updates right now", Severity.Warning);
-            }
-
+            Snackbar.Add("Unable to check for updates right now", Severity.Warning);
             return;
         }
 
         if (latest.Version <= AppInfo.Version)
         {
-            if (askedByHand)
-            {
-                Snackbar.Add(
-                    $"LetsClip {AppInfo.VersionText} is the latest version",
-                    Severity.Success
-                );
-            }
-
+            Snackbar.Add($"LetsClip {AppInfo.VersionText} is the latest version", Severity.Success);
             return;
         }
 
-        // The Red Dot Stays On The More Menu Until Restart
-        s_availableUpdate = latest;
-        StateHasChanged();
+        // Asked By Hand, The Dialog Opens Even If Offered Before
+        Shell.ReportUpdate(latest, offered: true);
+        await ShowUpdateAsync(latest);
+    }
+
+    private async Task ShowUpdateAsync(ReleaseInfo release)
+    {
         await DialogService.ShowAsync<UpdateDialog>(
             null,
-            new DialogParameters<UpdateDialog> { { dialog => dialog.Release, latest } },
+            new DialogParameters<UpdateDialog> { { dialog => dialog.Release, release } },
             new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true }
         );
     }
@@ -106,6 +106,7 @@ public partial class MainLayout : IDisposable
     public void Dispose()
     {
         Shell.OpenClipRequested -= OnOpenClipRequested;
+        Shell.UpdateFound -= OnUpdateFound;
         GC.SuppressFinalize(this);
     }
 }

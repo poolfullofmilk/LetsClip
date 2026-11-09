@@ -15,7 +15,7 @@
         <DebugType>embedded</DebugType>
         <Description>Saves What Just Happened On Screen As A Clip Ready to Share</Description>
         <Copyright>Copyright (c) 2026 poolfullofmilk</Copyright>
-        <Version>2.0.2</Version>
+        <Version>2.0.3</Version>
         <AssemblyTitle>LetsClip</AssemblyTitle>
         <Product>LetsClip</Product>
         <Company>poolfullofmilk</Company>
@@ -74,9 +74,9 @@
     <ItemGroup>
         <PackageReference
             Include="Microsoft.AspNetCore.Components.WebView.Wpf"
-            Version="10.0.120"
+            Version="10.0.130"
         />
-        <PackageReference Include="MudBlazor" Version="9.11.0" />
+        <PackageReference Include="MudBlazor" Version="9.12.0" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\LetsClip.Data\LetsClip.Data.csproj" />

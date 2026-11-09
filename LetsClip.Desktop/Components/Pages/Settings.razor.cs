@@ -86,6 +86,17 @@ public partial class Settings : IDisposable
         }
     }
 
+    // Only A Game Window's Recording Knows Its Game's Sound
+    private bool CanRecordOnlyGameAndDiscord =>
+        Controller.Settings.GamesOnly
+        && Controller.Settings.SystemAudio
+        && AudioMixer.CanRecordProcesses;
+
+    // The Game's Own Sound Ignores The Output Device
+    private bool PlaybackDeviceDisabled =>
+        !Controller.Settings.SystemAudio
+        || (CanRecordOnlyGameAndDiscord && Controller.Settings.OnlyGameAndDiscord);
+
     // The Saved Keys, Or While Picking The Last Keys Pressed
     private string HotkeyButtonText =>
         !_capturingKey ? Shell.HotkeyText : _pendingKey?.ToString() ?? "Waiting for Keys";
@@ -193,6 +204,11 @@ public partial class Settings : IDisposable
     private void SetPlaybackDevice(string id)
     {
         Controller.UpdateSettings(settings => settings with { SystemAudioDeviceId = id });
+    }
+
+    private void SetOnlyGameAndDiscord(bool enabled)
+    {
+        Controller.UpdateSettings(settings => settings with { OnlyGameAndDiscord = enabled });
     }
 
     private void SetMicrophone(bool enabled)

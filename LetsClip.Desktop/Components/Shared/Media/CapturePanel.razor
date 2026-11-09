@@ -128,12 +128,12 @@
                                   Label="Quality"
                                   Value="Controller.Settings.Quality"
                                   ValueChanged="SetQuality"
-                                  ToStringFunc="QualityLabel">
+                                  ToStringFunc="@(quality => quality.ToString())">
                         @foreach (var quality in Enum.GetValues<CaptureQuality>())
                         {
                             <MudSelectItem T="CaptureQuality"
                                            Value="quality">
-                                <ItemLabel Text="@QualityLabel(quality)"
+                                <ItemLabel Text="@quality.ToString()"
                                            Color="@QualityColor(quality)"
                                            Detail="@RecommendedText(quality == CaptureController.RecommendedQuality)" />
                             </MudSelectItem>

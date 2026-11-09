@@ -159,10 +159,7 @@ public static class ClipExporter
 
         encoders.Add(VideoEncoders.Software);
         var workFolder = CacheFolders.NewFolder();
-        var temporary = Path.Combine(
-            request.ExportsFolder,
-            $"{ClipLibrary.PartialPrefix}{Guid.NewGuid():N}.mp4"
-        );
+        var temporary = ClipLibrary.PartialPathIn(request.ExportsFolder);
         var job = new EncodeJob(
             request,
             temporary,
@@ -259,41 +256,16 @@ public static class ClipExporter
         // Stream Copied, The Clip's Own Frames, Size And Quality
         progress.Report(new ExportProgress("Copying", 0.5));
         var range = request.Range;
-        var temporary = Path.Combine(
-            request.ExportsFolder,
-            $"{ClipLibrary.PartialPrefix}{Guid.NewGuid():N}.mp4"
-        );
+        var temporary = ClipLibrary.PartialPathIn(request.ExportsFolder);
         try
         {
-            var result = await FFmpeg.RunAsync(
-                FFmpeg.FFmpegPath,
-                [
-                    "-hide_banner",
-                    "-nostdin",
-                    "-loglevel",
-                    "error",
-                    "-y",
-                    "-ss",
-                    FFmpeg.Seconds(range.SeekStart),
-                    "-i",
-                    request.SourcePath,
-                    "-t",
-                    FFmpeg.Seconds(range.Length),
-                    "-map",
-                    "0:v:0",
-                    .. (withAudio ? (string[])["-map", "0:a:0"] : []),
-                    "-c",
-                    "copy",
-                    "-movflags",
-                    "+faststart",
-                    "-f",
-                    "mp4",
-                    temporary,
-                ],
-                TimeSpan.FromMinutes(2),
+            var output = await ClipLibrary.CopyRangeAsync(
+                request.SourcePath,
+                range,
+                withAudio ? ["-map", "0:v:0", "-map", "0:a:0"] : ["-map", "0:v:0"],
+                temporary,
                 token
             );
-            var output = result.Succeeded ? await MediaProbe.ProbeAsync(temporary, token) : null;
             if (
                 output is not { HasVideo: true }
                 || Math.Abs(output.Duration - range.Length) > DurationTolerance

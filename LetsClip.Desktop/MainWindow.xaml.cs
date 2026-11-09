@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Net.Http;
 using System.Windows;
 using System.Windows.Interop;
 using LetsClip.Data.Enums;
@@ -11,6 +12,7 @@ using LetsClip.Desktop.Interop;
 using LetsClip.Desktop.Theming;
 using LetsClip.Services.Capture;
 using LetsClip.Services.Games;
+using LetsClip.Services.Integration;
 using LetsClip.Services.Media;
 using Microsoft.AspNetCore.Components.WebView.Wpf;
 using Microsoft.Web.WebView2.Core;
@@ -34,6 +36,13 @@ public partial class MainWindow : Window
 
     // Longer In The Tray, The Page Frees WebView2's 175 MB
     private static readonly TimeSpan s_releaseDelay = TimeSpan.FromMinutes(10);
+
+    // Looked For This Often, And Whenever The Window Opens
+    private static readonly TimeSpan s_updateCheckPeriod = TimeSpan.FromHours(6);
+
+    // Hidden This Long Is Idle, A Found Update Installs
+    private static readonly TimeSpan s_idleBeforeUpdate = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan s_idleCheckPeriod = TimeSpan.FromMinutes(1);
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
 
     private readonly IServiceProvider _services;
@@ -57,8 +66,12 @@ public partial class MainWindow : Window
     // What A Click On The Latest Balloon Does
     private Action? _balloonClick;
     private bool _isExiting;
+    private bool _isUpdating;
     private WindowState _windowedState;
     private double _pageZoom = 1;
+
+    // A Tray Start Counts As Hidden From Launch
+    private long? _hiddenSince = Stopwatch.GetTimestamp();
 
     public MainWindow(IServiceProvider services, CaptureController controller, DesktopShell shell)
     {
@@ -73,7 +86,14 @@ public partial class MainWindow : Window
         };
         DpiChanged += (_, _) => FitToScreen();
         LocationChanged += (_, _) => FitToScreen();
-        StateChanged += (_, _) => HideWhenMinimized();
+        StateChanged += (_, _) =>
+        {
+            // Minimising Goes Straight To The Tray, Capture Keeps Running
+            if (WindowState == WindowState.Minimized)
+            {
+                Hide();
+            }
+        };
         IsVisibleChanged += (_, _) => _ = RestPageAsync();
 
         _plainIcon = Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!)!;
@@ -99,7 +119,14 @@ public partial class MainWindow : Window
         _trayIcon.BalloonTipClicked += (_, _) => (_balloonClick ?? ShowFromTray)();
 
         controller.Recorder.StatusChanged += () => Dispatcher.InvokeAsync(UpdateTray);
-        controller.Recorder.SaveStarted += PlaySaveChime;
+        controller.Recorder.SaveStarted += () =>
+        {
+            // A Soft Chime At The Press, Muted Out Of Clips
+            if (_controller.Settings.SaveSound)
+            {
+                SaveChime.Play(_controller.Recorder, _controller.Settings.SaveSoundVolume);
+            }
+        };
         controller.Recorder.ClipSaved += clip => Dispatcher.InvokeAsync(() => NotifySaved(clip));
         controller.Changed += () =>
             Dispatcher.InvokeAsync(() =>
@@ -125,6 +152,7 @@ public partial class MainWindow : Window
                     "Stopped because the display turned off, history was cleared"
                 );
         _shell.Attach(_messages);
+        _ = KeepUpdatedAsync();
 
         // A Tray Start Shows No Panel, So Say It Here
         if (
@@ -170,6 +198,105 @@ public partial class MainWindow : Window
         _trayIcon.Dispose();
         _controller.Dispose();
         Application.Current.Shutdown();
+    }
+
+    public async Task InstallUpdateAsync(
+        ReleaseInfo release,
+        IProgress<(long Received, long Total)>? progress
+    )
+    {
+        // One At A Time, The New Exe Waits For Us
+        if (_isUpdating || _isExiting)
+        {
+            return;
+        }
+
+        _isUpdating = true;
+        try
+        {
+            var path = await Task.Run(() => Updater.DownloadAsync(release, progress));
+            Updater.Launch(path, inTray: !IsVisible);
+            await ExitAsync();
+        }
+        finally
+        {
+            _isUpdating = false;
+        }
+    }
+
+    private async Task KeepUpdatedAsync()
+    {
+        // At Start And Every Six Hours, Installed Once Idle
+        while (!_isExiting)
+        {
+            if (await FindUpdateAsync() is { } release)
+            {
+                await InstallWhenIdleAsync(release);
+            }
+
+            await Task.Delay(s_updateCheckPeriod);
+        }
+    }
+
+    private async Task<ReleaseInfo?> FindUpdateAsync()
+    {
+        // A Newer Release Gets Its Dialog And The Red Dot
+        var latest = await Updater.CheckAsync();
+        if (latest is null || latest.Version <= AppInfo.Version)
+        {
+            return null;
+        }
+
+        _shell.ReportUpdate(latest);
+        return latest;
+    }
+
+    private async Task InstallWhenIdleAsync(ReleaseInfo release)
+    {
+        // Debug, Sandboxed And Renamed Builds Only Offer It
+        if (!Updater.CanInstall)
+        {
+            s_logger.Info($"Found Update {release.Tag}, Only A Release Exe Installs It Itself");
+            return;
+        }
+
+        // Hidden A While, Nothing Saving Or Exporting
+        while (!_isExiting)
+        {
+            if (
+                _hiddenSince is { } hidden
+                && Stopwatch.GetElapsedTime(hidden) is var idle
+                && idle >= s_idleBeforeUpdate
+                && !ClipExporter.IsExporting
+                && !_controller.Recorder.Status.IsSaving
+            )
+            {
+                s_logger.Info(
+                    $"Began Installing Update {release.Tag} In The Background, Hidden For {idle.TotalMinutes:0} Minutes"
+                );
+                try
+                {
+                    await InstallUpdateAsync(release, null);
+                }
+                catch (Exception exception)
+                    when (exception
+                            is HttpRequestException
+                                or IOException
+                                or InvalidDataException
+                                or OperationCanceledException
+                                or UnauthorizedAccessException
+                                or Win32Exception
+                    )
+                {
+                    // The Next Check Tries Again, The Running Version Keeps Recording
+                    s_logger.Warn($"Failed To Update In The Background {exception.GetType().Name}");
+                }
+
+                return;
+            }
+
+            await Task.Delay(s_idleCheckPeriod);
+        }
     }
 
     private async Task SaveFromHotkeyAsync()
@@ -239,15 +366,6 @@ public partial class MainWindow : Window
         );
     }
 
-    private void PlaySaveChime()
-    {
-        // A Soft Chime At The Press, Muted Out Of Clips
-        if (_controller.Settings.SaveSound)
-        {
-            SaveChime.Play(_controller.Recorder, _controller.Settings.SaveSoundVolume);
-        }
-    }
-
     private void OpenClip(string path)
     {
         // A Clip Saved Elsewhere Shows In Explorer Instead
@@ -299,7 +417,7 @@ public partial class MainWindow : Window
         Content = page;
     }
 
-    private async Task ReleasePageAsync()
+    private async Task ReleasePageAsync(bool browserGone = false)
     {
         if (_page is not { } page)
         {
@@ -313,7 +431,7 @@ public partial class MainWindow : Window
         }
 
         // A Suspended Page Cannot Answer Its Components' Last Calls
-        if (_browser is { IsSuspended: true } browser)
+        if (!browserGone && _browser is { IsSuspended: true } browser)
         {
             browser.Resume();
         }
@@ -324,20 +442,43 @@ public partial class MainWindow : Window
         var released = Stopwatch.StartNew();
         try
         {
-            await page.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+            // A Dead Browser Never Answers, So Nothing Waits For It
+            await page.DisposeAsync()
+                .AsTask()
+                .WaitAsync(browserGone ? TimeSpan.Zero : TimeSpan.FromSeconds(5));
         }
         catch (TimeoutException)
         {
-            // Components Close At Once, Then The Hidden Host Waits
+            // Components Close At Once, Then The Host Waits
             page.WebView?.Dispose();
-            s_logger.Debug("Disposed WebView2 Directly, Its Host Waited On The Hidden Window");
+            s_logger.Debug("Disposed WebView2 Directly, Its Host Was Still Waiting");
+        }
+        catch (Exception exception) when (browserGone)
+        {
+            // A Dead Browser May Fail Teardown, The Page Still Goes
+            s_logger.Debug($"Disposed A Dead Page With {exception.GetType().Name}");
         }
 
         Content = null;
 
         s_logger.Info(
-            $"Released The Page After 10 Minutes In The Tray In {released.ElapsedMilliseconds} ms"
+            $"Released The Page {(browserGone ? "After Its Browser Exited" : "After 10 Minutes In The Tray")} In {released.ElapsedMilliseconds} ms"
         );
+    }
+
+    private async Task RebuildPageAsync(BlazorWebView page)
+    {
+        // Rebuilt Now While Shown, Else When Next Shown
+        if (page != _page)
+        {
+            return;
+        }
+
+        await ReleasePageAsync(browserGone: true);
+        if (IsVisible)
+        {
+            EnsurePage();
+        }
     }
 
     private void ShowTrayMenu()
@@ -415,6 +556,13 @@ public partial class MainWindow : Window
             )
             {
                 browser.Reload();
+            }
+            else if (
+                eventArgs.ProcessFailedKind == CoreWebView2ProcessFailedKind.BrowserProcessExited
+            )
+            {
+                // The Whole Browser Died, A New Page Replaces It
+                _ = RebuildPageAsync(page);
             }
         };
 
@@ -512,21 +660,14 @@ public partial class MainWindow : Window
         return Drawing.Color.FromArgb(color.A, color.R, color.G, color.B);
     }
 
-    private void HideWhenMinimized()
-    {
-        // Minimising Goes Straight To The Tray, Capture Keeps Running
-        if (WindowState == WindowState.Minimized)
-        {
-            Hide();
-        }
-    }
-
     private async Task RestPageAsync()
     {
         var visibility = ++_visibility;
+        _hiddenSince = IsVisible ? null : Stopwatch.GetTimestamp();
         if (IsVisible)
         {
             EnsurePage();
+            _ = FindUpdateAsync();
         }
 
         if (_page?.WebView is not { CoreWebView2: { } browser } control)

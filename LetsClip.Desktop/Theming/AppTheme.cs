@@ -150,7 +150,6 @@ public static class AppTheme
         {
             Default = new DefaultTypography { FontSize = "1rem", LineHeight = "1.5" },
             Button = new ButtonTypography { TextTransform = "none" },
-            Overline = new OverlineTypography { TextTransform = "none" },
         };
         BaseTypography[] headings =
         [

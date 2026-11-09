@@ -24,10 +24,7 @@ public static class ClipSaver
     )
     {
         var clipsFolder = FolderFor(library.Folder);
-        var temporary = Path.Combine(
-            clipsFolder,
-            $"{ClipLibrary.PartialPrefix}{Guid.NewGuid():N}.mp4"
-        );
+        var temporary = ClipLibrary.PartialPathIn(clipsFolder);
         try
         {
             // Stream Copy To The Press, The Replay Start Becomes Zero

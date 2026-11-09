@@ -23,6 +23,7 @@ public sealed record UserSettings(
     double SaveSoundVolume = 1,
     bool SystemAudio = true,
     string SystemAudioDeviceId = "",
+    bool OnlyGameAndDiscord = false,
     bool Microphone = true,
     string MicrophoneDeviceId = "",
     bool NoiseCancellation = true,

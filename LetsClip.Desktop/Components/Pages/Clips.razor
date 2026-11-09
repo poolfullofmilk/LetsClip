@@ -202,14 +202,16 @@
                                       @onclick="() => Open(clip)">
                                 <MudElement HtmlTag="div"
                                             Class="clip-thumb rounded-inner">
-                                    @if (DesktopShell.ThumbnailUrl(clip.ThumbnailPath) is { Length: > 0 } thumbnail)
+                                    @if (clip.ThumbnailPath is not null)
                                     {
-                                        <MudImage Src="@thumbnail"
-                                                  Alt="@clip.Title" />
+                                        <MudImage Src="@DesktopShell.ThumbnailUrl(clip.ThumbnailPath)"
+                                                  Alt="@clip.Title"
+                                                  loading="lazy"
+                                                  decoding="async" />
                                     }
                                     <MudElement HtmlTag="div"
                                                 Class="clip-preview"
-                                                data-clip="@DesktopShell.ClipUrl(clip.Path)" />
+                                                data-clip="@DesktopShell.ClipUrl(clip)" />
                                     <MudChip T="string"
                                              Size="Size.Small"
                                              Variant="Variant.Filled"
@@ -265,6 +267,10 @@
                                                 </MudElement>
                                             </ChildContent>
                                         </Tooltip>
+                                        @* Copy Button *@
+                                        <IconButton Icon="@Icons.Material.Rounded.ContentCopy"
+                                                    Text="Copy File"
+                                                    OnClick="() => DesktopShell.CopyFile(clip.Path, Snackbar)" />
                                         @* Delete Button *@
                                         <IconButton Icon="@Icons.Material.Rounded.Delete"
                                                     Text="Delete Clip"

@@ -1,5 +1,8 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
+using LetsClip.Services.Games;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using NLog;
@@ -21,13 +24,21 @@ public sealed class AudioMixer : IDisposable
     // E_NOTFOUND, Windows Has No Device Of That Kind At All
     private const int NoDevice = unchecked((int)0x80070490);
 
+    // Discord Started, Restarted Or Closed Is Noticed Within This
+    private static readonly TimeSpan s_discordCheckPeriod = TimeSpan.FromSeconds(10);
+    private const string DiscordKind = "Discord Audio";
+
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
 
     private readonly long _origin;
     private readonly MMDeviceEnumerator _enumerator = new();
     private readonly MMDeviceNotificationClient _notifications;
-    private readonly List<AudioSource> _sources = [];
     private readonly int _outputChannels;
+
+    // Replaced Whole, The Writer Reads One List Per Chunk
+    private volatile AudioSource[] _sources = [];
+    private readonly Lock _sourcesGate = new();
+    private readonly Timer? _discordWatch;
     private Thread? _writer;
     private volatile bool _stopping;
     private long _emittedFrames;
@@ -37,28 +48,36 @@ public sealed class AudioMixer : IDisposable
         long originTimestamp,
         string? systemId,
         string? microphoneId,
-        bool separateMicrophone
+        bool separateMicrophone,
+        int gameProcess
     )
     {
         // A Cleaned Microphone Gets Its Own Two Channels
         _origin = originTimestamp;
         _outputChannels = separateMicrophone ? Channels * 2 : Channels;
-        if (systemId is not null)
+        if (systemId is not null && gameProcess != 0)
         {
-            _sources.Add(new AudioSource(this, "System Audio", systemId, true, 0));
+            // Only The Game And Discord, Each With Its Child Processes
+            _sources = [new AudioSource(this, "Game Audio", "", true, 0, gameProcess)];
+        }
+        else if (systemId is not null)
+        {
+            _sources = [new AudioSource(this, "System Audio", systemId, true, 0)];
         }
 
         if (microphoneId is not null)
         {
-            _sources.Add(
+            _sources =
+            [
+                .. _sources,
                 new AudioSource(
                     this,
                     "Microphone",
                     microphoneId,
                     false,
                     separateMicrophone ? Channels : 0
-                )
-            );
+                ),
+            ];
         }
 
         _notifications = _enumerator.CreateNotificationClient(useSynchronizationContext: false);
@@ -78,10 +97,72 @@ public sealed class AudioMixer : IDisposable
         {
             source.Connect();
         }
+
+        if (systemId is not null && gameProcess != 0)
+        {
+            _discordWatch = new Timer(_ => FollowDiscord());
+            _discordWatch.Change(TimeSpan.Zero, Timeout.InfiniteTimeSpan);
+        }
     }
+
+    // Windows 10 2004 And Later Record One Process Tree
+    [SupportedOSPlatformGuard("windows10.0.19041")]
+    public static bool CanRecordProcesses => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041);
 
     public string? Problem =>
         _sources.Select(source => source.Problem).FirstOrDefault(problem => problem is not null);
+
+    private void FollowDiscord()
+    {
+        // Each Running Discord Gets A Recorder, Closed Ones Go
+        try
+        {
+            var running = GameWatcher.DiscordProcesses();
+            lock (_sourcesGate)
+            {
+                foreach (
+                    var gone in _sources.Where(source =>
+                        source.Kind == DiscordKind && !running.Contains(source.ProcessId)
+                    )
+                )
+                {
+                    _sources = [.. _sources.Where(source => source != gone)];
+                    gone.Dispose();
+                }
+
+                foreach (var process in running)
+                {
+                    if (_stopping || _sources.Any(source => source.ProcessId == process))
+                    {
+                        continue;
+                    }
+
+                    var discord = new AudioSource(this, DiscordKind, "", true, 0, process);
+                    discord.Connect();
+                    _sources = [.. _sources, discord];
+                }
+            }
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or Win32Exception)
+        {
+            // A Failed Look Waits, The Game Still Records
+            s_logger.Debug($"Failed To Look For Discord {exception.GetType().Name}");
+        }
+        finally
+        {
+            try
+            {
+                if (!_stopping)
+                {
+                    _discordWatch?.Change(s_discordCheckPeriod, Timeout.InfiniteTimeSpan);
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+                // The Session Ended Meanwhile
+            }
+        }
+    }
 
     public void Attach(Stream output)
     {
@@ -172,11 +253,15 @@ public sealed class AudioMixer : IDisposable
     public void Dispose()
     {
         _stopping = true;
+        _discordWatch?.Dispose();
         _writer?.Join(TimeSpan.FromSeconds(2));
         _notifications.Dispose();
-        foreach (var source in _sources)
+        lock (_sourcesGate)
         {
-            source.Dispose();
+            foreach (var source in _sources)
+            {
+                source.Dispose();
+            }
         }
 
         _enumerator.Dispose();
@@ -188,7 +273,8 @@ public sealed class AudioMixer : IDisposable
         string kind,
         string deviceId,
         bool loopback,
-        int channelOffset
+        int channelOffset,
+        int processId = 0
     ) : IDisposable
     {
         // Eight Seconds Of Room While The Encoder Starts Reading
@@ -214,8 +300,13 @@ public sealed class AudioMixer : IDisposable
 
         public string? Problem { get; private set; }
 
+        public string Kind => kind;
+
+        // Zero Records A Device, Else This Process And Its Children
+        public int ProcessId => processId;
+
         // Automatic, Or A Picked Device That Is Gone For Now
-        public bool FollowsDefault { get; private set; } = deviceId.Length == 0;
+        public bool FollowsDefault { get; private set; } = deviceId.Length == 0 && processId == 0;
 
         public DataFlow Flow => loopback ? DataFlow.Render : DataFlow.Capture;
 
@@ -223,8 +314,11 @@ public sealed class AudioMixer : IDisposable
         {
             // The Picked Device Coming Back Takes Over From The Default
             var isPicked = string.Equals(changedId, deviceId, StringComparison.OrdinalIgnoreCase);
-            return (Problem is not null && (FollowsDefault || isPicked))
-                || (FollowsDefault && isPicked);
+            return processId == 0
+                && (
+                    (Problem is not null && (FollowsDefault || isPicked))
+                    || (FollowsDefault && isPicked)
+                );
         }
 
         public void Connect()
@@ -239,21 +333,7 @@ public sealed class AudioMixer : IDisposable
                 Disconnect();
                 try
                 {
-                    // An Empty Id Or Missing Device Follows The Default
-                    var picked = AudioDevices.Find(mixer._enumerator, deviceId);
-                    FollowsDefault = picked is null;
-                    var endpoint =
-                        picked ?? mixer._enumerator.GetDefaultAudioEndpoint(Flow, Role.Console);
-                    var builder = new WasapiRecorderBuilder()
-                        .WithDevice(endpoint)
-                        .WithFormat(WaveFormat.CreateIeeeFloatWaveFormat(SampleRate, Channels))
-                        .WithBufferLength(100);
-                    if (loopback)
-                    {
-                        builder = builder.WithLoopbackCapture();
-                    }
-
-                    var recorder = builder.Build();
+                    var (recorder, from) = Build();
                     recorder.DataAvailable += OnData;
                     recorder.RecordingStopped += OnStopped;
 
@@ -265,13 +345,14 @@ public sealed class AudioMixer : IDisposable
                     _recorder = recorder;
                     recorder.StartRecording();
                     Problem = null;
-                    s_logger.Info($"Started {kind} From {endpoint.FriendlyName}");
+                    s_logger.Info($"Started {kind} From {from}");
                 }
                 catch (Exception exception)
                     when (exception
                             is COMException
                                 or InvalidOperationException
                                 or ArgumentException
+                                or NotSupportedException
                     )
                 {
                     // A Missing Device Records Silence, Never Another Device
@@ -285,6 +366,41 @@ public sealed class AudioMixer : IDisposable
                             : $"{kind} Unavailable";
                 }
             }
+        }
+
+        private (WasapiRecorder Recorder, string From) Build()
+        {
+            var format = WaveFormat.CreateIeeeFloatWaveFormat(SampleRate, Channels);
+            if (processId != 0 && CanRecordProcesses)
+            {
+                // Any Device They Play On, Activation Waited For Here
+                var recorder = new WasapiRecorderBuilder()
+                    .WithProcessLoopback(
+                        (uint)processId,
+                        ProcessLoopbackMode.IncludeTargetProcessTree
+                    )
+                    .WithFormat(format)
+                    .WithBufferLength(100)
+                    .BuildAsync()
+                    .GetAwaiter()
+                    .GetResult();
+                return (recorder, $"Process {processId} And Its Children");
+            }
+
+            // An Empty Id Or Missing Device Follows The Default
+            var picked = AudioDevices.Find(mixer._enumerator, deviceId);
+            FollowsDefault = picked is null;
+            var endpoint = picked ?? mixer._enumerator.GetDefaultAudioEndpoint(Flow, Role.Console);
+            var builder = new WasapiRecorderBuilder()
+                .WithDevice(endpoint)
+                .WithFormat(format)
+                .WithBufferLength(100);
+            if (loopback)
+            {
+                builder = builder.WithLoopbackCapture();
+            }
+
+            return (builder.Build(), endpoint.FriendlyName);
         }
 
         private void Disconnect()
@@ -340,7 +456,11 @@ public sealed class AudioMixer : IDisposable
             }
 
             var silent = flags.HasFlag(AudioClientBufferFlags.Silent);
-            var mutedUntil = loopback ? Interlocked.Read(ref mixer._muteUntilFrame) : long.MinValue;
+            // LetsClip's Own Sounds Never Reach A Game's Or Discord's Tree
+            var mutedUntil =
+                loopback && processId == 0
+                    ? Interlocked.Read(ref mixer._muteUntilFrame)
+                    : long.MinValue;
             lock (_gate)
             {
                 // Each Packet Lands At Its Clock Time, Gaps Stay Silent

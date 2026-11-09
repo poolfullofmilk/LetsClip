@@ -298,13 +298,7 @@ public partial class ExportPanel : IDisposable
     {
         if (_result is { } result)
         {
-            var copied = DesktopShell.CopyFile(result);
-            Snackbar.Add(
-                copied
-                    ? "Copied, paste it anywhere with Ctrl+V"
-                    : "The clipboard is busy, try again",
-                copied ? Severity.Success : Severity.Warning
-            );
+            DesktopShell.CopyFile(result, Snackbar);
         }
     }
 

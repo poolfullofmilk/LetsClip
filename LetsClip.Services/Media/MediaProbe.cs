@@ -17,11 +17,28 @@ public static class MediaProbe
         NumberHandling = JsonNumberHandling.AllowReadingFromString,
     };
 
-    public static async Task<MediaInfo?> ProbeAsync(string path, CancellationToken token)
+    public static async Task<MediaInfo?> ProbeAsync(
+        string path,
+        CancellationToken token,
+        bool withFrameTimes = false
+    )
     {
+        // Frame Times Ride Along When Asked, Packets Read Without Decoding
+        IReadOnlyList<string> packets = withFrameTimes
+            ? ["-show_entries", "packet=stream_index,pts_time"]
+            : [];
         var result = await FFmpeg.RunAsync(
             FFmpeg.FFprobePath,
-            ["-v", "error", "-print_format", "json", "-show_format", "-show_streams", path],
+            [
+                "-v",
+                "error",
+                "-print_format",
+                "json",
+                "-show_format",
+                "-show_streams",
+                .. packets,
+                path,
+            ],
             s_timeout,
             token
         );
@@ -39,45 +56,6 @@ public static class MediaProbe
             // A Damaged File Reads As Unreadable, Never As A Crash
             return null;
         }
-    }
-
-    public static async Task<double[]> FrameTimesAsync(string path, CancellationToken token)
-    {
-        // Each Video Frame's Start, Read From Packets Without Decoding
-        var result = await FFmpeg.RunAsync(
-            FFmpeg.FFprobePath,
-            [
-                "-v",
-                "error",
-                "-select_streams",
-                "v:0",
-                "-show_entries",
-                "packet=pts_time",
-                "-of",
-                "csv=p=0",
-                path,
-            ],
-            s_timeout,
-            token
-        );
-        return result.Succeeded
-            ?
-            [
-                .. result
-                    .Output.Split('\n')
-                    .Select(line =>
-                        double.TryParse(
-                            line.Trim().TrimEnd(','),
-                            CultureInfo.InvariantCulture,
-                            out var time
-                        )
-                            ? time
-                            : double.NaN
-                    )
-                    .Where(double.IsFinite)
-                    .Order(),
-            ]
-            : [];
     }
 
     private static MediaInfo? Parse(string json)
@@ -104,6 +82,21 @@ public static class MediaProbe
             video?.Duration is > 0 and var picture && format.Duration - picture < TrimRange.Step
                 ? picture
                 : format.Duration;
+        // Each Video Frame's Start, In Showing Order
+        double[]? frameTimes = probe.Packets is { } packets
+            ?
+            [
+                .. packets
+                    .Where(packet => packet.StreamIndex == video?.Index)
+                    .Select(packet =>
+                        double.TryParse(packet.PtsTime, CultureInfo.InvariantCulture, out var time)
+                            ? time
+                            : double.NaN
+                    )
+                    .Where(double.IsFinite)
+                    .Order(),
+            ]
+            : null;
         return new MediaInfo(
             duration,
             video?.CodecName,
@@ -112,7 +105,8 @@ public static class MediaProbe
             video?.Height ?? 0,
             frameRate,
             audio?.CodecName,
-            audio?.BitRate ?? 0
+            audio?.BitRate ?? 0,
+            frameTimes
         );
     }
 
@@ -129,11 +123,19 @@ public static class MediaProbe
             : 0;
     }
 
-    private sealed record Probe(ProbeFormat? Format, ProbeStream[]? Streams);
+    private sealed record Probe(
+        ProbeFormat? Format,
+        ProbeStream[]? Streams,
+        ProbePacket[]? Packets
+    );
 
     private sealed record ProbeFormat(double Duration);
 
+    // Times Stay Text, A Packet Without One Reads N/A
+    private sealed record ProbePacket(int StreamIndex, string? PtsTime);
+
     private sealed record ProbeStream(
+        int Index,
         string? CodecType,
         string? CodecName,
         string? PixFmt,

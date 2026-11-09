@@ -46,6 +46,12 @@ else
                             Disabled="@(_exporting || _swapping)"
                             OnClick="RestoreOriginalAsync" />
             }
+            @* Copy Button *@
+            <IconButton Icon="@Icons.Material.Rounded.ContentCopy"
+                        Text="Copy File"
+                        Placement="Placement.Left"
+                        Disabled="_swapping"
+                        OnClick="CopyFile" />
             @* Show In Folder Button *@
             <IconButton Icon="@Icons.Material.Rounded.FolderOpen"
                         Text="Show in Folder"

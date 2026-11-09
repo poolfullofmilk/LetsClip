@@ -26,6 +26,15 @@ public sealed partial class GameWatcher : IDisposable
         "msedgewebview2",
     };
 
+    // Discord's Own Builds, Any Of Them May Run
+    private static readonly string[] s_discordNames =
+    [
+        "Discord",
+        "DiscordPTB",
+        "DiscordCanary",
+        "DiscordDevelopment",
+    ];
+
     private readonly Timer _timer;
 
     // The Found Game's Handle, One Thread At A Time
@@ -45,6 +54,59 @@ public sealed partial class GameWatcher : IDisposable
     public event Action<string?>? GameChanged;
 
     public string? GameName { get; private set; }
+
+    // Zero While No Game Is Found
+    public int GameProcessId
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _game?.Id ?? 0;
+            }
+        }
+    }
+
+    public static IReadOnlyList<int> DiscordProcesses()
+    {
+        // Each Build's Oldest Process, Its Tree Plays Every Voice
+        var processes = Process.GetProcesses();
+        try
+        {
+            return
+            [
+                .. processes
+                    .Where(process =>
+                        s_discordNames.Contains(
+                            process.ProcessName,
+                            StringComparer.OrdinalIgnoreCase
+                        )
+                    )
+                    .GroupBy(process => process.ProcessName, StringComparer.OrdinalIgnoreCase)
+                    .Select(build => build.MinBy(StartTimeOf)!.Id),
+            ];
+        }
+        finally
+        {
+            foreach (var process in processes)
+            {
+                process.Dispose();
+            }
+        }
+    }
+
+    private static DateTime StartTimeOf(Process process)
+    {
+        try
+        {
+            return process.StartTime;
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or Win32Exception)
+        {
+            // Gone Or Hidden, Never Taken For The First
+            return DateTime.MaxValue;
+        }
+    }
 
     public void SetGames(IReadOnlyDictionary<string, GameEntry> games)
     {

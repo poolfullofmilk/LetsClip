@@ -14,4 +14,13 @@ LetsClip ships one pinned FFmpeg build beside itself and never looks on `PATH` o
 
 Only `ffmpeg.exe`, `ffprobe.exe`, their DLLs and `LICENSE.txt` are kept; `ffplay.exe` is dropped. The binaries are not in git: run `Get-FFmpeg.ps1` once after cloning, which downloads the asset above, refuses it unless the SHA-256 matches, and unpacks it here. A build without these files fails with a message saying so.
 
-Used features: `ddagrab` (Desktop Duplication capture), `scale` and `transpose` (CPU, after `hwdownload`), `h264_amf`, `h264_nvenc`, `h264_qsv` and `libx264` (capture, tried in that order of what the PC has), `aac`, the `segment` muxer with `mpegts`, the `concat` protocol and `mp4` with `faststart`, and `ffprobe` JSON output.
+Used features:
+
+- Capture: `gfxcapture` (Windows Graphics Capture, game and app windows), `ddagrab` (Desktop Duplication, monitors) and `setpts` for the media clock
+- Converting: `hwdownload`, `scale` with Lanczos and `transpose` on the CPU, or `hwmap` and `vpp_qsv` on Intel's GPU
+- Encoding: `h264_amf`, `h264_nvenc`, `h264_qsv` and `libx264`, tried in that order of what the PC has, with `h264_metadata` writing the BT.709 colour description, and `aac`
+- Microphone cleaning: `asplit`, `pan`, `highpass`, `afftdn`, `agate` and `amix`, the live test adds `volume` and `aresample`
+- Files: the `segment` muxer with `mpegts`, the `concat` protocol, `mp4` with `faststart`, stream copies for saves, cuts and exact exports, `pad` for encoded exports
+- Pictures: `scale` for thumbnails, `-skip_frame nokey` with `fps`, `tpad` and `tile` for the timeline strip
+- Probing: `ffprobe` JSON output, packet times included when the editor opens a clip
+- Encoder tests: the `lavfi` source `testsrc2`

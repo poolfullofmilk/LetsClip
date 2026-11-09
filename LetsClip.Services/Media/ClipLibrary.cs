@@ -15,6 +15,7 @@ public sealed class ClipLibrary : IDisposable
 
     // A Cut Clip's Full Original Waits Here, Hidden Beside It
     private const string OriginalsFolder = ".Originals";
+    private const string ThumbnailSuffix = ".jpg";
     private const string StripSuffix = ".strip.jpg";
 
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
@@ -176,7 +177,7 @@ public sealed class ClipLibrary : IDisposable
             return null;
         }
 
-        var thumbnail = ThumbnailPathOf(path);
+        var thumbnail = PicturePathOf(path, ThumbnailSuffix);
         return new ClipInfo(
             file.FullName,
             Path.GetFileNameWithoutExtension(file.Name),
@@ -189,7 +190,8 @@ public sealed class ClipLibrary : IDisposable
             !metadata.ForeignOriginal && File.Exists(OriginalPathOf(path)),
             metadata.Width,
             metadata.Height,
-            metadata.Monitor
+            metadata.Monitor,
+            file.LastWriteTimeUtc
         );
     }
 
@@ -235,47 +237,17 @@ public sealed class ClipLibrary : IDisposable
         CancellationToken token
     )
     {
-        // Stream Copied, The MP4 Edit List Hides The Keyframe Pre-Roll
-        // A Hair Early, So The Start Frame Itself Is Kept
         var metadata =
             MetadataOf(path) ?? throw new InvalidDataException("The clip could not be read");
-        var temporary = Path.Combine(
-            Path.GetDirectoryName(path) ?? "",
-            $"{PartialPrefix}{Guid.NewGuid():N}.mp4"
-        );
+        var temporary = PartialPathIn(Path.GetDirectoryName(path) ?? "");
         try
         {
-            var result = await FFmpeg.RunAsync(
-                FFmpeg.FFmpegPath,
-                [
-                    "-hide_banner",
-                    "-nostdin",
-                    "-loglevel",
-                    "error",
-                    "-y",
-                    "-ss",
-                    FFmpeg.Seconds(range.SeekStart),
-                    "-i",
-                    path,
-                    "-t",
-                    FFmpeg.Seconds(range.Length),
-                    "-map",
-                    "0",
-                    "-c",
-                    "copy",
-                    "-movflags",
-                    "+faststart",
-                    "-f",
-                    "mp4",
-                    temporary,
-                ],
-                TimeSpan.FromMinutes(2),
-                token
-            );
-            var media = result.Succeeded ? await MediaProbe.ProbeAsync(temporary, token) : null;
-            if (media is not { HasVideo: true, Duration: > 0 })
+            if (
+                await CopyRangeAsync(path, range, ["-map", "0"], temporary, token)
+                is not { HasVideo: true, Duration: > 0 } media
+            )
             {
-                throw new IOException($"Failed To Cut The Clip, {result.LastError}");
+                throw new IOException("Failed To Cut The Clip");
             }
 
             // The First Cut Keeps The Full Clip If Asked
@@ -318,6 +290,51 @@ public sealed class ClipLibrary : IDisposable
         {
             await FFmpeg.DeleteOutputAsync(temporary);
         }
+    }
+
+    internal static async Task<MediaInfo?> CopyRangeAsync(
+        string source,
+        TrimRange range,
+        IReadOnlyList<string> streams,
+        string output,
+        CancellationToken token
+    )
+    {
+        // Stream Copied, The MP4 Edit List Hides The Keyframe Pre-Roll
+        // A Hair Early, So The Start Frame Itself Is Kept
+        var result = await FFmpeg.RunAsync(
+            FFmpeg.FFmpegPath,
+            [
+                "-hide_banner",
+                "-nostdin",
+                "-loglevel",
+                "error",
+                "-y",
+                "-ss",
+                FFmpeg.Seconds(range.SeekStart),
+                "-i",
+                source,
+                "-t",
+                FFmpeg.Seconds(range.Length),
+                .. streams,
+                "-c",
+                "copy",
+                "-movflags",
+                "+faststart",
+                "-f",
+                "mp4",
+                output,
+            ],
+            TimeSpan.FromMinutes(2),
+            token
+        );
+        return result.Succeeded ? await MediaProbe.ProbeAsync(output, token) : null;
+    }
+
+    internal static string PartialPathIn(string folder)
+    {
+        // Unfinished Outputs Stay Out Of The Library Until Renamed
+        return Path.Combine(folder, $"{PartialPrefix}{Guid.NewGuid():N}.mp4");
     }
 
     private static void DeleteOriginal(string original)
@@ -523,7 +540,7 @@ public sealed class ClipLibrary : IDisposable
     {
         var at = FFmpeg.Seconds(Math.Min(1, duration / 2));
         return RenderAsync(
-            ThumbnailPathOf(path),
+            PicturePathOf(path, ThumbnailSuffix),
             ["-ss", at, "-i", path, "-frames:v", "1", "-vf", "scale=480:-2", "-q:v", "4"],
             TimeSpan.FromSeconds(30),
             CancellationToken.None
@@ -630,11 +647,6 @@ public sealed class ClipLibrary : IDisposable
             AppInfo.ThumbnailsDirectory,
             $"{FilePaths.KeyOf(path)}{generation}{suffix}"
         );
-    }
-
-    private static string ThumbnailPathOf(string path)
-    {
-        return PicturePathOf(path, ".jpg");
     }
 
     private static void Forget(string path)

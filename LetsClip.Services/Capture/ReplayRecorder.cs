@@ -19,7 +19,8 @@ public sealed record CaptureOptions(
     string? MicrophoneId,
     bool CleanMicrophone,
     nint GameWindow,
-    string? GameName
+    string? GameName,
+    int GameProcess
 );
 
 public sealed record SaveOutcome(ClipInfo? Clip, string? Error);

@@ -88,8 +88,13 @@
                                   SavedId="@Controller.Settings.SystemAudioDeviceId"
                                   ValueChanged="SetPlaybackDevice"
                                   Missing="No Output Device Detected"
-                                  Disabled="@(!Controller.Settings.SystemAudio)" />
+                                  Disabled="@PlaybackDeviceDisabled" />
                 </SettingRow>
+                <MudDivider />
+                <SettingRow Title="Only Record Game and Discord"
+                            Switch="Controller.Settings.OnlyGameAndDiscord"
+                            SwitchChanged="SetOnlyGameAndDiscord"
+                            SwitchDisabled="@(!CanRecordOnlyGameAndDiscord)" />
                 <MudDivider />
                 <SettingRow Title="Microphone"
                             Switch="Controller.Settings.Microphone"

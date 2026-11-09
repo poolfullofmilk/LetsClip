@@ -78,7 +78,8 @@ public partial class ClipEditor : IAsyncDisposable
     private MudTextField<string>? _titleField;
     private string _titleText = "";
 
-    private string VideoUrl => _path is null ? "" : DesktopShell.ClipUrl(_path);
+    // No Disk Read, The Loaded Clip Knows Its Write Time
+    private string VideoUrl => _clip is null ? "" : DesktopShell.ClipUrl(_clip);
 
     private string Title => _clip?.Title ?? "";
 
@@ -133,12 +134,11 @@ public partial class ClipEditor : IAsyncDisposable
         }
 
         var path = Path.Combine(Controller.Settings.ClipsDirectory, FileName);
+        // One Probe Reads The Streams And Every Frame's Start
         var clip = await Task.Run(() => Controller.Library.GetAsync(path, token), token);
-        var frameTimes = Task.Run(() => MediaProbe.FrameTimesAsync(path, token), token);
         var media = clip is null
             ? null
-            : await Task.Run(() => MediaProbe.ProbeAsync(path, token), token);
-        var frames = await frameTimes;
+            : await Task.Run(() => MediaProbe.ProbeAsync(path, token, withFrameTimes: true), token);
 
         // Another Clip Opened Meanwhile, This Result Belongs To Nobody
         if (token.IsCancellationRequested)
@@ -166,7 +166,7 @@ public partial class ClipEditor : IAsyncDisposable
                 FrameRate = metadata?.FrameRate ?? media.FrameRate,
             },
             path,
-            frames,
+            media.FrameTimes ?? [],
             strip is null ? null : DesktopShell.ThumbnailUrl(strip),
             metadata is { TrimStart: { } start, TrimEnd: { } end }
                 ? TrimRange.Fit(start, end, media.Duration)
@@ -610,6 +610,15 @@ public partial class ClipEditor : IAsyncDisposable
         if (_path is not null)
         {
             Explorer.ShowFile(_path);
+        }
+    }
+
+    private void CopyFile()
+    {
+        // The Whole File, Selection Or Not
+        if (_path is not null)
+        {
+            DesktopShell.CopyFile(_path, Snackbar);
         }
     }
 

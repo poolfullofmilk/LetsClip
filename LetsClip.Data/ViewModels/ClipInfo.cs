@@ -14,7 +14,8 @@ public sealed record ClipInfo(
     bool HasOriginal,
     int Width,
     int Height,
-    int? Monitor = null
+    int? Monitor,
+    DateTime WrittenUtc
 )
 {
     // The Game, Else The Monitor By Its Place

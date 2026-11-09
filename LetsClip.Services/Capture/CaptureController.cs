@@ -211,15 +211,12 @@ public sealed class CaptureController : IDisposable
         }
 
         // No Scanning While Locked Or Asleep
-        Games.SetGames(KnownGames());
+        Games.SetGames(
+            GameList()
+                .Where(game => !game.IsRemoved)
+                .ToDictionary(game => game.Key, StringComparer.OrdinalIgnoreCase)
+        );
         Games.SetEnabled(Settings.GamesOnly && _holds == CaptureHolds.None);
-    }
-
-    private Dictionary<string, GameEntry> KnownGames()
-    {
-        return GameList()
-            .Where(game => !game.IsRemoved)
-            .ToDictionary(game => game.Key, StringComparer.OrdinalIgnoreCase);
     }
 
     public IReadOnlyList<GameEntry> GameList()
@@ -483,7 +480,7 @@ public sealed class CaptureController : IDisposable
         // One Line A Log Reader Can Compare Between Steps
         return options is null
             ? "Nothing"
-            : $"{(options.GameWindow != 0 ? "A Game Window On " : "")}{options.Monitor.Label}, {options.Seconds} s, {options.Resolution}p, {options.FrameRate} FPS, {options.Quality}, System Audio {options.SystemAudioId switch { null => "Off", "" => "Automatic", _ => "Picked" }}, Microphone {options.MicrophoneId switch { null => "Off", "" => "Automatic", _ => "Picked" }}{(options.CleanMicrophone ? " Cleaned" : "")}";
+            : $"{(options.GameWindow != 0 ? "A Game Window On " : "")}{options.Monitor.Label}, {options.Seconds} s, {options.Resolution}p, {options.FrameRate} FPS, {options.Quality}, System Audio {(options.GameProcess != 0 ? "Of The Game And Discord" : options.SystemAudioId switch { null => "Off", "" => "Automatic", _ => "Picked" })}, Microphone {options.MicrophoneId switch { null => "Off", "" => "Automatic", _ => "Picked" }}{(options.CleanMicrophone ? " Cleaned" : "")}";
     }
 
     private CaptureOptions? WantedOptions()
@@ -498,6 +495,14 @@ public sealed class CaptureController : IDisposable
             return null;
         }
 
+        // Only The Game's And Discord's Sound, Else Everything Windows Plays
+        var gameAudio =
+            window != 0
+            && settings.SystemAudio
+            && settings.OnlyGameAndDiscord
+            && AudioMixer.CanRecordProcesses
+                ? Games.GameProcessId
+                : 0;
         return new CaptureOptions(
             shown,
             settings.ReplaySeconds,
@@ -508,7 +513,8 @@ public sealed class CaptureController : IDisposable
             settings.Microphone ? settings.MicrophoneDeviceId : null,
             settings.Microphone && settings.NoiseCancellation,
             window,
-            window != 0 ? Games.GameName : null
+            window != 0 ? Games.GameName : null,
+            gameAudio
         );
     }
     #endregion

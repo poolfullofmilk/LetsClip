@@ -122,7 +122,6 @@
     background-color: var(--inset-fill) !important;
 }
 
-/* Shared Radii */
 /* A Panel Scrolled Into View Keeps The Page's Bottom Gap */
 .rounded-panel {
     border-radius: var(--radius-panel) !important;
@@ -293,6 +292,11 @@
         line-height: var(--mud-typography-body2-lineheight);
     }
 
+    /* Switches Drop Their Hover Padding, So They End Flush */
+    .setting-row .mud-switch-span {
+        margin-inline: -9px;
+    }
+
 /* Editor Panels Sit Closer, Every Row 40 Px, Fields Too */
 .compact .setting-row {
     min-height: 40px;
@@ -305,11 +309,6 @@
         min-height: 35px;
     }
 }
-
-    /* Switches Drop Their Hover Padding, So They End Flush */
-    .setting-row .mud-switch-span {
-        margin-inline: -9px;
-    }
 
 /* The Game Row's Links Run Under It, Never Wrapping */
 .game-row {
@@ -532,11 +531,6 @@
     box-shadow: var(--mud-elevation-1);
 }
 
-/* Switch Tracks Run Rounded Like Every Thin Bar */
-.mud-switch-track {
-    border-radius: var(--radius-pill) !important;
-}
-
     .mud-chip .mud-chip-icon {
         margin-inline-end: 6px;
     }
@@ -575,6 +569,11 @@
     96% {
         opacity: 0.8;
     }
+}
+
+/* Switch Tracks Run Rounded Like Every Thin Bar */
+.mud-switch-track {
+    border-radius: var(--radius-pill) !important;
 }
 
 /* No Material Ripple, Buttons Fade Their Colour Instead */
@@ -720,13 +719,17 @@
     padding-inline: 16px;
 }
 
-/* Alerts Read At The Size Of Body Text */
+/* Alerts Read At Body Size, Centred Like The Save Button */
 .mud-alert .mud-alert-message {
+    flex: 1;
+    padding-inline: 28px;
     font-size: var(--mud-typography-body2-size);
     line-height: var(--mud-typography-body2-lineheight);
+    text-align: center;
+    text-wrap: balance;
 }
 
-    /* Icon Left, Text Centred, Like The Save Button Below */
+    /* Icon Left, Text Centred In The Same Width */
     .mud-alert .mud-alert-position {
         position: relative;
         align-items: center;
@@ -742,13 +745,6 @@
             width: 20px;
             height: 20px;
         }
-
-    .mud-alert .mud-alert-message {
-        flex: 1;
-        padding-inline: 28px;
-        text-align: center;
-        text-wrap: balance;
-    }
 
 /* Fields Sit Inset, Blue Edge On Focus */
 .mud-input.mud-input-outlined {
@@ -830,7 +826,7 @@
 }
 /* #endregion */
 
-/* #region Clips */
+/* #region Clips And Dialogs */
 /* Game Rows Lead With Their Icon, End On Their Switch */
 .games-table .game-icon {
     width: 40px;
@@ -1043,6 +1039,12 @@ mark {
     animation: fade-in var(--fade);
 }
 
+    /* Full Screen Keeps Play And Seeking, Not Volume */
+    .player video::-webkit-media-controls-mute-button,
+    .player video::-webkit-media-controls-volume-slider {
+        display: none;
+    }
+
 /* A Held Frame Covers A File Change, Then Fades */
 .player-frozen {
     position: absolute;
@@ -1064,12 +1066,6 @@ mark {
 .player:has(.player-frozen[data-held]) video {
     visibility: hidden;
 }
-
-    /* Full Screen Keeps Play And Seeking, Not Volume */
-    .player video::-webkit-media-controls-mute-button,
-    .player video::-webkit-media-controls-volume-slider {
-        display: none;
-    }
 
 /* Thumbnails In A Track, Handles Outside The Kept Part */
 .timeline {
@@ -1221,6 +1217,13 @@ mark {
         height: 40px;
     }
 
+    /* The Clock Stands Clear Of Play */
+    .player-controls .transport {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
     /* The Jumps Draw Larger, Lifted Like Play Beside Them */
     .player-controls .transport .square:not(.mud-button-filled) .mud-icon-root {
         width: round(31.28px, var(--device-pixel));
@@ -1236,13 +1239,6 @@ mark {
 
     .player-controls .transport .square:not(:disabled) .jump-digit {
         stroke: var(--jump-digit);
-    }
-
-    /* The Clock Stands Clear Of Play */
-    .player-controls .transport {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
     }
 
 .player-time {
