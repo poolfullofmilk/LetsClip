@@ -5,288 +5,296 @@
 
 @{
     var shown = ShownClips;
+    var day = default(DateTime?);
 }
 
 <MudElement HtmlTag="div"
-            Class="split page-fill">
-    <MudElement HtmlTag="div"
-                Class="side-panel">
-        <CapturePanel />
-    </MudElement>
-
-    <MudElement HtmlTag="div"
-                Class="main-panel fill-column">
-        <Header Title="Clips"
-                Scrolls>
-            <TitleContent>
-                <MudText Typo="Typo.subtitle1"
-                         Class="mud-text-secondary">
-                    @CountText(shown.Count)
-                </MudText>
-                <MudSpacer />
-                @* Sort Menu *@
-                <Tooltip Text="Sort Clips"
-                         Placement="Placement.Left"
-                         Disabled="@(shown.Count < 2)">
-                    <MudBadge Dot
-                              Color="Color.Info"
-                              Overlap
-                              Visible="@(Controller.Settings.ClipSort != ClipSort.Newest)"
-                              Class="d-flex">
-                        <MudMenu Icon="@Icons.Material.Rounded.SwapVert"
-                                 AriaLabel="Sort Clips"
-                                 Size="Size.Small"
-                                 Dense
-                                 Disabled="@(shown.Count < 2)"
-                                 AnchorOrigin="Origin.BottomRight"
-                                 TransformOrigin="Origin.TopRight">
-                            @foreach (var sort in Enum.GetValues<ClipSort>())
-                            {
-                                @* Sort Item *@
-                                <MudMenuItem OnClick="() => SetSortAsync(sort)">
-                                    <ItemLabel Text="@($"{sort} First")"
-                                               Checked="@(sort == Controller.Settings.ClipSort)" />
-                                </MudMenuItem>
-                            }
-                        </MudMenu>
-                    </MudBadge>
-                </Tooltip>
-                @* Game Filter Button *@
+            Class="page-fill fill-column">
+    <Header Title="Clips"
+            Scrolls>
+        <TitleContent>
+            <MudText Typo="Typo.subtitle1"
+                     Class="mud-text-secondary">
+                @CountText(shown.Count)
+            </MudText>
+            <MudSpacer />
+            @* Save Button *@
+            <SaveClipButton />
+            @* Sort Menu *@
+            <Tooltip Text="Sort Clips"
+                     Placement="Placement.Left"
+                     Disabled="@(shown.Count < 2)">
                 <MudBadge Dot
                           Color="Color.Info"
                           Overlap
-                          Visible="@IsFiltered"
+                          Visible="@(Controller.Settings.ClipSort != ClipSort.Newest)"
                           Class="d-flex">
-                    <IconButton Icon="@Icons.Material.Rounded.FilterList"
-                                Text="Filter by Game or App"
-                                Placement="Placement.Left"
-                                Disabled="@(Games.Count < 2 && !IsFiltered)"
-                                OnClick="OpenFilter" />
+                    <MudMenu Icon="@Icons.Material.Rounded.SwapVert"
+                             AriaLabel="Sort Clips"
+                             Size="Size.Small"
+                             Dense
+                             Disabled="@(shown.Count < 2)"
+                             AnchorOrigin="Origin.BottomRight"
+                             TransformOrigin="Origin.TopRight">
+                        @foreach (var sort in Enum.GetValues<ClipSort>())
+                        {
+                            @* Sort Item *@
+                            <MudMenuItem OnClick="() => SetSortAsync(sort)">
+                                <ItemLabel Text="@($"{sort} First")"
+                                           Checked="@(sort == Controller.Settings.ClipSort)" />
+                            </MudMenuItem>
+                        }
+                    </MudMenu>
                 </MudBadge>
-                @* Game Filter Popover *@
-                <MudPopover Open="_filterOpen"
-                            AnchorOrigin="Origin.BottomRight"
-                            TransformOrigin="Origin.TopRight"
-                            Class="filter-popover">
-                    <MudElement HtmlTag="div"
-                                Class="pa-3">
-                        @* Game Search *@
-                        <MudTextField T="string"
-                                      @bind-Value="_search"
-                                      Immediate
-                                      Placeholder="Search"
-                                      Adornment="Adornment.Start"
-                                      AdornmentIcon="@Icons.Material.Rounded.Search"
-                                      Clearable
-                                      ClearIcon="@Icons.Material.Rounded.Clear"
-                                      Variant="Variant.Outlined"
-                                      Margin="Margin.Dense"
-                                      aria-label="Search Games and Apps"
-                                      Class="my-0" />
-                    </MudElement>
-                    <MudElement HtmlTag="div"
-                                Class="filter-list">
-                        @if (string.IsNullOrWhiteSpace(_search))
-                        {
-                            @* All Games Checkbox *@
-                            <MudCheckBox T="bool?"
-                                         Value="AllState"
-                                         ValueChanged="SetAll"
-                                         Color="Color.Info"
-                                         CheckedIcon="@Icons.Material.Rounded.CheckBox"
-                                         UncheckedIcon="@Icons.Material.Rounded.CheckBoxOutlineBlank"
-                                         IndeterminateIcon="@Icons.Material.Rounded.IndeterminateCheckBox"
-                                         Dense>
-                                <MudText Typo="Typo.body2">All</MudText>
-                            </MudCheckBox>
-                        }
-                        @foreach (var game in SearchedGames)
-                        {
-                            @* Game Checkbox *@
-                            <MudCheckBox T="bool"
-                                         Value="@_draft.Contains(game)"
-                                         ValueChanged="@(on => SetGame(game, on))"
-                                         Color="Color.Info"
-                                         CheckedIcon="@Icons.Material.Rounded.CheckBox"
-                                         UncheckedIcon="@Icons.Material.Rounded.CheckBoxOutlineBlank"
-                                         Dense>
-                                <MudText Typo="Typo.body2">
-                                    <MudHighlighter Text="@game"
-                                                    HighlightedText="@_search" />
-                                </MudText>
-                            </MudCheckBox>
-                        }
-                    </MudElement>
-                    <MudStack Row
-                              AlignItems="AlignItems.Center"
-                              Spacing="4"
-                              Class="filter-footer px-3 py-2">
-                        @* Reset Button *@
-                        <MudButton Variant="Variant.Text"
-                                   Color="Color.Error"
-                                   Size="Size.Small"
-                                   OnClick="ResetFilter">
-                            Reset
-                        </MudButton>
-                        <MudSpacer />
-                        @* Apply Button *@
+            </Tooltip>
+            @* Game Filter Button *@
+            <MudBadge Dot
+                      Color="Color.Info"
+                      Overlap
+                      Visible="@IsFiltered"
+                      Class="d-flex">
+                <IconButton Icon="@Icons.Material.Rounded.FilterList"
+                            Text="Filter by Game or App"
+                            Placement="Placement.Left"
+                            Disabled="@(Games.Count < 2 && !IsFiltered)"
+                            OnClick="OpenFilter" />
+            </MudBadge>
+            @* Game Filter Popover *@
+            <MudPopover Open="_filterOpen"
+                        AnchorOrigin="Origin.BottomRight"
+                        TransformOrigin="Origin.TopRight"
+                        Class="filter-popover">
+                <MudElement HtmlTag="div"
+                            Class="pa-3">
+                    @* Game Search *@
+                    <MudTextField T="string"
+                                  @bind-Value="_search"
+                                  Immediate
+                                  Placeholder="Search"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Rounded.Search"
+                                  Clearable
+                                  ClearIcon="@Icons.Material.Rounded.Clear"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  aria-label="Search Games and Apps"
+                                  Class="my-0" />
+                </MudElement>
+                <MudElement HtmlTag="div"
+                            Class="filter-list">
+                    @if (string.IsNullOrWhiteSpace(_search))
+                    {
+                        @* All Games Checkbox *@
+                        <MudCheckBox T="bool?"
+                                     Value="AllState"
+                                     ValueChanged="SetAll"
+                                     Color="Color.Info"
+                                     CheckedIcon="@Icons.Material.Rounded.CheckBox"
+                                     UncheckedIcon="@Icons.Material.Rounded.CheckBoxOutlineBlank"
+                                     IndeterminateIcon="@Icons.Material.Rounded.IndeterminateCheckBox"
+                                     Dense>
+                            <MudText Typo="Typo.body2">All</MudText>
+                        </MudCheckBox>
+                    }
+                    @foreach (var game in SearchedGames)
+                    {
+                        @* Game Checkbox *@
+                        <MudCheckBox T="bool"
+                                     Value="@_draft.Contains(game)"
+                                     ValueChanged="@(on => SetGame(game, on))"
+                                     Color="Color.Info"
+                                     CheckedIcon="@Icons.Material.Rounded.CheckBox"
+                                     UncheckedIcon="@Icons.Material.Rounded.CheckBoxOutlineBlank"
+                                     Dense>
+                            <MudText Typo="Typo.body2">
+                                <MudHighlighter Text="@game"
+                                                HighlightedText="@_search" />
+                            </MudText>
+                        </MudCheckBox>
+                    }
+                </MudElement>
+                <MudStack Row
+                          AlignItems="AlignItems.Center"
+                          Spacing="4"
+                          Class="filter-footer px-3 py-2">
+                    @* Reset Button *@
+                    <MudButton Variant="Variant.Text"
+                               Color="Color.Error"
+                               Size="Size.Small"
+                               OnClick="ResetFilter">
+                        Reset
+                    </MudButton>
+                    <MudSpacer />
+                    @* Apply Button *@
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Info"
+                               Size="Size.Small"
+                               Disabled="@(_draft.Count == 0)"
+                               OnClick="ApplyFilterAsync">
+                        Apply
+                    </MudButton>
+                </MudStack>
+            </MudPopover>
+            @* Filter Overlay *@
+            <MudOverlay Visible="_filterOpen"
+                        OnClick="CloseFilter"
+                        AutoClose />
+            @* Open Folder *@
+            <IconButton Icon="@Icons.Material.Rounded.FolderOpen"
+                        Text="Open Clips Folder"
+                        Placement="Placement.Left"
+                        OnClick="OpenFolder" />
+        </TitleContent>
+        <ChildContent>
+            <CaptureNotice />
+            @if (s_clips is null)
+            {
+                <Loading Class="page-loading" />
+            }
+            else if (s_clips.Count == 0 && Controller.Library.IsUnavailable)
+            {
+                <MudPaper Elevation="4"
+                          Class="rounded-panel">
+                    <EmptyState Icon="@Icons.Material.Rounded.FolderOff"
+                                Color="Color.Warning"
+                                Text="Clips Folder Not Available" />
+                </MudPaper>
+            }
+            else if (s_clips.Count == 0)
+            {
+                <MudPaper Elevation="4"
+                          Class="rounded-panel">
+                    <EmptyState Icon="@Icons.Material.Rounded.VideoLibrary"
+                                Text="No Clips" />
+                </MudPaper>
+            }
+            else if (shown.Count == 0)
+            {
+                <MudPaper Elevation="4"
+                          Class="rounded-panel">
+                    <EmptyState Icon="@Icons.Material.Rounded.FilterList"
+                                Text="No Clips Match This Filter">
+                        @* Show All Button *@
                         <MudButton Variant="Variant.Filled"
                                    Color="Color.Info"
                                    Size="Size.Small"
-                                   Disabled="@(_draft.Count == 0)"
-                                   OnClick="ApplyFilterAsync">
-                            Apply
+                                   OnClick="ShowAllAsync">
+                            Show All Clips
                         </MudButton>
-                    </MudStack>
-                </MudPopover>
-                @* Filter Overlay *@
-                <MudOverlay Visible="_filterOpen"
-                            OnClick="CloseFilter"
-                            AutoClose />
-                @* Open Folder *@
-                <IconButton Icon="@Icons.Material.Rounded.FolderOpen"
-                            Text="Open Clips Folder"
-                            Placement="Placement.Left"
-                            OnClick="OpenFolder" />
-            </TitleContent>
-            <ChildContent>
-                @if (s_clips is null)
-                {
-                    <Loading Class="page-loading" />
-                }
-                else if (s_clips.Count == 0 && Controller.Library.IsUnavailable)
-                {
-                    <MudPaper Elevation="4"
-                              Class="rounded-panel">
-                        <EmptyState Icon="@Icons.Material.Rounded.FolderOff"
-                                    Color="Color.Warning"
-                                    Text="Clips Folder Not Available" />
-                    </MudPaper>
-                }
-                else if (s_clips.Count == 0)
-                {
-                    <MudPaper Elevation="4"
-                              Class="rounded-panel">
-                        <EmptyState Icon="@Icons.Material.Rounded.VideoLibrary"
-                                    Text="No Clips" />
-                    </MudPaper>
-                }
-                else if (shown.Count == 0)
-                {
-                    <MudPaper Elevation="4"
-                              Class="rounded-panel">
-                        <EmptyState Icon="@Icons.Material.Rounded.FilterList"
-                                    Text="No Clips Match This Filter">
-                            @* Show All Button *@
-                            <MudButton Variant="Variant.Filled"
-                                       Color="Color.Info"
-                                       Size="Size.Small"
-                                       OnClick="ShowAllAsync">
-                                Show All Clips
-                            </MudButton>
-                        </EmptyState>
-                    </MudPaper>
-                }
-                else
-                {
-                    @* Clip Cards *@
-                    <MudElement HtmlTag="div"
-                                Class="clip-grid">
-                        @foreach (var clip in shown.Take(_cards))
+                    </EmptyState>
+                </MudPaper>
+            }
+            else
+            {
+                @* Clip Cards *@
+                <MudElement HtmlTag="div"
+                            Class="clip-grid">
+                    @foreach (var clip in shown.Take(_cards))
+                    {
+                        @if (IsByDay && clip.RecordedAt.LocalDateTime.Date != day)
                         {
-                            @* Clip Card *@
-                            <MudPaper @key="clip.Path"
-                                      Elevation="4"
-                                      Class="rounded-panel pa-4 hover-card"
-                                      role="button"
-                                      tabindex="0"
-                                      data-keyclick
-                                      aria-label="@($"Open {clip.Title}")"
-                                      Style="@CardStyle(clip)"
-                                      @onclick="() => Open(clip)">
-                                <MudElement HtmlTag="div"
-                                            Class="clip-thumb rounded-inner">
-                                    @if (clip.ThumbnailPath is not null)
-                                    {
-                                        <MudImage Src="@DesktopShell.ThumbnailUrl(clip.ThumbnailPath)"
-                                                  Alt="@clip.Title"
-                                                  loading="lazy"
-                                                  decoding="async" />
-                                    }
-                                    <MudElement HtmlTag="div"
-                                                Class="clip-preview"
-                                                data-clip="@DesktopShell.ClipUrl(clip)" />
-                                    <MudChip T="string"
-                                             Size="Size.Small"
-                                             Variant="Variant.Filled"
-                                             Color="Color.Dark"
-                                             Class="clip-date ma-0">
-                                        @Formatter.FormatDateTime(clip.RecordedAt)
-                                    </MudChip>
-                                    <MudChip T="string"
-                                             Size="Size.Small"
-                                             Variant="Variant.Filled"
-                                             Color="Color.Dark"
-                                             Class="clip-duration ma-0">
-                                        @Formatter.FormatDuration(clip.Duration)
-                                    </MudChip>
-                                </MudElement>
-                                <MudStack Row
-                                          AlignItems="AlignItems.Center"
-                                          Spacing="1"
-                                          Class="mt-2">
-                                    <MudText Typo="Typo.h6"
-                                             Class="ellipsis flex-grow-1">
-                                        @clip.Title
-                                    </MudText>
-                                    <MudElement HtmlTag="span"
-                                                Class="d-flex align-center gap-1"
-                                                ClickPropagation="false">
-                                        @* Clip Info *@
-                                        <Tooltip Placement="Placement.Left"
-                                                 ShowOnFocus
-                                                 RootClass="d-inline-flex cursor-default info-icon">
-                                            <Content>
-                                                <MudElement HtmlTag="div"
-                                                            Class="info-facts">
-                                                    @foreach (var fact in FactsOf(clip))
-                                                    {
-                                                        <MudText Typo="Typo.body2"
-                                                                 Class="mud-text-secondary">
-                                                            @fact.Label
-                                                        </MudText>
-                                                        <MudText Typo="Typo.body2">@fact.Value</MudText>
-                                                    }
-                                                </MudElement>
-                                            </Content>
-                                            <ChildContent>
-                                                <MudElement HtmlTag="span"
-                                                            Class="d-inline-flex"
-                                                            tabindex="0"
-                                                            role="img"
-                                                            aria-label="@FactsText(clip)">
-                                                    <MudIcon Icon="@AppTheme.InfoIcon"
-                                                             Color="Color.Default"
-                                                             Size="Size.Small" />
-                                                </MudElement>
-                                            </ChildContent>
-                                        </Tooltip>
-                                        @* Copy Button *@
-                                        <IconButton Icon="@Icons.Material.Rounded.ContentCopy"
-                                                    Text="Copy File"
-                                                    OnClick="() => DesktopShell.CopyFile(clip.Path, Snackbar)" />
-                                        @* Delete Button *@
-                                        <IconButton Icon="@Icons.Material.Rounded.Delete"
-                                                    Text="Delete Clip"
-                                                    Color="Color.Error"
-                                                    OnClick="() => DeleteAsync(clip)" />
-                                    </MudElement>
-                                </MudStack>
-                            </MudPaper>
+                            day = clip.RecordedAt.LocalDateTime.Date;
+                            <MudText @key="day"
+                                     Typo="Typo.h6"
+                                     Class="clip-day">
+                                @Formatter.FormatDay(clip.RecordedAt)
+                            </MudText>
                         }
-                    </MudElement>
-                }
-            </ChildContent>
-        </Header>
-    </MudElement>
+
+                        @* Clip Card *@
+                        <MudPaper @key="clip.Path"
+                                  Elevation="4"
+                                  Class="rounded-panel pa-4 hover-card"
+                                  role="button"
+                                  tabindex="0"
+                                  data-keyclick
+                                  aria-label="@($"Open {clip.Title}")"
+                                  Style="@CardStyle(clip)"
+                                  @onclick="() => Open(clip)">
+                            <MudElement HtmlTag="div"
+                                        Class="clip-thumb rounded-inner">
+                                @if (clip.ThumbnailPath is not null)
+                                {
+                                    <MudImage Src="@DesktopShell.ThumbnailUrl(clip.ThumbnailPath)"
+                                              Alt="@clip.Title"
+                                              loading="lazy"
+                                              decoding="async" />
+                                }
+                                <MudElement HtmlTag="div"
+                                            Class="clip-preview"
+                                            data-clip="@DesktopShell.ClipUrl(clip)" />
+                                <SourceChip Clip="clip"
+                                            OnPicture />
+                                <MudChip T="string"
+                                         Size="Size.Small"
+                                         Variant="Variant.Filled"
+                                         Color="Color.Dark"
+                                         Class="clip-date ma-0">
+                                    @(IsByDay ? Formatter.FormatTime(clip.RecordedAt) : Formatter.FormatDateTime(clip.RecordedAt))
+                                </MudChip>
+                                <MudChip T="string"
+                                         Size="Size.Small"
+                                         Variant="Variant.Filled"
+                                         Color="Color.Dark"
+                                         Class="clip-duration ma-0">
+                                    @Formatter.FormatDuration(clip.Duration)
+                                </MudChip>
+                            </MudElement>
+                            <MudStack Row
+                                      AlignItems="AlignItems.Center"
+                                      Spacing="1"
+                                      Class="mt-2">
+                                <MudText Typo="Typo.h6"
+                                         Class="ellipsis flex-grow-1">
+                                    @clip.Title
+                                </MudText>
+                                <MudElement HtmlTag="span"
+                                            Class="d-flex align-center gap-1"
+                                            ClickPropagation="false">
+                                    @* Clip Info *@
+                                    <Tooltip Placement="Placement.Left"
+                                             ShowOnFocus
+                                             RootClass="d-inline-flex cursor-default info-icon">
+                                        <Content>
+                                            <MudElement HtmlTag="div"
+                                                        Class="info-facts">
+                                                @foreach (var fact in FactsOf(clip))
+                                                {
+                                                    <MudText Typo="Typo.body2"
+                                                             Class="mud-text-secondary">
+                                                        @fact.Label
+                                                    </MudText>
+                                                    <MudText Typo="Typo.body2">@fact.Value</MudText>
+                                                }
+                                            </MudElement>
+                                        </Content>
+                                        <ChildContent>
+                                            <MudElement HtmlTag="span"
+                                                        Class="d-inline-flex"
+                                                        tabindex="0"
+                                                        role="img"
+                                                        aria-label="@FactsText(clip)">
+                                                <MudIcon Icon="@AppTheme.InfoIcon"
+                                                         Color="Color.Default"
+                                                         Size="Size.Small" />
+                                            </MudElement>
+                                        </ChildContent>
+                                    </Tooltip>
+                                    @* Copy Button *@
+                                    <IconButton Icon="@Icons.Material.Rounded.ContentCopy"
+                                                Text="Copy File"
+                                                OnClick="() => DesktopShell.CopyFile(clip.Path, Snackbar)" />
+                                    @* Delete Button *@
+                                    <IconButton Icon="@Icons.Material.Rounded.Delete"
+                                                Text="Delete Clip"
+                                                Color="Color.Error"
+                                                OnClick="() => DeleteAsync(clip)" />
+                                </MudElement>
+                            </MudStack>
+                        </MudPaper>
+                    }
+                </MudElement>
+            }
+        </ChildContent>
+    </Header>
 </MudElement>

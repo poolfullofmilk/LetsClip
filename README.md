@@ -7,14 +7,18 @@
 - One click picks the recommended quality, or record up to your monitor's own resolution and refresh rate
 - Records system audio, or only your game and Discord, and your microphone with its background noise cleaned out
 - Test your microphone live and hear how it will sound in a clip
-- Trim a clip to the exact frame and export an exact copy of it, or fit it to Discord's Free, Nitro Basic or Nitro limit, with or without sound
+- Trim a clip to the exact frame, by dragging, typing or stepping, and export an exact copy of it, or fit it to Discord's Free, Nitro Basic or Nitro limit, with or without sound
 - Keep just the trimmed part without losing any quality, and keep the full clip to bring back if you want
-- Clips are named after their game or app and show their resolution, bitrate and size, rename them, sort them and filter them by game
+- Clips sit under a header per day, each tagged with its game, app or monitor, with its resolution, bitrate and size one hover away
+- Rename clips, sort them and filter them by game
 - Rest the pointer on a clip to preview it
 - Copy any clip as a file and paste it straight into Discord
 - A different sound tells you when a press saved nothing, and no notification ever plays a Windows sound over your game
 - Spamming the key saves one clip, not a pile of copies
 - Finds your games wherever Steam is installed, and games from the Xbox app
+- A game always goes before an app you added, so a browser left open never takes its place
+- Change the replay length while it records, nothing is lost
+- Remembers where you left its window and how loud you play clips
 - Starts with Windows in the tray, updates itself in the background with signed updates and recovers from problems on its own, even a crash
 
 ## Quick start

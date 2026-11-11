@@ -23,6 +23,9 @@ public sealed class Tray
     // Looked For This Often, And Whenever The Window Opens
     private static readonly TimeSpan s_updateCheckPeriod = TimeSpan.FromHours(6);
 
+    // An Unanswered Check Is Asked Again After This
+    private static readonly TimeSpan s_updateRetryPeriod = TimeSpan.FromMinutes(5);
+
     // Hidden This Long Is Idle, A Found Update Installs
     private static readonly TimeSpan s_idleBeforeUpdate = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan s_idleCheckPeriod = TimeSpan.FromMinutes(1);
@@ -132,6 +135,12 @@ public sealed class Tray
 
     public void ExitNow()
     {
+        // A Window Open At Shutdown Is Remembered Too
+        if (_window.IsVisible)
+        {
+            _window.RememberPlacement();
+        }
+
         _window.IsExiting = true;
         _messages.Dispose();
         _icon.Visible = false;
@@ -174,9 +183,12 @@ public sealed class Tray
         // At Start And Every Six Hours, Installed Once Idle
         while (!_window.IsExiting)
         {
+            var answered = false;
             try
             {
-                if (await FindUpdateAsync() is { } release)
+                var latest = await FindUpdateAsync();
+                answered = latest is not null;
+                if (latest is { } release && release.Version > AppInfo.Version)
                 {
                     await InstallWhenIdleAsync(release);
                 }
@@ -187,7 +199,8 @@ public sealed class Tray
                 s_logger.Warn($"Failed To Check For Updates {exception.GetType().Name}");
             }
 
-            await Task.Delay(s_updateCheckPeriod);
+            // No Network Yet At Sign In, Asked Again Soon
+            await Task.Delay(answered ? s_updateCheckPeriod : s_updateRetryPeriod);
         }
     }
 
@@ -195,12 +208,11 @@ public sealed class Tray
     {
         // A Newer Release Gets Its Dialog And The Red Dot
         var latest = await Updater.CheckAsync();
-        if (latest is null || latest.Version <= AppInfo.Version)
+        if (latest is { } release && release.Version > AppInfo.Version)
         {
-            return null;
+            _shell.ReportUpdate(release);
         }
 
-        _shell.ReportUpdate(latest);
         return latest;
     }
 

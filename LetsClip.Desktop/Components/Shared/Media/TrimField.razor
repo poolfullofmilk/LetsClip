@@ -18,4 +18,21 @@
                   IconSize="Size.Small"
                   Disabled="Disabled"
                   Class="my-0" />
+    <MudElement HtmlTag="div"
+                Class="trim-spin">
+        @* Later Button *@
+        <MudIconButton Icon="@Icons.Material.Rounded.KeyboardArrowUp"
+                       aria-label="@($"{Label} Later")"
+                       Size="Size.Small"
+                       tabindex="-1"
+                       Disabled="Disabled"
+                       OnClick="() => OnStep.InvokeAsync(1)" />
+        @* Earlier Button *@
+        <MudIconButton Icon="@Icons.Material.Rounded.KeyboardArrowDown"
+                       aria-label="@($"{Label} Earlier")"
+                       Size="Size.Small"
+                       tabindex="-1"
+                       Disabled="Disabled"
+                       OnClick="() => OnStep.InvokeAsync(-1)" />
+    </MudElement>
 </MudElement>

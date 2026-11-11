@@ -43,6 +43,7 @@ public partial class MainWindow : Window
     private WindowState _windowedState;
     private Size _windowedSize;
     private double _pageZoom = 1;
+    private bool _placing;
 
     // A Tray Start Counts As Hidden From Launch
     private long? _hiddenSince = Stopwatch.GetTimestamp();
@@ -56,6 +57,16 @@ public partial class MainWindow : Window
         SourceInitialized += (_, _) =>
         {
             WindowCaptionTheme.Apply(this);
+
+            // Opens Where And How It Was Left
+            if (_controller.Settings.Window is { } bounds)
+            {
+                // No Fitting Meanwhile, It Would Undo The Size
+                _placing = true;
+                WindowPlacement.Apply(this, bounds);
+                _placing = false;
+            }
+
             FitToScreen();
         };
         DpiChanged += (_, _) => FitToScreen();
@@ -68,7 +79,15 @@ public partial class MainWindow : Window
                 Hide();
             }
         };
-        IsVisibleChanged += (_, _) => _ = RestPageAsync();
+        IsVisibleChanged += (_, _) =>
+        {
+            if (!IsVisible)
+            {
+                RememberPlacement();
+            }
+
+            _ = RestPageAsync();
+        };
         controller.Changed += () => Dispatcher.InvokeAsync(MapClipsFolder);
     }
 
@@ -77,6 +96,22 @@ public partial class MainWindow : Window
 
     public TimeSpan? HiddenFor =>
         _hiddenSince is { } hidden ? Stopwatch.GetElapsedTime(hidden) : null;
+
+    public void RememberPlacement()
+    {
+        // Never The Full Screen Player, Never Before A First Show
+        if (
+            WindowStyle == WindowStyle.None
+            || new WindowInteropHelper(this).Handle == 0
+            || WindowPlacement.Read(this) is not { } bounds
+            || bounds == _controller.Settings.Window
+        )
+        {
+            return;
+        }
+
+        _controller.UpdateSettings(settings => settings with { Window = bounds });
+    }
 
     public void ShowFromTray()
     {
@@ -217,6 +252,11 @@ public partial class MainWindow : Window
 
     private void FitToScreen()
     {
+        if (_placing)
+        {
+            return;
+        }
+
         // Small Or Heavily Scaled Screens Still Show The Whole Page
         var scale = System.Windows.Media.VisualTreeHelper.GetDpi(this).DpiScaleX;
         var area = Forms.Screen.FromHandle(new WindowInteropHelper(this).Handle).WorkingArea;

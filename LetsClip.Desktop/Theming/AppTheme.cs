@@ -7,21 +7,6 @@ public static class AppTheme
     // The One Icon For Details, Notes And About
     public const string InfoIcon = Icons.Material.Rounded.Notes;
 
-    // Material Lacks 2 Second Jumps, So A 2 Is Drawn
-    private const string DigitTwo =
-        "<path class=\"jump-digit\" d=\"M10.78 13.02a1.22 1.22 0 0 1 2.44 0c0 .42-.17 .77-.46 1.12L10.67 16.7H13.82\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\" ";
-
-    // Shifted So Each Ring And Its 2 Sit Dead Centre
-    public const string BackTwoIcon =
-        "<g transform=\"translate(-.008 -1.012)\"><path class=\"jump-arrow\" opacity=\".33\" d=\"M12 5V2.21c0-.45-.54-.67-.85-.35l-3.8 3.79c-.2.2-.2.51 0 .71l3.79 3.79c.32.31.86.09.86-.36V7c3.73 0 6.68 3.42 5.86 7.29-.47 2.26-2.14 3.99-4.39 4.53-3.64.88-6.93-1.6-7.42-4.96-.06-.49-.48-.86-.97-.86-.6 0-1.08.53-1 1.13.63 4.47 4.94 7.75 9.77 6.67 3.09-.69 5.39-3.08 5.99-6.19C20.84 9.48 16.94 5 12 5z\"/>"
-        + DigitTwo
-        + "transform=\"translate(12.008 13.012) scale(1.55) translate(-12.245 -14.25)\"/></g>";
-
-    public const string ForwardTwoIcon =
-        "<g transform=\"translate(.067 -1.01)\"><path class=\"jump-arrow\" opacity=\".33\" d=\"M18.87 13c-.5 0-.91.37-.98.86-.48 3.37-3.77 5.84-7.42 4.96-2.25-.54-3.91-2.27-4.39-4.53C5.27 10.42 8.22 7 11.95 7v2.79c0 .45.54.67.85.35l3.79-3.79c.2-.2.2-.51 0-.71L12.8 1.85c-.31-.31-.85-.09-.85.35V5c-4.94 0-8.84 4.48-7.84 9.6.6 3.11 2.9 5.5 5.99 6.19 4.83 1.08 9.15-2.2 9.77-6.67.09-.59-.4-1.12-1-1.12z\"/>"
-        + DigitTwo
-        + "transform=\"translate(11.933 13.01) scale(1.55) translate(-12.245 -14.25)\"/></g>";
-
     // Application Font First, System Fonts Until It Loads
     private static readonly string[] s_fontFamily =
     [

@@ -113,6 +113,25 @@ public sealed class CaptureController : IDisposable
     public int RecommendedFrameRate =>
         FrameRateChoices.Where(rate => rate <= (HasHardwareEncoder ? 60 : 30)).Max();
 
+    public bool IsRecommended =>
+        Resolution == RecommendedResolution
+        && FrameRate == RecommendedFrameRate
+        && Settings.Quality == RecommendedQuality;
+
+    public void UseRecommended()
+    {
+        // One Change, So Capture Restarts Once
+        var (resolution, rate) = (RecommendedResolution, RecommendedFrameRate);
+        UpdateSettings(settings =>
+            settings with
+            {
+                Resolution = resolution,
+                FrameRate = rate,
+                Quality = RecommendedQuality,
+            }
+        );
+    }
+
     // Only What Lasts Or Needs The Person Is Ever Shown
     public bool ShowsError => Recorder.Status.State == CaptureState.Error && !_quietRetry;
 
@@ -380,14 +399,24 @@ public sealed class CaptureController : IDisposable
 
     public Task HoldAsync(CaptureHolds hold, string reason)
     {
-        s_logger.Info($"Holding Capture For {hold}, Now {_holds | hold}");
-        return StepAsync(() => _holds |= hold, reason);
+        return StepAsync(() => SetHolds(_holds | hold, $"Held Capture For {hold}"), reason);
     }
 
     public Task ReleaseAsync(CaptureHolds hold)
     {
-        s_logger.Info($"Releasing Capture Hold {hold}, Left {_holds & ~hold}");
-        return StepAsync(() => _holds &= ~hold);
+        return StepAsync(() => SetHolds(_holds & ~hold, $"Released Capture Hold {hold}"));
+    }
+
+    private void SetHolds(CaptureHolds holds, string what)
+    {
+        // Windows Repeats Its Events, Only A Change Is Logged
+        if (holds == _holds)
+        {
+            return;
+        }
+
+        _holds = holds;
+        s_logger.Info($"{what}, Now Holding {holds}");
     }
 
     private Task OnGameChangedAsync(string? game)
@@ -405,7 +434,7 @@ public sealed class CaptureController : IDisposable
     {
         // Every Failure Starts Over By Itself, Set Once And Forget
         var failures =
-            failure == CaptureFailure.RanLong
+            failure is CaptureFailure.RanLong or CaptureFailure.WindowClosed
             || Stopwatch.GetElapsedTime(_lastFailure) > s_failuresForgotten
                 ? 1
                 : _failures + 1;
@@ -415,8 +444,12 @@ public sealed class CaptureController : IDisposable
         _quietRetry = failure != CaptureFailure.Blocked && failures <= QuietFailures;
         Changed?.Invoke();
         var seconds = s_retrySeconds[Math.Min(failures, s_retrySeconds.Length) - 1];
+
+        // A Closed Window Is No Failure, Its Game Closed Too
         s_logger.Info(
-            $"Retrying In {seconds} s, Failure {failures} In A Row, {failure}{(_quietRetry ? ", Out Of Sight" : "")}"
+            failure == CaptureFailure.WindowClosed
+                ? $"Starting Again In {seconds} s If The Game Still Runs"
+                : $"Retrying In {seconds} s, Failure {failures} In A Row, {failure}{(_quietRetry ? ", Out Of Sight" : "")}"
         );
         try
         {
@@ -460,6 +493,21 @@ public sealed class CaptureController : IDisposable
             var clearsError = wanted is null && Recorder.Status.State == CaptureState.Error;
             if (running == wanted && (stopReason is null || wanted is not null) && !clearsError)
             {
+                return;
+            }
+
+            // Only The Length Differs, The Session And Its History Stay
+            if (
+                wanted is not null
+                && running is not null
+                && stopReason is null
+                && running with { Seconds = wanted.Seconds } == wanted
+            )
+            {
+                Recorder.SetSeconds(wanted.Seconds);
+                s_logger.Info(
+                    $"Changed The Replay Length From {running.Seconds} s To {wanted.Seconds} s, Recording Kept"
+                );
                 return;
             }
 

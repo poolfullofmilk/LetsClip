@@ -197,6 +197,15 @@ public sealed class ReplayRecorder : IDisposable
         }
     }
 
+    public void SetSeconds(int seconds)
+    {
+        // A New Replay Length Keeps The Session And Its History
+        lock (_gate)
+        {
+            _session?.SetSeconds(seconds);
+        }
+    }
+
     public void MuteSystemAudio(TimeSpan duration)
     {
         lock (_gate)
@@ -358,7 +367,8 @@ public sealed class ReplayRecorder : IDisposable
             // The Controller Hears First, A Quick Retry Shows No Error
             Failed?.Invoke(
                 blocked ? CaptureFailure.Blocked
-                : windowClosed || Stopwatch.GetElapsedTime(session.OriginTimestamp) > s_ranLong
+                : windowClosed ? CaptureFailure.WindowClosed
+                : Stopwatch.GetElapsedTime(session.OriginTimestamp) > s_ranLong
                     ? CaptureFailure.RanLong
                 : CaptureFailure.Brief
             );
@@ -476,6 +486,8 @@ public sealed class ReplayRecorder : IDisposable
                     return false;
                 }
 
+                // A Length Changed Meanwhile Carries Over
+                standby.SetSeconds(current.Options.Seconds);
                 _session = standby;
             }
 
@@ -558,12 +570,16 @@ public sealed class ReplayRecorder : IDisposable
             session = _session;
             if (session is null || Status.State != CaptureState.Recording)
             {
+                s_logger.Info(
+                    $"Saved Nothing For A Press, Nothing Is Recording, State {Status.State}"
+                );
                 return new SaveOutcome(null, "Nothing is being recorded right now");
             }
 
             // A Press While One Saves Does Nothing
             if (_saves > 0)
             {
+                s_logger.Info("Ignored A Press, A Save Is Running");
                 return new SaveOutcome(null, null);
             }
 
@@ -658,13 +674,20 @@ public sealed class ReplayRecorder : IDisposable
             );
         }
 
+        // A Replay Just Made Longer Starts Where Its History Does
+        var audio = session.Audio?.Segments.Covering(from, end) ?? [];
+        var kept = Math.Max(video[0].Start, audio.Count > 0 ? audio[0].Start : 0);
+        var wanted = Math.Max(from, CaptureSession.LeadSeconds);
+        var start =
+            videoOffset == 0 && kept - wanted > CaptureSession.SegmentSeconds ? kept : wanted;
+
         // Exactly The Replay Length, Or All Of A Younger Session
         Task<ClipInfo> SaveClipAsync()
         {
             return ClipSaver.SaveAsync(
                 video,
-                session.Audio?.Segments.Covering(from, end) ?? [],
-                Math.Max(from, CaptureSession.LeadSeconds),
+                audio,
+                start,
                 to,
                 videoOffset,
                 session.Folder,

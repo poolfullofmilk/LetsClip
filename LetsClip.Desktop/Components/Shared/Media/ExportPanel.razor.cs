@@ -43,6 +43,10 @@ public partial class ExportPanel : IDisposable
     [Parameter]
     public bool CanSaveCut { get; set; }
 
+    // The Cut Is Being Written, Its Button Spins
+    [Parameter]
+    public bool Cutting { get; set; }
+
     [Parameter]
     public EventCallback<bool> ExportingChanged { get; set; }
 

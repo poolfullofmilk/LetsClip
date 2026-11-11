@@ -1,0 +1,9 @@
+@* Source Chip *@
+<MudChip T="string"
+         Icon="@(Clip.Game is null ? Icons.Material.Rounded.Monitor : Icons.Material.Rounded.SportsEsports)"
+         Size="Size.Small"
+         Variant="@(OnPicture ? Variant.Filled : Variant.Text)"
+         Color="@(OnPicture ? Color.Dark : Color.Default)"
+         Class="source-chip ma-0">
+    @Clip.Source
+</MudChip>

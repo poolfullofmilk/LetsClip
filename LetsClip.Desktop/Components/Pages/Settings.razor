@@ -10,22 +10,34 @@
                     Class="settings-grid">
             @* Recording Settings *@
             <Panel Title="Recording">
-                <SettingRow Title="Games and Apps Only"
-                            Switch="Controller.Settings.GamesOnly"
-                            SwitchChanged="SetGamesOnly">
-                    @* Edit Games Button *@
-                    <MudButton Variant="Variant.Filled"
-                               Color="Color.Info"
-                               Size="Size.Small"
-                               StartIcon="@Icons.Material.Rounded.SportsEsports"
-                               OnClick="() => GamesDialog.ShowAsync(DialogService)">
-                        Edit Games and Apps
-                    </MudButton>
-                </SettingRow>
-                <MudDivider />
-                <SettingRow Title="Start with Windows"
-                            Switch="Controller.Settings.StartWithWindows"
-                            SwitchChanged="SetStartWithWindows" />
+                <Actions>
+                    @* Recommended Button *@
+                    <IconButton Icon="@Icons.Material.Rounded.AutoFixHigh"
+                                Text="Use Recommended Settings"
+                                Placement="Placement.Left"
+                                Disabled="Controller.IsRecommended"
+                                OnClick="Controller.UseRecommended" />
+                </Actions>
+                <ChildContent>
+                    <SettingRow Title="Games and Apps Only"
+                                Switch="Controller.Settings.GamesOnly"
+                                SwitchChanged="SetGamesOnly">
+                        @* Edit Games Button *@
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Info"
+                                   Size="Size.Small"
+                                   StartIcon="@Icons.Material.Rounded.SportsEsports"
+                                   OnClick="() => GamesDialog.ShowAsync(DialogService)">
+                            Edit Games and Apps
+                        </MudButton>
+                    </SettingRow>
+                    <MudDivider />
+                    <CaptureSettings />
+                    <MudDivider />
+                    <SettingRow Title="Start with Windows"
+                                Switch="Controller.Settings.StartWithWindows"
+                                SwitchChanged="SetStartWithWindows" />
+                </ChildContent>
             </Panel>
 
             @* Saving Settings *@

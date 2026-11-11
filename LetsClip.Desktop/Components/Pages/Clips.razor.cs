@@ -56,6 +56,9 @@ public partial class Clips : IDisposable
 
     private static bool IsFiltered => s_shownGames is not null;
 
+    // Sorted By Time, Each Day Gets Its Own Header
+    private bool IsByDay => Controller.Settings.ClipSort is ClipSort.Newest or ClipSort.Oldest;
+
     // What The Cards Show, Filtered Then Ordered
     private IReadOnlyList<ClipInfo> ShownClips
     {

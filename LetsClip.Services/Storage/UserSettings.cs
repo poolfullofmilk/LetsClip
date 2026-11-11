@@ -34,13 +34,16 @@ public sealed record UserSettings(
     bool DeleteOriginals = true,
     int DefaultsVersion = 0,
     ClipSort ClipSort = ClipSort.Newest,
-    string? AttemptedUpdate = null
+    string? AttemptedUpdate = null,
+    double PlayerVolume = UserSettings.OpeningVolume,
+    bool PlayerMuted = false,
+    WindowBounds? Window = null
 )
 {
     // Raised When New Defaults Reach Existing Users Once
     public const int CurrentDefaults = 2;
 
-    // Every Clip Opens At Half Volume, Its Microphone Test Too
+    // First Clip At Half Volume, The Microphone Test Too
     public const double OpeningVolume = 0.5;
 
     public static readonly int[] ReplayChoices = [30, 60, 120];
@@ -188,6 +191,9 @@ public sealed record UserSettings(
             SaveSoundVolume = double.IsFinite(SaveSoundVolume)
                 ? Math.Clamp(Math.Round(SaveSoundVolume, 1), 0.1, 1)
                 : defaults.SaveSoundVolume,
+            PlayerVolume = double.IsFinite(PlayerVolume)
+                ? Math.Clamp(Math.Round(PlayerVolume, 1), 0.1, 1)
+                : defaults.PlayerVolume,
         };
     }
 }

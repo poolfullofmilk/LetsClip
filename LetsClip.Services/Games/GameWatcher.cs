@@ -44,6 +44,9 @@ public sealed partial class GameWatcher : IDisposable
     private int _checking;
     private bool _failing;
     private Process? _game;
+
+    // A Library Game, Never An Added App
+    private bool _isGame;
     private volatile IReadOnlyDictionary<string, GameEntry> _games =
         new Dictionary<string, GameEntry>();
 
@@ -291,49 +294,65 @@ public sealed partial class GameWatcher : IDisposable
             }
 
             // A Found Game Counts Until Its Own Process Exits
-            if (GameName is { } running)
+            var running = GameName;
+            if (running is not null && GameClosed())
             {
-                if (!GameClosed())
-                {
-                    return;
-                }
-
                 s_logger.Info($"Found {running} Closed");
                 ForgetGame();
                 GameChanged?.Invoke(null);
+                running = null;
+            }
+
+            // A Game Stays, An App Gives Way To One
+            if (running is not null && _isGame)
+            {
+                return;
             }
 
             // A New Game Needs A Window On Screen To Record
             processes = Process.GetProcesses();
-            foreach (var process in processes)
-            {
-                if (
-                    process.Id != Environment.ProcessId
-                    && _games.TryGetValue(
-                        GameScanner.NormalizeProcessKey(process.ProcessName),
-                        out var game
+            var found = processes
+                .Select(process =>
+                    (
+                        Process: process,
+                        Game: _games.GetValueOrDefault(
+                            GameScanner.NormalizeProcessKey(process.ProcessName)
+                        )
                     )
-                    && process.MainWindowHandle is not 0 and var window
-                    && !IsIconic(window)
-                    && IsSameProgram(process, game)
                 )
+                .Where(candidate =>
+                    candidate.Game is { } game
+                    && (running is null || game.IsInstalledGame)
+                    && candidate.Process.Id != Environment.ProcessId
+                    && candidate.Process.MainWindowHandle is not 0 and var window
+                    && !IsIconic(window)
+                    && IsSameProgram(candidate.Process, game)
+                )
+                .OrderByDescending(candidate => candidate.Game!.IsInstalledGame)
+                .FirstOrDefault();
+            if (found.Game is { } next)
+            {
+                // Turned Off Meanwhile, The Game Waits For The Next Start
+                lock (_gate)
                 {
-                    // Turned Off Meanwhile, The Game Waits For The Next Start
-                    lock (_gate)
+                    if (!_enabled)
                     {
-                        if (!_enabled)
-                        {
-                            return;
-                        }
-
-                        _game = process;
-                        GameName = game.Name;
+                        return;
                     }
 
-                    s_logger.Info($"Found {game.Name} Running");
-                    GameChanged?.Invoke(game.Name);
-                    return;
+                    _game?.Dispose();
+                    _game = found.Process;
+                    _isGame = next.IsInstalledGame;
+                    GameName = next.Name;
                 }
+
+                s_logger.Info(
+                    running is null
+                        ? $"Found {next.Name} Running"
+                        : $"Found {next.Name} Running, A Game Goes Before {running}"
+                );
+                GameChanged?.Invoke(next.Name);
+                return;
             }
 
             _failing = false;

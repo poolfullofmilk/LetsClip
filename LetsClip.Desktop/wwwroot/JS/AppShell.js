@@ -437,14 +437,6 @@ window.letsClip = (() => {
 
     const pause = () => state?.video.pause();
 
-    // A Jump Past The End Point Lets Playback Run On
-    const nudge = (seconds) => {
-        if (!state) return;
-        const time = clamp(state.video.currentTime + seconds);
-        state.video.currentTime = time;
-        if (state.stopAt !== null && time >= state.stopAt) state.stopAt = null;
-    };
-
     // A Typed Or Marked Point Moves Like A Drag
     const place = (edge, time) => {
         if (!state) return;
@@ -454,6 +446,9 @@ window.letsClip = (() => {
         showEdge(range, edge);
         commit(range);
     };
+
+    // A Field's Arrows Step Its Point Like A Handle's Keys
+    const stepEdge = (edge, direction) => state && place(edge, readRange()[edge] + direction * step);
 
     // The Frame On Screen Starts The Clip Or Ends It
     const mark = (edge) => {
@@ -520,5 +515,5 @@ window.letsClip = (() => {
     // Scrolled Just Enough To Show The Whole Panel, Never Animated
     const reveal = (id) => document.getElementById(id)?.scrollIntoView({ block: "nearest" });
 
-    return { transition, watchEnd, attach, detach, play, pause, nudge, place, mark, setVolume, fullScreen, watchKeys, stopKeys: () => stopKeys(), reveal };
+    return { transition, watchEnd, attach, detach, play, pause, place, stepEdge, mark, setVolume, fullScreen, watchKeys, stopKeys: () => stopKeys(), reveal };
 })();

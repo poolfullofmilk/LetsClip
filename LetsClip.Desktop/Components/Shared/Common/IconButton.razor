@@ -1,13 +1,14 @@
 @* Icon Button *@
 <Tooltip Text="@Text"
          Placement="Placement"
-         Disabled="Disabled">
-    <MudIconButton Icon="@Icon"
+         Disabled="@(Disabled || Busy)">
+    <MudIconButton Icon="@(Busy ? null : Icon)"
                    aria-label="@Text"
                    Variant="@(Filled ? Variant.Filled : Variant.Text)"
                    Color="Color"
                    Size="@(Square ? Size.Medium : Size.Small)"
                    Class="@(Square ? "square" : null)"
                    Disabled="Disabled"
-                   OnClick="OnClick" />
+                   ChildContent="@(Busy ? s_spinner : null)"
+                   OnClick="PressAsync" />
 </Tooltip>

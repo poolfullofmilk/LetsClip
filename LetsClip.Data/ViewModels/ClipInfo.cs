@@ -22,7 +22,8 @@ public sealed record ClipInfo(
     public string Source => Game ?? (Monitor is { } number ? $"Monitor {number}" : "Monitor");
 
     // Without A Given Name, A Copied File Keeps Its Own
-    public string DefaultTitle => Game is null && ClipNames.DateOf(Name) is null ? Name : Source;
+    public string DefaultTitle =>
+        Game is null && ClipNames.DateOf(Name) is null ? Name : "Untitled";
 
     public string Title => CustomTitle ?? DefaultTitle;
 }

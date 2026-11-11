@@ -53,15 +53,23 @@ public static class Updater
             );
             var location = response.Headers.Location?.ToString() ?? string.Empty;
             var tag = location[(location.LastIndexOf('/') + 1)..];
+            if (Version.TryParse(tag.TrimStart('v', 'V'), out var latest))
+            {
+                s_logger.Debug($"Checked For Updates, The Latest Release Is {tag}");
+                return new ReleaseInfo(tag, latest);
+            }
 
-            return Version.TryParse(tag.TrimStart('v', 'V'), out var latest)
-                ? new ReleaseInfo(tag, latest)
-                : null;
+            // No Redirect Means GitHub Lists No Release Right Now
+            s_logger.Info(
+                $"Failed To Check For Updates, GitHub Answered {(int)response.StatusCode} Without A Release"
+            );
+            return null;
         }
         catch (Exception exception)
             when (exception is HttpRequestException or TaskCanceledException)
         {
             // Unreachable Means Unknown, Never Up To Date
+            s_logger.Info($"Failed To Check For Updates {exception.GetType().Name}");
             return null;
         }
     }

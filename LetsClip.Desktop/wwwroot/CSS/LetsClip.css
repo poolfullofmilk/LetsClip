@@ -27,7 +27,6 @@
     --page-top: 80px;
     --page-bottom: 28px;
     --nav-width: 240px;
-    --side-width: 360px;
     --glass-opacity: 66%;
     --glass-blur: blur(12px);
     --row-hover-amount: 12%;
@@ -41,9 +40,6 @@
     /* The Frame Is The Line Step, The Grip Text Grey */
     --grabber: color-mix(in srgb, var(--mud-palette-white) 15%, var(--mud-palette-surface));
     --grip: color-mix(in srgb, var(--mud-palette-white) 85%, var(--mud-palette-surface));
-    /* A Solid Dark Arrow Under An Icon Grey 2 */
-    --jump-arrow: color-mix(in srgb, var(--mud-palette-white) 20%, var(--mud-palette-surface));
-    --jump-digit: color-mix(in srgb, var(--mud-palette-white) 60%, var(--mud-palette-surface));
     /* A Full Button's Height, Which Square Icon Buttons Share */
     --action-size: calc(var(--mud-typography-button-size) * var(--mud-typography-button-lineheight) + 12px);
     --picture-shadow: 0 2px 12px 1px rgb(0 0 0 / 80%);
@@ -54,8 +50,6 @@
     --scrollbar-thumb: color-mix(in srgb, var(--mud-palette-white) 15%, transparent);
     --scrollbar-thumb-hover: color-mix(in srgb, var(--mud-palette-white) 35%, transparent);
     --icon-shadow: 0 2px 8px rgb(0 0 0 / 60%);
-    /* The Theme's Slight Lift, For A Glyph Without A Box */
-    --lift-drop: 0 1px 9px rgb(0 0 0 / 16%);
     --quick: 120ms ease-out;
     --fade: 150ms ease-out;
 }
@@ -64,7 +58,6 @@
 @media (max-width: 1440px) {
     :root {
         --nav-width: 200px;
-        --side-width: 300px;
         --page-gutter: 20px;
     }
 }
@@ -165,11 +158,6 @@
     scrollbar-gutter: stable;
 }
 
-/* A Filling Split Lets Its Main Column Reach The Bottom */
-.split.page-fill > .main-panel {
-    align-self: stretch;
-}
-
 /* Dialog Tables Scroll Inside A Box Rounded Like Fields */
 .mud-table.fit {
     display: flex;
@@ -183,10 +171,6 @@
         min-height: 0;
         overflow: auto;
     }
-
-.split.fill {
-    align-items: stretch;
-}
 
 /* A Closed Select Reads Like Its Item */
 .field-detail {
@@ -310,20 +294,6 @@
     }
 }
 
-/* The Game Row's Links Run Under It, Never Wrapping */
-.game-row {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-content: center;
-    justify-items: end;
-    column-gap: 16px;
-}
-
-    .game-row > .mud-link {
-        grid-column: 1 / -1;
-        white-space: nowrap;
-    }
-
 /* Two Columns Side By Side At Every Window Width */
 .split {
     display: flex;
@@ -332,7 +302,6 @@
 }
 
 .side-panel {
-    width: var(--side-width);
     flex-shrink: 0;
 }
 
@@ -697,6 +666,7 @@
 
 /* A Quick Load Never Shows Its Spinner */
 .player .mud-progress-circular-svg,
+.timeline .mud-progress-circular-svg,
 .loading-state .mud-progress-circular-svg {
     animation: fade-in var(--fade) 300ms backwards;
 }
@@ -711,6 +681,7 @@
     .timeline-strip,
     .player video,
     .player .mud-progress-circular-svg,
+    .timeline .mud-progress-circular-svg,
     .loading-state .mud-progress-circular-svg,
     ::view-transition-group(*),
     ::view-transition-old(*),
@@ -792,19 +763,6 @@
         font-weight: 500;
     }
 
-/* The Capture Button Keeps Its Icon Left, Text Centred */
-.mud-button-root.icon-left .mud-button-label:has(> .mud-button-icon-start) {
-    padding-inline: 28px;
-}
-
-    .mud-button-root.icon-left .mud-button-label > .mud-button-icon-start {
-        position: absolute;
-        top: 50%;
-        left: 16px;
-        margin: 0;
-        transform: translateY(-50%);
-    }
-
 /* A Field As Wide As Its Value, Its List Grows */
 .content-field {
     flex: 0 1 auto;
@@ -818,11 +776,22 @@
     }
 
 /* A Spinner Replaces A Button's Icon While It Works */
-.mud-button-icon-start .button-spinner {
+.button-spinner {
     width: 20px;
     height: 20px;
     color: inherit;
 }
+
+    /* Small Buttons Hold 18 Px Icons, Square Ones 24 */
+    .mud-button-icon-size-small .button-spinner {
+        width: 18px;
+        height: 18px;
+    }
+
+    .square .button-spinner {
+        width: 24px;
+        height: 24px;
+    }
 
 /* Progress Bars Run Rounded */
 .mud-progress-linear,
@@ -895,6 +864,16 @@ mark {
     gap: 12px;
 }
 
+/* A Day's Header Spans The Row, 24 Px Above */
+.clip-day {
+    grid-column: 1 / -1;
+    margin: 12px 8px -4px;
+}
+
+    .clip-day:first-child {
+        margin-top: 0;
+    }
+
 /* Thumbnails Keep The Clip's Shape, Portrait Ones Fit Inside */
 .clip-thumb {
     position: relative;
@@ -920,6 +899,14 @@ mark {
         position: absolute;
         right: 8px;
         bottom: 8px;
+    }
+
+    /* The Game Or Monitor Sits Top Right, Long Names Shortened */
+    .clip-thumb .source-chip {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        max-width: calc(100% - 16px);
     }
 
 /* A Hover Preview Plays Over The Picture, Under The Chips */
@@ -969,38 +956,44 @@ mark {
 /* #region Editor */
 /* Rows Under The Player Keep Fixed Heights For The Sizing */
 .editor {
-    /* A Field's Line, A Gap, Then The Clock Under Play */
-    --controls-height: 66px;
+    /* One 40 Px Line Of Fields And Buttons */
+    --controls-height: 40px;
     --timeline-height: 72px;
-    /* Start And End Fit 1m59,9s Beside Their Set Here Icon */
-    --trim-field-width: 116px;
-    /* Both Fields Mirrored Beside The Transport Centre Play */
-    --controls-min-width: calc(4 * var(--trim-field-width) + 3 * var(--action-size) + 6 * 8px);
+    /* Start And End Fit 1m59,9s Beside Their Icon And Arrows */
+    --trim-field-width: 138px;
+    /* Both Fields, The Clock And Three Icon Buttons */
+    --controls-min-width: calc(2 * var(--trim-field-width) + 240px);
 }
 
 /* The Side Panel Takes What The Clip Or Controls Leave */
 .split.editor {
     container-type: size;
+    /* The Height Left For The Clip In A Full Panel */
+    --clip-room: calc(100cqh - 48px - 32px - var(--controls-height) - var(--timeline-height));
 }
 
     /* Scrolls Like A Page, Scrollbar In The Gutter, Shadows Clear */
     .split.editor > .side-panel {
-        --side-content: clamp(300px, calc(100cqw - 24px - 48px - max((100cqh - 48px - 24px - var(--controls-height) - var(--timeline-height)) * var(--clip-aspect), var(--controls-min-width))), 480px);
+        --side-content: clamp(300px, calc(100cqw - 24px - 48px - max(var(--clip-room) * var(--clip-aspect), var(--controls-min-width))), 480px);
         width: calc(var(--side-content) + 16px + var(--page-gutter));
+        align-self: stretch;
         margin: -8px calc(-1 * var(--page-gutter)) calc(-1 * var(--page-bottom)) -16px;
         padding: 8px calc(var(--page-gutter) - var(--scrollbar-width)) var(--page-bottom) 16px;
         overflow-y: auto;
         scrollbar-gutter: stable;
     }
 
-/* The Player Takes The Height Left, The Clip Centred */
+/* As Tall As Its Clip, Up To The Room Left */
 .player {
     position: relative;
     display: flex;
+    flex: none;
     align-items: center;
     justify-content: center;
     width: 100%;
+    aspect-ratio: var(--clip-aspect);
     min-height: 96px;
+    max-height: var(--clip-room);
 }
 
 /* A Volume Change Shows Its Level, Then Fades */
@@ -1095,6 +1088,13 @@ mark {
     height: 100%;
     touch-action: none;
     cursor: pointer;
+}
+
+/* The Strip's Spinner Waits Centred In The Bar */
+.timeline-spinner {
+    position: absolute;
+    inset: 0;
+    margin: auto;
 }
 
 .timeline-strip {
@@ -1206,10 +1206,10 @@ mark {
 
 /* Start And End Left, Transport Centred, Sound Right */
 .player-controls {
-    display: grid;
+    display: flex;
     flex-shrink: 0;
-    grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
     align-items: center;
+    justify-content: space-between;
     gap: 8px;
     height: var(--controls-height);
 }
@@ -1222,39 +1222,39 @@ mark {
         height: 40px;
     }
 
-    /* The Clock Stands Clear Of Play */
-    .player-controls .transport {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-    }
-
-    /* The Jumps Draw Larger, Lifted Like Play Beside Them */
-    .player-controls .transport .square:not(.mud-button-filled) .mud-icon-root {
-        width: round(31.28px, var(--device-pixel));
-        height: round(31.28px, var(--device-pixel));
-        filter: drop-shadow(var(--lift-drop));
-    }
-
-    /* Solid Once Enabled, So The 2 Covers The Arrow Cleanly */
-    .player-controls .transport .square:not(:disabled) .jump-arrow {
-        fill: var(--jump-arrow);
-        opacity: 1;
-    }
-
-    .player-controls .transport .square:not(:disabled) .jump-digit {
-        stroke: var(--jump-digit);
-    }
-
 .player-time {
-    line-height: 20px;
-    text-align: center;
+    margin-inline-end: 8px;
+    white-space: nowrap;
     font-variant-numeric: tabular-nums;
 }
 
 .trim-field {
+    position: relative;
     width: var(--trim-field-width);
 }
+
+    /* Step Arrows Stacked At The Field's End */
+    .trim-spin {
+        position: absolute;
+        top: 0;
+        right: 6px;
+        bottom: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+        .trim-spin .mud-icon-button {
+            width: 20px;
+            height: 16px;
+            padding: 0;
+            border-radius: var(--radius-thumb);
+        }
+
+    /* The Set Here Icon Makes Room For Them */
+    .trim-field .mud-input-adornment-end {
+        margin-right: 22px;
+    }
 
     /* Typed Times At Label Size, As Tall As Every Field */
     .trim-field .mud-input {
@@ -1262,12 +1262,6 @@ mark {
         font-size: var(--mud-typography-body2-size);
         font-variant-numeric: tabular-nums;
     }
-
-/* A Quieter Second Line Inside A Button */
-.button-hint {
-    line-height: 1.2;
-    opacity: 0.7;
-}
 
 /* The Volume Slider Opens Above Its Button */
 .volume {

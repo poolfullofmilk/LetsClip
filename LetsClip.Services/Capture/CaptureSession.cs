@@ -38,7 +38,16 @@ public sealed class CaptureSession(
     private int _pins;
     private bool _deleteWhenUnused;
 
-    public CaptureOptions Options { get; } = options;
+    public CaptureOptions Options { get; private set; } = options;
+
+    public void SetSeconds(int seconds)
+    {
+        // The Cache Grows Or Shrinks From Its Next Segment On
+        Options = Options with
+        {
+            Seconds = seconds,
+        };
+    }
 
     // High Frame Rates Need Room For Their Whole Replay
     private long CacheBytes =>

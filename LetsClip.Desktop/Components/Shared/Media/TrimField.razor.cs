@@ -24,6 +24,10 @@ public partial class TrimField
     [Parameter]
     public EventCallback OnSet { get; set; }
 
+    // One Step Later Or Earlier, Like A Handle's Arrow Key
+    [Parameter]
+    public EventCallback<int> OnStep { get; set; }
+
     private int _version;
 
     private async Task CommitAsync(string text)

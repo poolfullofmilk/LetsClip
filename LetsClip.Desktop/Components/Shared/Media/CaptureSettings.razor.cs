@@ -8,7 +8,7 @@ using MudBlazor;
 
 namespace LetsClip.Desktop.Components.Shared.Media;
 
-public partial class CapturePanel : IDisposable
+public partial class CaptureSettings : IDisposable
 {
     [Inject]
     public required CaptureController Controller { get; set; }
@@ -17,49 +17,16 @@ public partial class CapturePanel : IDisposable
     public required DesktopShell Shell { get; set; }
 
     [Inject]
-    public required IDialogService DialogService { get; set; }
-
-    [Inject]
     public required ISnackbar Snackbar { get; set; }
-
-    private string? _saveError;
-
-    private CaptureStatus Status => Controller.Recorder.Status;
-
-    private bool IsRecommended =>
-        Controller.Resolution == Controller.RecommendedResolution
-        && Controller.FrameRate == Controller.RecommendedFrameRate
-        && Controller.Settings.Quality == CaptureController.RecommendedQuality;
-
-    // One Alert At Most, The Most Pressing First
-    private (Severity Severity, string Text)? Alert =>
-        Controller.ShowsError && Status.Message is { } error ? (Severity.Error, error)
-        : _saveError is { } saveError ? (Severity.Warning, saveError)
-        : Shell.HotkeyProblem is { } hotkey ? (Severity.Warning, hotkey)
-        : Status is { State: CaptureState.Recording, Warning: { } warning }
-            ? (Severity.Warning, warning)
-        : Status is { State: not CaptureState.Error, Message: { } message }
-            ? (Severity.Info, message)
-        : null;
 
     protected override void OnInitialized()
     {
-        Controller.Recorder.StatusChanged += OnChanged;
-        Controller.Recorder.ClipSaved += OnClipSaved;
         Controller.Changed += OnChanged;
-        Shell.HotkeyChanged += OnChanged;
     }
 
     private void OnChanged()
     {
         _ = InvokeAsync(StateHasChanged);
-    }
-
-    private void OnClipSaved(ClipInfo clip)
-    {
-        // Any Later Save Makes An Old Failure Stale
-        _saveError = null;
-        OnChanged();
     }
 
     private static string MonitorLabel(MonitorInfo? monitor)
@@ -143,11 +110,6 @@ public partial class CapturePanel : IDisposable
         );
     }
 
-    private void SetGamesOnly(bool enabled)
-    {
-        Controller.UpdateSettings(settings => settings with { GamesOnly = enabled });
-    }
-
     private void SetReplay(int seconds)
     {
         Controller.UpdateSettings(settings => settings with { ReplaySeconds = seconds });
@@ -202,43 +164,10 @@ public partial class CapturePanel : IDisposable
         );
     }
 
-    private void UseRecommended()
-    {
-        // One Change, So Capture Restarts Once
-        var (resolution, rate) = (
-            Controller.RecommendedResolution,
-            Controller.RecommendedFrameRate
-        );
-        Controller.UpdateSettings(settings =>
-            settings with
-            {
-                Resolution = resolution,
-                FrameRate = rate,
-                Quality = CaptureController.RecommendedQuality,
-            }
-        );
-    }
-
-    private async Task TryAgainAsync()
-    {
-        _saveError = null;
-        await Controller.StartAutomaticallyAsync();
-    }
-
-    private async Task SaveAsync()
-    {
-        // The Same Save As The Hotkey, Off The Page's Thread
-        var outcome = await Task.Run(Controller.SaveAsync);
-        _saveError = outcome.Error;
-    }
-
     public void Dispose()
     {
         Shell.HideMonitors();
-        Controller.Recorder.StatusChanged -= OnChanged;
-        Controller.Recorder.ClipSaved -= OnClipSaved;
         Controller.Changed -= OnChanged;
-        Shell.HotkeyChanged -= OnChanged;
         GC.SuppressFinalize(this);
     }
 }

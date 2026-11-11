@@ -28,6 +28,24 @@ public partial class IconButton
     [Parameter]
     public bool Disabled { get; set; }
 
+    // A Spinner In The Icon's Place While Its Work Runs
+    [Parameter]
+    public bool Busy { get; set; }
+
     [Parameter]
     public EventCallback OnClick { get; set; }
+
+    private static readonly RenderFragment s_spinner = builder =>
+    {
+        builder.OpenComponent<MudProgressCircular>(0);
+        builder.AddComponentParameter(1, nameof(MudProgressCircular.Indeterminate), true);
+        builder.AddComponentParameter(2, nameof(MudProgressCircular.Class), "button-spinner");
+        builder.CloseComponent();
+    };
+
+    private Task PressAsync()
+    {
+        // A Press While It Works Does Nothing
+        return Busy ? Task.CompletedTask : OnClick.InvokeAsync();
+    }
 }

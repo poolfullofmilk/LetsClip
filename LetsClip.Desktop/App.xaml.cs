@@ -197,6 +197,8 @@ public partial class App : Application
         // Signing In Starts LetsClip In The Tray, Already Recording
         if (!startsInTray)
         {
+            // A Sandboxed Test Run Never Takes Focus From A Game
+            _window.ShowActivated = AppInfo.SandboxRoot is null;
             _window.Show();
         }
 

@@ -33,9 +33,13 @@ else
                         Text="Back to Clips"
                         OnClick="Back" />
             <MudText Typo="Typo.h5"
-                     Class="header-title mx-2">
+                     Class="header-title mx-3">
                 @Title
             </MudText>
+            @if (_clip is { } titled)
+            {
+                <SourceChip Clip="titled" />
+            }
             <MudSpacer />
             @if (_clip?.HasOriginal == true)
             {
@@ -44,6 +48,7 @@ else
                             Text="Restore Original"
                             Placement="Placement.Left"
                             Disabled="@(_exporting || _swapping)"
+                            Busy="_restoring"
                             OnClick="RestoreOriginalAsync" />
             }
             @* Copy Button *@
@@ -70,14 +75,13 @@ else
                     Class="split fill editor"
                     Style="@($"--clip-aspect:{Exact(ClipAspect)}")">
             <MudElement HtmlTag="div"
-                        Class="main-panel fill-column">
+                        Class="main-panel">
                 <MudPaper Elevation="4"
-                          Class="rounded-panel pa-6 fill fill-column">
-                    <MudStack Spacing="3"
-                              Class="fill">
+                          Class="rounded-panel pa-6">
+                    <MudStack Spacing="4">
                         @* Player *@
                         <MudElement HtmlTag="div"
-                                    Class="player fill">
+                                    Class="player">
                             @if (!_ready && !_playError)
                             {
                                 <MudProgressCircular Color="Color.Info"
@@ -124,45 +128,27 @@ else
                                            Value="_range.Start"
                                            Disabled="@(!_ready)"
                                            OnCommit="@(start => PlaceAsync("start", start))"
-                                           OnSet="@(() => MarkAsync("start"))" />
+                                           OnSet="@(() => MarkAsync("start"))"
+                                           OnStep="@(direction => StepAsync("start", direction))" />
                                 <TrimField Label="End"
                                            Icon="@Icons.Material.Rounded.LastPage"
                                            Value="_range.End"
                                            Disabled="@(!_ready)"
                                            OnCommit="@(end => PlaceAsync("end", end))"
-                                           OnSet="@(() => MarkAsync("end"))" />
+                                           OnSet="@(() => MarkAsync("end"))"
+                                           OnStep="@(direction => StepAsync("end", direction))" />
                             </MudElement>
                             <MudElement HtmlTag="div"
-                                        Class="transport">
-                                <MudElement HtmlTag="div"
-                                            Class="control-line">
-                                    @* Back Button *@
-                                    <IconButton Icon="@AppTheme.BackTwoIcon"
-                                                Text="Back 2 Seconds"
-                                                Square
-                                                Disabled="@(!_ready)"
-                                                OnClick="() => NudgeAsync(-SeekStep)" />
-                                    @* Play Button *@
-                                    <IconButton Icon="@(_paused ? Icons.Material.Rounded.PlayArrow : Icons.Material.Rounded.Pause)"
-                                                Text="@PlayTip"
-                                                Filled
-                                                Square
-                                                Disabled="@(!_ready)"
-                                                OnClick="TogglePlayAsync" />
-                                    @* Forward Button *@
-                                    <IconButton Icon="@AppTheme.ForwardTwoIcon"
-                                                Text="Forward 2 Seconds"
-                                                Square
-                                                Disabled="@(!_ready)"
-                                                OnClick="() => NudgeAsync(SeekStep)" />
-                                </MudElement>
+                                        Class="control-line">
                                 <PlayerClock @ref="_clock"
                                              @key="_path"
                                              Start="_range.Start"
                                              Duration="_duration" />
-                            </MudElement>
-                            <MudElement HtmlTag="div"
-                                        Class="control-line justify-end">
+                                @* Play Button *@
+                                <IconButton Icon="@(_paused ? Icons.Material.Rounded.PlayArrow : Icons.Material.Rounded.Pause)"
+                                            Text="@PlayTip"
+                                            Disabled="@(!_ready)"
+                                            OnClick="TogglePlayAsync" />
                                 @* Mute Button *@
                                 <VolumeButton Text="@MuteTip"
                                               Disabled="@(!_ready)"
@@ -185,6 +171,13 @@ else
                                 <MudImage Src="@strip"
                                           Alt=""
                                           Class="timeline-strip" />
+                            }
+                            else if (_stripLoading)
+                            {
+                                <MudProgressCircular Color="Color.Info"
+                                                     Size="Size.Small"
+                                                     Indeterminate
+                                                     Class="timeline-spinner" />
                             }
                             <MudElement @bind-Ref="_timeline"
                                         HtmlTag="div"
@@ -245,6 +238,7 @@ else
                                  Clip="clip"
                                  SaveCut="SaveCutAsync"
                                  CanSaveCut="@CanSaveCut()"
+                                 Cutting="_cutting"
                                  Busy="_swapping"
                                  ExportingChanged="SetExporting"
                                  Range="_range"
@@ -272,6 +266,13 @@ else
                             </MudText>
                         </SettingRow>
                     </ExportPanel>
+                }
+                else
+                {
+                    <MudPaper Elevation="4"
+                              Class="rounded-panel">
+                        <Loading />
+                    </MudPaper>
                 }
             </MudElement>
         </MudElement>

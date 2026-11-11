@@ -14,6 +14,10 @@ public partial class Panel
     [Parameter]
     public string? Id { get; set; }
 
+    // Buttons At The Title's Right End
+    [Parameter]
+    public RenderFragment? Actions { get; set; }
+
     [Parameter]
     public RenderFragment? ChildContent { get; set; }
 }

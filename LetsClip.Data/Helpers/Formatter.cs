@@ -74,17 +74,26 @@ public static partial class Formatter
     )]
     private static partial Regex DurationText();
 
-    public static string FormatDateTime(DateTimeOffset time, DateTime? today = null)
+    public static string FormatDay(DateTimeOffset time, DateTime? today = null)
     {
         // Today And Yesterday By Name, Older Days As 6-11-2026
         var local = time.ToLocalTime();
-        var day = ((today ?? DateTime.Today) - local.Date).Days switch
+        return ((today ?? DateTime.Today) - local.Date).Days switch
         {
             0 => "Today",
             1 => "Yesterday",
             _ => local.ToString("d-M-yyyy", s_invariant),
         };
-        return $"{day} at {local.ToString("H:mm", s_invariant)}";
+    }
+
+    public static string FormatTime(DateTimeOffset time)
+    {
+        return time.ToLocalTime().ToString("H:mm", s_invariant);
+    }
+
+    public static string FormatDateTime(DateTimeOffset time, DateTime? today = null)
+    {
+        return $"{FormatDay(time, today)} at {FormatTime(time)}";
     }
 
     public static string FormatFileDate(DateTimeOffset time)

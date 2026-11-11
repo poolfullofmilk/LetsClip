@@ -1,0 +1,130 @@
+@* Monitor Row *@
+<SettingRow Title="Monitor">
+    @* Monitor Select *@
+    <FieldDetail Class="fixed-width"
+                 Detail="@MonitorDetail(Controller.SelectedMonitor)">
+        <ChoiceSelect T="MonitorInfo"
+                      Value="Controller.SelectedMonitor"
+                      ValueChanged="SelectMonitor"
+                      OpenChanged="OutlineMonitors"
+                      ToStringFunc="MonitorLabel"
+                      Disabled="@Controller.Settings.GamesOnly"
+                      aria-label="Monitor">
+            @foreach (var monitor in Controller.Monitors)
+            {
+                <MudSelectItem T="MonitorInfo"
+                               Value="monitor">
+                    <MudStack Row
+                              Justify="Justify.SpaceBetween"
+                              AlignItems="AlignItems.Center"
+                              Spacing="4">
+                        <MudText Typo="Typo.body2">@monitor.FriendlyName</MudText>
+                        <MudStack Spacing="0"
+                                  AlignItems="AlignItems.End">
+                            <MudText Typo="Typo.body2"
+                                     Class="mud-text-secondary">
+                                @($"{monitor.Width} × {monitor.Height}")
+                            </MudText>
+                            <MudText Typo="Typo.body2"
+                                     Class="mud-text-secondary">
+                                @($"{monitor.RefreshRate} Hz")
+                            </MudText>
+                        </MudStack>
+                    </MudStack>
+                </MudSelectItem>
+            }
+        </ChoiceSelect>
+    </FieldDetail>
+</SettingRow>
+<MudDivider />
+@* Replay Length Row *@
+<SettingRow Title="Replay Length">
+    @* Replay Length Select *@
+    <FieldDetail Class="fixed-width">
+        <ChoiceSelect T="int"
+                      Value="Controller.Settings.ReplaySeconds"
+                      ValueChanged="SetReplay"
+                      ToStringFunc="ReplayLabel"
+                      aria-label="Replay Length">
+            @foreach (var seconds in UserSettings.ReplayChoices)
+            {
+                <MudSelectItem T="int"
+                               Value="seconds">
+                    <ItemLabel Text="@ReplayLabel(seconds)" />
+                </MudSelectItem>
+            }
+        </ChoiceSelect>
+    </FieldDetail>
+</SettingRow>
+<MudDivider />
+@* Resolution Row *@
+<SettingRow Title="Resolution">
+    @* Resolution Select *@
+    <FieldDetail Class="fixed-width"
+                 Color="@ResolutionColor(Controller.Resolution)"
+                 Detail="@RecommendedText(Controller.Resolution == Controller.RecommendedResolution)">
+        <ChoiceSelect T="int"
+                      Value="Controller.Resolution"
+                      ValueChanged="SetResolution"
+                      ToStringFunc="ResolutionLabel"
+                      aria-label="Resolution">
+            @foreach (var lines in Controller.ResolutionChoices)
+            {
+                <MudSelectItem T="int"
+                               Value="lines">
+                    <ItemLabel Text="@ResolutionLabel(lines)"
+                               Color="@ResolutionColor(lines)"
+                               Detail="@RecommendedText(lines == Controller.RecommendedResolution)" />
+                </MudSelectItem>
+            }
+        </ChoiceSelect>
+    </FieldDetail>
+</SettingRow>
+<MudDivider />
+@* Frame Rate Row *@
+<SettingRow Title="Frame Rate">
+    @* Frame Rate Select *@
+    <FieldDetail Class="fixed-width"
+                 Color="@FrameRateColor(Controller.FrameRate)"
+                 Detail="@RecommendedText(Controller.FrameRate == Controller.RecommendedFrameRate)">
+        <ChoiceSelect T="int"
+                      Value="Controller.FrameRate"
+                      ValueChanged="SetFrameRate"
+                      ToStringFunc="FrameRateLabel"
+                      aria-label="Frame Rate">
+            @foreach (var rate in Controller.FrameRateChoices)
+            {
+                <MudSelectItem T="int"
+                               Value="rate">
+                    <ItemLabel Text="@FrameRateLabel(rate)"
+                               Color="@FrameRateColor(rate)"
+                               Detail="@RecommendedText(rate == Controller.RecommendedFrameRate)" />
+                </MudSelectItem>
+            }
+        </ChoiceSelect>
+    </FieldDetail>
+</SettingRow>
+<MudDivider />
+@* Quality Row *@
+<SettingRow Title="Quality">
+    @* Quality Select *@
+    <FieldDetail Class="fixed-width"
+                 Color="@QualityColor(Controller.Settings.Quality)"
+                 Detail="@RecommendedText(Controller.Settings.Quality == CaptureController.RecommendedQuality)">
+        <ChoiceSelect T="CaptureQuality"
+                      Value="Controller.Settings.Quality"
+                      ValueChanged="SetQuality"
+                      ToStringFunc="@(quality => quality.ToString())"
+                      aria-label="Quality">
+            @foreach (var quality in Enum.GetValues<CaptureQuality>())
+            {
+                <MudSelectItem T="CaptureQuality"
+                               Value="quality">
+                    <ItemLabel Text="@quality.ToString()"
+                               Color="@QualityColor(quality)"
+                               Detail="@RecommendedText(quality == CaptureController.RecommendedQuality)" />
+                </MudSelectItem>
+            }
+        </ChoiceSelect>
+    </FieldDetail>
+</SettingRow>

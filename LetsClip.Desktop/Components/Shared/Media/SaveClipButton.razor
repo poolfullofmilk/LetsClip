@@ -1,0 +1,34 @@
+@if (Controller.ShowsError)
+{
+    @* Try Again Button *@
+    <MudButton Variant="Variant.Filled"
+               Color="Color.Info"
+               Size="Size.Small"
+               StartIcon="@Icons.Material.Rounded.Refresh"
+               OnClick="Controller.StartAutomaticallyAsync">
+        Try Again
+    </MudButton>
+}
+else
+{
+    @* Save Button *@
+    <Tooltip Text="@($"Or Press {Controller.Settings.Hotkey}")"
+             Disabled="@(!Controller.IsRecording || Shell.HotkeyProblem is not null)">
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Info"
+                   Size="Size.Small"
+                   StartIcon="@(Status.IsSaving ? null : Icons.Material.Rounded.Save)"
+                   Disabled="@(!Controller.IsRecording)"
+                   OnClick="SaveAsync">
+            @if (Status.IsSaving)
+            {
+                <MudElement HtmlTag="span"
+                            Class="mud-button-icon-start mud-button-icon-size-small">
+                    <MudProgressCircular Indeterminate
+                                         Class="button-spinner" />
+                </MudElement>
+            }
+            @($"Save Last {Controller.Settings.ReplaySeconds} Seconds")
+        </MudButton>
+    </Tooltip>
+}
