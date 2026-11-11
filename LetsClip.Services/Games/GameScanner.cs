@@ -47,7 +47,12 @@ internal static partial class GameScanner
         @"bin\win64",
         @"game\bin\win64",
         @"live\ShooterGame\Binaries\Win64",
+        "Content",
     ];
+
+    private static readonly string s_programData = Environment.GetFolderPath(
+        Environment.SpecialFolder.CommonApplicationData
+    );
 
     private static readonly string[] s_steamRoots =
     [
@@ -72,13 +77,14 @@ internal static partial class GameScanner
     // Reads Many Folders, Its One Caller Keeps The Result
     public static IReadOnlyDictionary<string, AddedGame> Scan()
     {
-        Dictionary<string, AddedGame> installedGames = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, AddedGame> installedGames = [with(StringComparer.OrdinalIgnoreCase)];
 
         var gameRoots = DiscoverSteamGameRoots()
             .Concat(DiscoverEpicGameRoots())
             .Concat(DiscoverRiotGameRoots())
             .Concat(DiscoverRockstarGameRoots())
             .Concat(DiscoverRobloxGameRoots())
+            .Concat(DiscoverXboxGameRoots())
             .Concat(s_commonGameRoots.SelectMany(EnumerateDirectoriesSafely));
 
         foreach (var rootDirectory in gameRoots)
@@ -293,12 +299,20 @@ internal static partial class GameScanner
     {
         return RootsFrom(roots =>
         {
+            // Steam Says Where It Lives, Program Files Only By Default
+            string?[] steamRoots =
+            [
+                Registry.GetValue(@"HKEY_CURRENT_USER\Software\Valve\Steam", "SteamPath", null)
+                    as string,
+                Registry.GetValue(
+                    @"HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Valve\Steam",
+                    "InstallPath",
+                    null
+                ) as string,
+                .. s_steamRoots,
+            ];
             var libraryFolders = File.ReadAllText(
-                Path.Combine(
-                    s_steamRoots.First(Directory.Exists),
-                    "steamapps",
-                    "libraryfolders.vdf"
-                )
+                Path.Combine(steamRoots.First(Directory.Exists)!, "steamapps", "libraryfolders.vdf")
             );
 
             foreach (Match libraryMatch in LibraryPathRegex().Matches(libraryFolders))
@@ -343,7 +357,7 @@ internal static partial class GameScanner
         {
             foreach (
                 var itemFilePath in EnumerateFilesSafely(
-                    @"C:\ProgramData\Epic\EpicGamesLauncher\Data\Manifests",
+                    Path.Combine(s_programData, @"Epic\EpicGamesLauncher\Data\Manifests"),
                     "*.item"
                 )
             )
@@ -371,7 +385,7 @@ internal static partial class GameScanner
         return RootsFrom(roots =>
         {
             using var jsonDocument = JsonDocument.Parse(
-                File.ReadAllText(@"C:\ProgramData\Riot Games\RiotClientInstalls.json")
+                File.ReadAllText(Path.Combine(s_programData, @"Riot Games\RiotClientInstalls.json"))
             );
 
             foreach (var property in jsonDocument.RootElement.EnumerateObject())
@@ -395,7 +409,12 @@ internal static partial class GameScanner
     {
         var found = RootsFrom(roots =>
         {
-            using var baseKey = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Rockstar Games");
+            // The Launcher Is 32 Bit, Its Keys Sit There
+            using var machine = RegistryKey.OpenBaseKey(
+                RegistryHive.LocalMachine,
+                RegistryView.Registry32
+            );
+            using var baseKey = machine.OpenSubKey(@"SOFTWARE\Rockstar Games");
 
             foreach (var subKeyName in baseKey?.GetSubKeyNames() ?? [])
             {
@@ -425,6 +444,16 @@ internal static partial class GameScanner
             )
             .Where(directory => File.Exists(Path.Combine(directory, "RobloxPlayerBeta.exe")))
             .Take(1);
+
+    // The Xbox App Installs Each Game In A Content Folder
+    private static IEnumerable<string> DiscoverXboxGameRoots() =>
+        DriveInfo
+            .GetDrives()
+            .Where(drive => drive.DriveType == DriveType.Fixed)
+            .SelectMany(drive => EnumerateDirectoriesSafely(Path.Combine(drive.Name, "XboxGames")))
+            .Where(directory =>
+                !directory.EndsWith("Launcher", StringComparison.OrdinalIgnoreCase)
+            );
     #endregion
 
     #region File System

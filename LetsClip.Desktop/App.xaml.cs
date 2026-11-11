@@ -22,9 +22,17 @@ public partial class App : Application
     private EventWaitHandle? _showSignal;
     private MainWindow? _window;
 
+    public Tray? Tray { get; private set; }
+
     protected override void OnStartup(StartupEventArgs eventArgs)
     {
         base.OnStartup(eventArgs);
+        if (Updater.MoveToInstallFolder(eventArgs.Args))
+        {
+            Shutdown();
+            return;
+        }
+
         var previousVersion = Updater.WaitForPreviousVersion(eventArgs.Args);
         LogManager
             .Setup()
@@ -38,6 +46,13 @@ public partial class App : Application
                         maxArchiveFiles: 30
                     )
             );
+
+        // A Crash Off The Window's Thread Ends LetsClip, Logged First
+        AppDomain.CurrentDomain.UnhandledException += (_, exceptionArgs) =>
+        {
+            s_logger.Fatal(exceptionArgs.ExceptionObject as Exception, "Crashed");
+            LogManager.Shutdown();
+        };
 
         // A Second Launch Shows The First Window, Two Recorders Fight
         _showSignal = new EventWaitHandle(
@@ -63,6 +78,18 @@ public partial class App : Application
         {
             // Without A Window The Process Would Linger Unseen
             s_logger.Fatal(exception, "Failed To Start");
+
+            // A Failed Update Hands Back To The Version It Replaced
+            if (
+                File.Exists(previousVersion)
+                && !FilePaths.AreSame(previousVersion, Environment.ProcessPath)
+            )
+            {
+                Updater.Launch(previousVersion, eventArgs.Args.Contains("--tray"));
+                Shutdown(1);
+                return;
+            }
+
             MessageBox.Show(
                 $"{AppInfo.DisplayName} could not start, see the log in {AppInfo.LogsDirectory}",
                 AppInfo.DisplayName,
@@ -156,9 +183,9 @@ public partial class App : Application
 
         _window = new MainWindow(services.BuildServiceProvider(), controller, shell);
         MainWindow = _window;
-        _window.Attach();
+        Tray = new Tray(_window, controller, shell);
         WatchSystem(controller);
-        SessionEnding += (_, _) => _window.ExitNow();
+        SessionEnding += (_, _) => Tray.ExitNow();
         ThreadPool.RegisterWaitForSingleObject(
             _showSignal!,
             (_, _) => Dispatcher.InvokeAsync(_window.ShowFromTray),
@@ -175,6 +202,16 @@ public partial class App : Application
 
         _ = controller.StartAutomaticallyAsync();
         Updater.DeletePreviousVersion(previousVersion);
+
+        // Started Well, The Update That Brought It Is Forgotten
+        if (
+            Version.TryParse(controller.Settings.AttemptedUpdate?.TrimStart('v'), out var attempted)
+            && attempted <= AppInfo.Version
+        )
+        {
+            controller.UpdateSettings(settings => settings with { AttemptedUpdate = null });
+        }
+
         _ = Task.Run(Updater.DeleteOldUnpackedVersions);
 
         // How Long Windows And This Start Took

@@ -138,9 +138,9 @@ public sealed class ReplayRecorder : IDisposable
                 $"Started Recording {(session.Options.GameWindow != 0 ? "A Game Window On " : "")}{session.Options.Monitor.Label} With {session.Encoder.Name}{(session.Encoder.GpuFrames ? " On The GPU" : "")} At {session.Size.Width} × {session.Size.Height}, {session.Options.FrameRate} FPS, {session.Options.Quality}, Keeping {session.Options.Seconds} s"
             );
         }
-        catch (Exception exception) when (IsStartFailure(exception))
+        catch (Exception exception)
         {
-            // Any Failed Start Shows As An Error
+            // Whatever A Start Throws Ends On Error And Retries
             var message = exception.Message.TrimEnd('.');
             Failed?.Invoke(
                 exception is CaptureBlockedException ? CaptureFailure.Blocked : CaptureFailure.Brief
@@ -261,8 +261,11 @@ public sealed class ReplayRecorder : IDisposable
             );
         foreach (var encoder in encoders)
         {
+            // A Failed Or Hung Test Is Never Run Twice
+            var unavailable = $"{encoder.Name} unavailable";
             if (
-                !await VideoEncoders.WorksAsync(
+                skipped.Contains(unavailable)
+                || !await VideoEncoders.WorksAsync(
                     encoder,
                     width,
                     height,
@@ -271,7 +274,7 @@ public sealed class ReplayRecorder : IDisposable
                 )
             )
             {
-                skipped.Add($"{encoder.Name} unavailable");
+                skipped.Add(unavailable);
                 continue;
             }
 
@@ -391,7 +394,14 @@ public sealed class ReplayRecorder : IDisposable
         for (var attempt = 0; better.Count > 0; attempt++)
         {
             var wait = s_upgradeWaits[Math.Min(attempt, s_upgradeWaits.Length - 1)];
-            await Task.WhenAny(Task.Delay(wait), current.Ended);
+
+            // The Wait Ends With The Session, No Timer Left Behind
+            using (var waited = new CancellationTokenSource())
+            {
+                await Task.WhenAny(Task.Delay(wait, waited.Token), current.Ended);
+                waited.Cancel();
+            }
+
             if (current.Stopping || current.HasEnded)
             {
                 return;
@@ -429,11 +439,19 @@ public sealed class ReplayRecorder : IDisposable
         try
         {
             await standby.LaunchAsync();
-            await Task.WhenAny(
-                Task.Delay(TimeSpan.FromSeconds(options.Seconds + CaptureSession.SegmentSeconds)),
-                standby.Ended,
-                current.Ended
-            );
+            using (var waited = new CancellationTokenSource())
+            {
+                await Task.WhenAny(
+                    Task.Delay(
+                        TimeSpan.FromSeconds(options.Seconds + CaptureSession.SegmentSeconds),
+                        waited.Token
+                    ),
+                    standby.Ended,
+                    current.Ended
+                );
+                waited.Cancel();
+            }
+
             if (!standby.HasEnded && await SwapAsync(current, standby))
             {
                 return true;
@@ -496,11 +514,15 @@ public sealed class ReplayRecorder : IDisposable
             try
             {
                 await standby.LaunchAsync();
-                await Task.WhenAny(
-                    standby.Video!.FirstSegment,
-                    Task.Delay(s_windowProbe),
-                    current.Ended
-                );
+                using (var waited = new CancellationTokenSource())
+                {
+                    await Task.WhenAny(
+                        standby.Video!.FirstSegment,
+                        Task.Delay(s_windowProbe, waited.Token),
+                        current.Ended
+                    );
+                    waited.Cancel();
+                }
 
                 // A Window That Just Moved Reaches The Old One Too
                 await Task.Delay(s_windowWait);

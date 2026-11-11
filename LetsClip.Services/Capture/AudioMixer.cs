@@ -143,9 +143,9 @@ public sealed class AudioMixer : IDisposable
                 }
             }
         }
-        catch (Exception exception) when (exception is InvalidOperationException or Win32Exception)
+        catch (Exception exception)
         {
-            // A Failed Look Waits, The Game Still Records
+            // A Throwing Timer Ends LetsClip, The Game Still Records
             s_logger.Debug($"Failed To Look For Discord {exception.GetType().Name}");
         }
         finally
@@ -247,6 +247,11 @@ public sealed class AudioMixer : IDisposable
         catch (Exception exception) when (exception is IOException or ObjectDisposedException)
         {
             // The Encoder Closed Its Input, The Recorder Reports Why
+        }
+        catch (Exception exception)
+        {
+            // A Throwing Thread Ends LetsClip, The Stall Check Restarts
+            s_logger.Warn($"Failed To Write Audio {exception.GetType().Name}");
         }
     }
 

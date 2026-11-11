@@ -123,12 +123,27 @@ trackDevicePixel();
 
 window.letsClip = (() => {
     // Changes Run Through Here Animate, Named Cards Slide
-    const transition = (dotnet, method) => {
-        const change = () => dotnet.invokeMethodAsync(method).catch(() => {});
+    const transition = (dotnet, method, fromTop) => {
+        const change = async () => {
+            await dotnet.invokeMethodAsync(method).catch(() => {});
+            // A New Order Or Filter Reads From Its Start
+            if (fromTop) document.querySelector(".page-scroll")?.scrollTo(0, 0);
+        };
         // No Transition Support Still Makes The Change
         if (!document.startViewTransition) return void change();
         // A Newer Change Skips This One, Which Rejects Ready
         document.startViewTransition(change).ready.catch(() => {});
+    };
+
+    // The Last Card Nearing The View Asks For More Cards
+    let listEnd = null;
+    const watchEnd = (dotnet, method) => {
+        listEnd?.disconnect();
+        const last = document.querySelector(".clip-grid > :last-child");
+        if (!last) return;
+        const near = (entries) => entries.some((entry) => entry.isIntersecting) && dotnet.invokeMethodAsync(method).catch(() => {});
+        listEnd = new IntersectionObserver(near, { root: last.closest(".page-scroll"), rootMargin: "100% 0px" });
+        listEnd.observe(last);
     };
 
     // The Shortest Selection, Matching TrimRange.Step
@@ -505,5 +520,5 @@ window.letsClip = (() => {
     // Scrolled Just Enough To Show The Whole Panel, Never Animated
     const reveal = (id) => document.getElementById(id)?.scrollIntoView({ block: "nearest" });
 
-    return { transition, attach, detach, play, pause, nudge, place, mark, setVolume, fullScreen, watchKeys, stopKeys: () => stopKeys(), reveal };
+    return { transition, watchEnd, attach, detach, play, pause, nudge, place, mark, setVolume, fullScreen, watchKeys, stopKeys: () => stopKeys(), reveal };
 })();

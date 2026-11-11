@@ -1,0 +1,62 @@
+# LetsClip, Recovery
+
+What heals itself and what the person sees, with the research and injected failures behind it. Read before touching recovery, retries, encoders or anything that can fail; add every new failure to the table. Part of `CLAUDE.md`, its rules bind the same way.
+
+## Recovery
+
+The owner's rule: consistent on every kind of system, and anything that can fix itself does so without the person noticing. Only what lasts or what they alone can fix is ever shown. Add every new failure to this table.
+
+| What goes wrong | What happens | What the person sees |
+|---|---|---|
+| A hardware encoder's capture hangs or fails to start | The same encoder gets a second start (12 s limit each), then the next one | Recording throughout |
+| Recording runs on a lesser encoder than the machine has | `UpgradeAsync` tries the better one after 1, 2, 5 and 15 minutes, then every 30: it runs beside the running session until it holds a whole replay, then takes over, so no history is lost and a failed try costs nothing | Nothing |
+| A window's encoder hangs, at the start or mid session | A hung encoder and a still window both send nothing, so after 20 s of no video segment `ProbeWindowAsync` starts a fresh capture beside it, on the same encoder and then x264, at most once per quiet spell. Only a fresh capture that draws while the old one still sends nothing takes over; a still window keeps its session and history | Recording throughout |
+| A session dies or stalls | Retries after 2, 5, 15, 30 s, then each minute | Recording for the first four in a row, about a minute, then the error with Try Again while retries go on |
+| HDR on, under 2 GB free, FFmpeg missing, monitor gone (`CaptureBlockedException`, `CaptureFailure.Blocked`) | Retried the same way | Shown at once, only the person can fix these |
+| An audio device is pulled or restarts | Reconnects, falling back to the default | A Notice only after 5 s of it (`ProblemTicks`) |
+| Capture falls below its frame rate | Nothing to do | A Notice only after 10 slow reports (`SlowTicks`), never for a loading screen |
+| A save hits an IO error (a scanner holding the file) | Saved again after 1 s | Nothing |
+| The clips folder is gone or read only | `ClipSaver.FolderFor` saves to `Videos\LetsClip` | The balloon opens that file |
+| An export encoder hangs or fails | The next encoder takes over | Progress carries on |
+| A page throws | `SelfHealingBoundary` logs it and goes back to Clips, waiting for the route so the broken page is not rendered again; a second failure within 10 s shows the panel, so it can never loop | Clips |
+| WebView2's renderer crashes | `ProcessFailed` reloads the page, recording never depended on it | A blink |
+| WebView2's whole browser process exits | `ProcessFailed` with `BrowserProcessExited` runs `MainWindow.RebuildPageAsync`: the dead page is released without waiting on it (`ReleasePageAsync(browserGone: true)`, the control disposed directly) and a new one is built at once while shown, else on the next show. Tested with CDP's `Browser.crash`: the Clips page was back with its cards in 1.2 s, the window responsive, no background errors; waiting on the dead page's own disposal took 5 s and logged 34 unobserved `The WebView control is no longer valid` errors from Blazor reporting to the dead browser, which is why it no longer waits | A blink |
+| An update is out while LetsClip sits in the tray | Installed after 10 minutes hidden with nothing saving or exporting, the new version starting in the tray (see Updates) | Nothing, the replay starts over |
+| Temp cleaners or Storage Sense sweep `%Temp%` | FFmpeg sits in the single file exe's extraction under `%Temp%\.net`, so `FFmpeg.HoldFiles` keeps every file open from start to exit | Nothing |
+| The microphone test loses a device | It ends and says so | A Notice |
+| The clips folder's watcher overflows or its drive leaves | `ClipLibrary` rescans and builds a new watcher, 15 s between tries while the folder is missing (`Rewatch`) | Clips Folder Not Available until it returns, 4 s after a test drive came back |
+| A window's encoder hangs | Covered above, the fresh capture needs no restart of the game | Recording throughout |
+| LetsClip itself crashes or hangs | `AppDomain.UnhandledException` logs it as Fatal (`Crashed`), and Windows restarts it in the tray (`RegisterApplicationRestart` in `StartupRegistration.Apply`, crashes and hangs only, Release outside a sandbox, only after 60 s of running). The restart carries `--after-update <pid> <own path> --tray`, so it waits for the crashed process, which still holds the single instance handle while Windows writes its report. Measured: back 5.1 s after the crash, no click | Nothing, the replay starts over |
+| An update throws while starting | `App.OnStartup` starts the version it replaced again (`Updater.Launch`), which deletes the broken exe, rewrites the Run value and skips that release from then on (`UserSettings.AttemptedUpdate`). Measured: the old version was back 0.15 s later | Nothing |
+| An update dies before it can log | The old version wrote `AttemptedUpdate` before launching it, so the next start of the old version skips that release instead of installing it at every sign in | Nothing records until the next start, then Recording |
+| A timer or thread body throws something unlisted | Caught and logged where it happens: the clip folder timers (`ClipLibrary.Guard`), the game check, the Discord watch, the audio writer, the save chime's output meter | Nothing |
+| No microphone or output device exists at all | Automatic records silence and connects when one becomes the default | `No Microphone Detected` in Settings, no warning |
+| Old versions' unpacked folders pile up in `%Temp%\.net` | Deleted at the next Release start, a running copy's own folder kept | Nothing |
+
+## Reliability Research And Tests
+
+Done on 8 November 2026 after `Using x264 on the CPU, AMD AMF failed` appeared. Keep the conclusions; rerun the tools below whenever capture, encoders or recovery change.
+
+- What happened: the installer step force killed the owner's copy mid recording and started the new exe 3 s later. Its encoder test passed in 1 s, then the real capture produced nothing for 12 s and fell to x264. The log held no FFmpeg error, which is why starts now log which half went quiet.
+- It could not be reproduced: 140 cycles of starting `ddagrab` into `h264_amf` and killing it, restarting at once or after 3 s, and 20 with a graceful `q`, gave 0 hangs, first frame at 590 to 720 ms, the single failed run never repeating. So a graceful stop was not added, and nothing depends on knowing the cause: two starts plus `UpgradeAsync` cover it either way.
+- AMD: no public report of AMF hanging after a killed process was found; an OBS issue shows AMF deadlocking at shutdown on one preset, fixed by a newer driver. AMF refusing `qvbr` on old cards would fail `WorksAsync` and fall to x264.
+- NVIDIA: consumer cards cap concurrent NVENC sessions (2, then 3, then 5 in the support matrix), so OBS or another recorder can use them up. A start then fails, x264 takes over and `UpgradeAsync` moves back once a session frees up. NVENC is still untested on real hardware here.
+- Intel: on hybrid machines `h264_qsv` can fail with `unsupported (-3)` when the Intel adapter drives no display, so it falls to the next candidate.
+- Hybrid laptops: Desktop Duplication returns `DXGI_ERROR_UNSUPPORTED` when run on the GPU that does not drive the display; `MonitorCatalog` passes the adapter that owns the output, so this is already handled. FFmpeg ticket 10385 (ddagrab on non primary outputs) was fixed by 7.1.1 and we ship 9.0.2.
+- Software rendering: `backdrop-filter` is slow without a GPU in some engines, Chromium 140 handles it. Capture needs a GPU anyway, so nothing was changed.
+- Injected failures, through the stand-in `ffmpeg.exe` below, on a window session with AMF: a hang on the first capture, three failed rounds of all encoders, the audio process dying at 6 s, the encoder test hanging, the video process dying at 35 s and a hang 10 s in all stayed on Recording with no error shown. Every encoder failing keeps Recording for 55.8 s, four quiet retries, then shows the error. A hung window capture moved to a fresh one 22 s after the hang, where before it read Recording for ever and a save said `Nothing has moved in the window yet` over a moving window. A window still from its first moment kept its session, with both probes hung or not. A save pressed during retries waits and saves what the new session holds (1.3 s of it, 12 s later).
+- Cost with the window open on the 7800X3D, Debug: Clips idle 0.5% of a core and WebView2 0%, the hover preview 5.9% and 27% only while it plays, Settings idle 0% and 0.2%, the live microphone test 2% and 1.4% plus 0.5% for its FFmpeg.
+- A probe of a still window takes 8 s per encoder with x264 and 12 to 30 s with AMF. The cause was not found, it costs one idle FFmpeg once per quiet spell.
+- Scales: Clips, Settings and the editor measure clean (no sideways scroll, nothing past its panel, no side panel scroll) at the page sizes Windows gives 1080p at 100, 125 and 150%, 4K at 200%, 1440p at 100% and 768p at 100%.
+- Locales: names, dates, durations and typed times round trip under en-US, nl-BE, de-DE, tr-TR, ar-SA, fa-IR, th-TH, ja-JP, he-IL, hi-IN and fr-CH. Arabic and Persian use `٫` as the decimal separator, so `Formatter.ParseDuration` now reads the culture's own.
+- Paths: list, hover preview, editor, Save Cut, export and restore all work with the root in a folder with accents, apostrophes, Japanese, `#`, `&` and `%`, and a clip named with those.
+
+Tools, all throwaway and never committed:
+
+- CDP helper: Node over `http://127.0.0.1:9333`. The window may open on a narrow monitor where the page is zoomed (`devicePixelRatio` 0.9 on the portrait monitor), so read `cssVisualViewport.zoom` from `Page.getLayoutMetrics` and multiply sizes and screenshot clips by it, or every crop lands in the wrong place; mouse positions stay plain CSS pixels, multiplied they land a tenth off.
+- Per frame smoothness: inject a `requestAnimationFrame` recorder of spinner, strip, panels, handles, held frame and video readiness, press the action, count frames that would flash (must be 0).
+- Consistency dump: walk every visible element on every screen and group computed `box-shadow`, `filter`, radius, font and button sizes. Exactly two shadow values are allowed, plus the hover ring, the info icon's `drop-shadow` and `--picture-shadow`.
+- Failure injection: a small .NET file-based `shim.cs` built as `ffmpeg.exe` beside `ffmpeg.real.exe` reads `faults.txt` lines (`pattern|video,audio,test|hang,crash,die|ms|count`; `hang` with `ms` above 0 runs the real one that long, then `NtSuspendProcess`), else runs the real one in a kill on close job. A harness on `CaptureController` records a separate `pattern.exe` window keyed as the only game (a game cannot be the harness's own process, `GameWatcher` skips itself) and prints every change of `StatusText`, `ShowsError` and `IsRecording` per scenario.
+- A page exception is tested with a temporary `@page "/crash"` that throws, removed before the diff is carried over; a renderer crash with CDP's `Page.crash`.
+- Monitor mode without recording: rename the build's `FFmpeg\ffmpeg.exe` for the look.
+- The owner's G522 gives only silence to a process started from the Claude app, so the microphone path is proven with synthetic speech; the owner confirms by ear.

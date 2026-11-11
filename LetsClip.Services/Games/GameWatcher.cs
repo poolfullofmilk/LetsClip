@@ -13,8 +13,9 @@ public sealed partial class GameWatcher : IDisposable
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
 
     // Windows' Own Windows Never Count As Apps To Add
-    private static readonly HashSet<string> s_shellHosts = new(StringComparer.OrdinalIgnoreCase)
-    {
+    private static readonly HashSet<string> s_shellHosts =
+    [
+        with(StringComparer.OrdinalIgnoreCase),
         "explorer",
         "ApplicationFrameHost",
         "TextInputHost",
@@ -24,7 +25,7 @@ public sealed partial class GameWatcher : IDisposable
         "SearchHost",
         "LockApp",
         "msedgewebview2",
-    };
+    ];
 
     // Discord's Own Builds, Any Of Them May Run
     private static readonly string[] s_discordNames =
@@ -338,9 +339,8 @@ public sealed partial class GameWatcher : IDisposable
             _failing = false;
         }
         catch (Exception exception)
-            when (exception is InvalidOperationException or Win32Exception or FileNotFoundException)
         {
-            // A Process Gone Mid Check Waits For The Next Tick
+            // A Throwing Timer Ends LetsClip, The Next Tick Checks Again
             if (!_failing)
             {
                 s_logger.Warn($"Failed To Check For A Game {exception.GetType().Name}");

@@ -3,6 +3,10 @@
 
 <PageTitle>Clips</PageTitle>
 
+@{
+    var shown = ShownClips;
+}
+
 <MudElement HtmlTag="div"
             Class="split page-fill">
     <MudElement HtmlTag="div"
@@ -17,13 +21,13 @@
             <TitleContent>
                 <MudText Typo="Typo.subtitle1"
                          Class="mud-text-secondary">
-                    @CountText
+                    @CountText(shown.Count)
                 </MudText>
                 <MudSpacer />
                 @* Sort Menu *@
                 <Tooltip Text="Sort Clips"
                          Placement="Placement.Left"
-                         Disabled="@(ShownClips.Count < 2)">
+                         Disabled="@(shown.Count < 2)">
                     <MudBadge Dot
                               Color="Color.Info"
                               Overlap
@@ -33,7 +37,7 @@
                                  AriaLabel="Sort Clips"
                                  Size="Size.Small"
                                  Dense
-                                 Disabled="@(ShownClips.Count < 2)"
+                                 Disabled="@(shown.Count < 2)"
                                  AnchorOrigin="Origin.BottomRight"
                                  TransformOrigin="Origin.TopRight">
                             @foreach (var sort in Enum.GetValues<ClipSort>())
@@ -167,7 +171,7 @@
                                     Text="No Clips" />
                     </MudPaper>
                 }
-                else if (ShownClips.Count == 0)
+                else if (shown.Count == 0)
                 {
                     <MudPaper Elevation="4"
                               Class="rounded-panel">
@@ -188,7 +192,7 @@
                     @* Clip Cards *@
                     <MudElement HtmlTag="div"
                                 Class="clip-grid">
-                        @foreach (var clip in ShownClips)
+                        @foreach (var clip in shown.Take(_cards))
                         {
                             @* Clip Card *@
                             <MudPaper @key="clip.Path"
@@ -198,7 +202,7 @@
                                       tabindex="0"
                                       data-keyclick
                                       aria-label="@($"Open {clip.Title}")"
-                                      Style="@($"view-transition-name:{CardName(clip)}")"
+                                      Style="@CardStyle(clip)"
                                       @onclick="() => Open(clip)">
                                 <MudElement HtmlTag="div"
                                             Class="clip-thumb rounded-inner">

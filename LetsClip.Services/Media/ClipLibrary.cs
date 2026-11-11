@@ -48,13 +48,13 @@ public sealed class ClipLibrary : IDisposable
     {
         Folder = folder;
         _changeTimer = new Timer(
-            _ => Settle(),
+            _ => Guard(Settle),
             null,
             Timeout.InfiniteTimeSpan,
             Timeout.InfiniteTimeSpan
         );
         _rewatchTimer = new Timer(
-            _ => Rewatch(),
+            _ => Guard(Rewatch),
             null,
             Timeout.InfiniteTimeSpan,
             Timeout.InfiniteTimeSpan
@@ -869,11 +869,33 @@ public sealed class ClipLibrary : IDisposable
         Changed?.Invoke();
     }
 
+    private static void Guard(Action body)
+    {
+        try
+        {
+            body();
+        }
+        catch (Exception exception)
+        {
+            // A Throwing Timer Ends LetsClip, The Next Change Tries Again
+            s_logger.Warn($"Failed To Follow The Clips Folder {exception.GetType().Name}");
+        }
+    }
+
     private void Debounce(string? name)
     {
-        if (name?.StartsWith(PartialPrefix, StringComparison.Ordinal) != true)
+        if (name?.StartsWith(PartialPrefix, StringComparison.Ordinal) == true)
+        {
+            return;
+        }
+
+        try
         {
             _changeTimer.Change(s_debounce, Timeout.InfiniteTimeSpan);
+        }
+        catch (ObjectDisposedException)
+        {
+            // A Change Seen While Closing Has Nobody To Tell
         }
     }
 

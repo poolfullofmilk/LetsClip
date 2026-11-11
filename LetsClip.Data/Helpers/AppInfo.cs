@@ -44,6 +44,13 @@ public static class AppInfo
         FolderName
     );
 
+    // Where The Exe Lives, Wherever It Was First Run From
+    public static readonly string InstallDirectory = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "Programs",
+        DisplayName
+    );
+
     public static readonly string CacheDirectory = Path.Combine(LocalDirectory, "Cache");
 
     public static readonly string ThumbnailsDirectory = Path.Combine(LocalDirectory, "Thumbnails");

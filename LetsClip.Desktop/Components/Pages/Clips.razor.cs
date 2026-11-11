@@ -29,10 +29,17 @@ public partial class Clips : IDisposable
 
     public const string Route = "clips";
 
+    // Cards Render In Batches, More As The Last One Nears
+    private const int BatchSize = 60;
+
+    // Past This Many Cards A Change Only Fades
+    private const int NamedCards = 2 * BatchSize;
+
     private readonly CancellationTokenSource _closing = new();
     private DotNetObjectReference<Clips>? _reference;
     private Action? _nextChange;
     private int _loads;
+    private int _cards = BatchSize;
 
     // The Last List, So Coming Back Never Shows A Spinner
     private static IReadOnlyList<ClipInfo>? s_clips;
@@ -44,10 +51,8 @@ public partial class Clips : IDisposable
     private string? _search;
     private bool _filterOpen;
 
-    private string CountText =>
-        s_clips is not { Count: > 0 } clips ? ""
-        : IsFiltered ? $"{ShownClips.Count} of {clips.Count}"
-        : $"{clips.Count}";
+    private DotNetObjectReference<Clips> Reference =>
+        _reference ??= DotNetObjectReference.Create(this);
 
     private static bool IsFiltered => s_shownGames is not null;
 
@@ -146,23 +151,22 @@ public partial class Clips : IDisposable
         await ChangeAsync(() => s_clips = clips);
     }
 
-    private async Task ChangeAsync(Action change)
+    private async Task ChangeAsync(Action change, bool fromTop = false)
     {
         // Cards Slide To New Places, Others Fade In Or Out
         _nextChange += change;
-        _reference ??= DotNetObjectReference.Create(this);
-        try
+        if (fromTop)
         {
-            await JavaScript.InvokeVoidAsync(
-                "letsClip.transition",
-                _reference,
-                nameof(ShowNextChange)
-            );
+            // A New Order Or Filter Starts At Its First Batch
+            _nextChange += () => _cards = BatchSize;
         }
-        catch (JSDisconnectedException)
-        {
-            // The Window Is Closing, Nothing Left To Show
-        }
+
+        await JavaScript.CallAsync(
+            "letsClip.transition",
+            Reference,
+            nameof(ShowNextChange),
+            fromTop
+        );
     }
 
     [JSInvokable]
@@ -172,17 +176,46 @@ public partial class Clips : IDisposable
         StateHasChanged();
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Ponytail: Each Batch Rebuilds Every Shown Card, Fine To Thousands
+        if (ShownClips.Count > _cards)
+        {
+            await JavaScript.CallAsync("letsClip.watchEnd", Reference, nameof(ShowMoreCards));
+        }
+    }
+
+    [JSInvokable]
+    public void ShowMoreCards()
+    {
+        if (ShownClips.Count > _cards)
+        {
+            _cards += BatchSize;
+            StateHasChanged();
+        }
+    }
+
     private async Task SetSortAsync(ClipSort sort)
     {
-        await ChangeAsync(() =>
-            Controller.UpdateSettings(settings => settings with { ClipSort = sort })
+        await ChangeAsync(
+            () => Controller.UpdateSettings(settings => settings with { ClipSort = sort }),
+            fromTop: true
         );
     }
 
-    private static string CardName(ClipInfo clip)
+    private static string CountText(int shown)
+    {
+        return s_clips is not { Count: > 0 } clips ? ""
+            : IsFiltered ? $"{shown} of {clips.Count}"
+            : $"{clips.Count}";
+    }
+
+    private string? CardStyle(ClipInfo clip)
     {
         // Its Own Name, So The Card Moves Rather Than Fades
-        return $"clip-{(uint)clip.Path.GetHashCode(StringComparison.OrdinalIgnoreCase)}";
+        return _cards > NamedCards
+            ? null
+            : $"view-transition-name:clip-{(uint)clip.Path.GetHashCode(StringComparison.OrdinalIgnoreCase)}";
     }
 
     private static IEnumerable<(string Label, string Value)> FactsOf(ClipInfo clip)
@@ -239,12 +272,12 @@ public partial class Clips : IDisposable
             ? null
             : new HashSet<string>(_draft, StringComparer.OrdinalIgnoreCase);
         _filterOpen = false;
-        await ChangeAsync(() => s_shownGames = shown);
+        await ChangeAsync(() => s_shownGames = shown, fromTop: true);
     }
 
     private async Task ShowAllAsync()
     {
-        await ChangeAsync(() => s_shownGames = null);
+        await ChangeAsync(() => s_shownGames = null, fromTop: true);
     }
     #endregion
 

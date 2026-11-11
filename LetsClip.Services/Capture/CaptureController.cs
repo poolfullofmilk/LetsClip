@@ -23,6 +23,9 @@ public sealed class CaptureController : IDisposable
     // Failures In A Row Kept Out Of Sight
     private const int QuietFailures = 4;
 
+    // Retries Come Within Two Minutes, Later Ones Count Anew
+    private static readonly TimeSpan s_failuresForgotten = TimeSpan.FromMinutes(5);
+
     private readonly Lock _gate = new();
 
     // Starts And Stops Run One At A Time, Whoever Asks
@@ -35,6 +38,7 @@ public sealed class CaptureController : IDisposable
     private string? _lastGame;
     private IReadOnlyDictionary<string, AddedGame>? _installedGames;
     private int _failures;
+    private long _lastFailure;
     private int _retry;
     private volatile bool _quietRetry;
     private readonly Lazy<bool> _hasHardwareEncoder = new(() =>
@@ -392,8 +396,13 @@ public sealed class CaptureController : IDisposable
     private async Task RetryAsync(CaptureFailure failure)
     {
         // Every Failure Starts Over By Itself, Set Once And Forget
-        var failures = failure == CaptureFailure.RanLong ? 1 : _failures + 1;
+        var failures =
+            failure == CaptureFailure.RanLong
+            || Stopwatch.GetElapsedTime(_lastFailure) > s_failuresForgotten
+                ? 1
+                : _failures + 1;
         _failures = failures;
+        _lastFailure = Stopwatch.GetTimestamp();
         var retry = Interlocked.Increment(ref _retry);
         _quietRetry = failure != CaptureFailure.Blocked && failures <= QuietFailures;
         Changed?.Invoke();

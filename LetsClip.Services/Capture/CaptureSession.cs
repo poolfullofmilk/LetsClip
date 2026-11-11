@@ -127,7 +127,9 @@ public sealed class CaptureSession(
             isWindow && Audio is not null
                 ? Audio.FirstSegment
                 : Task.WhenAll(Video.FirstSegment, Audio?.FirstSegment ?? Task.CompletedTask);
-        var finished = await Task.WhenAny(ready, Ended, Task.Delay(s_startTimeout));
+        using var waited = new CancellationTokenSource();
+        var finished = await Task.WhenAny(ready, Ended, Task.Delay(s_startTimeout, waited.Token));
+        waited.Cancel();
         if (finished != ready && !(isWindow && !HasEnded))
         {
             // Which Half Went Quiet, The Log Answers Reports With

@@ -18,8 +18,8 @@ public partial class GamesDialog : IDisposable
     // Rows Keep Their Order, A Switch Never Moves One
     private List<AddedGame> _rows = [];
     private IReadOnlyList<AddedGame>? _apps;
-    private Dictionary<string, GameEntry> _listed = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, string> _icons = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, GameEntry> _listed = [with(StringComparer.OrdinalIgnoreCase)];
+    private readonly Dictionary<string, string> _icons = [with(StringComparer.OrdinalIgnoreCase)];
     private string? _search;
     private bool _showApps;
 

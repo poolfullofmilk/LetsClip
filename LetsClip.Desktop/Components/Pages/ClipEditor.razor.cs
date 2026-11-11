@@ -183,14 +183,7 @@ public partial class ClipEditor : IAsyncDisposable
 
         _loaded = loaded;
         _page ??= DotNetObjectReference.Create(this);
-        try
-        {
-            await JavaScript.InvokeVoidAsync("letsClip.transition", _page, nameof(ShowLoaded));
-        }
-        catch (JSDisconnectedException)
-        {
-            // The Window Is Closing, Nothing Left To Show
-        }
+        await JavaScript.CallAsync("letsClip.transition", _page, nameof(ShowLoaded));
     }
 
     [JSInvokable]
@@ -245,7 +238,7 @@ public partial class ClipEditor : IAsyncDisposable
         // A Reference Of This Clip's Own, Let Go On Detach
         _attached = true;
         _reference = DotNetObjectReference.Create(this);
-        await JavaScript.InvokeVoidAsync(
+        await JavaScript.CallAsync(
             "letsClip.attach",
             _video,
             VideoUrl,
@@ -276,11 +269,7 @@ public partial class ClipEditor : IAsyncDisposable
         _reference = null;
         try
         {
-            await JavaScript.InvokeVoidAsync("letsClip.detach", holdFrame);
-        }
-        catch (JSDisconnectedException)
-        {
-            // The Window Is Closing, The Browser Releases Everything Itself
+            await JavaScript.CallAsync("letsClip.detach", holdFrame);
         }
         finally
         {
@@ -362,13 +351,13 @@ public partial class ClipEditor : IAsyncDisposable
     private async Task MarkAsync(string edge)
     {
         // The Page Script Knows The Frame On Screen
-        await JavaScript.InvokeVoidAsync("letsClip.mark", edge);
+        await JavaScript.CallAsync("letsClip.mark", edge);
     }
 
     private async Task PlaceAsync(string edge, double seconds)
     {
         // A Typed Point Snaps To Its Frame Like A Drag
-        await JavaScript.InvokeVoidAsync("letsClip.place", edge, seconds);
+        await JavaScript.CallAsync("letsClip.place", edge, seconds);
     }
 
     private void ScheduleTrimSave()
@@ -425,17 +414,17 @@ public partial class ClipEditor : IAsyncDisposable
     {
         if (_paused)
         {
-            await JavaScript.InvokeVoidAsync("letsClip.play", _range.Start, _range.End);
+            await JavaScript.CallAsync("letsClip.play", _range.Start, _range.End);
         }
         else
         {
-            await JavaScript.InvokeVoidAsync("letsClip.pause");
+            await JavaScript.CallAsync("letsClip.pause");
         }
     }
 
     private async Task NudgeAsync(double seconds)
     {
-        await JavaScript.InvokeVoidAsync("letsClip.nudge", seconds);
+        await JavaScript.CallAsync("letsClip.nudge", seconds);
     }
 
     private async Task ToggleMuteAsync()
@@ -454,12 +443,12 @@ public partial class ClipEditor : IAsyncDisposable
         // Each Change Shows Its Level Over The Clip
         (_muted, _volume) = (muted, volume);
         _volumeShown++;
-        await JavaScript.InvokeVoidAsync("letsClip.setVolume", volume, muted);
+        await JavaScript.CallAsync("letsClip.setVolume", volume, muted);
     }
 
     private async Task FullScreenAsync()
     {
-        await JavaScript.InvokeVoidAsync("letsClip.fullScreen");
+        await JavaScript.CallAsync("letsClip.fullScreen");
     }
 
     #region Title

@@ -22,26 +22,37 @@ public static partial class SaveChime
         (1568, 0.07),
     ];
 
+    // A Press That Saved Nothing Falls Instead, An Octave Lower
+    private static readonly (double Frequency, double Delay)[] s_failedNotes =
+    [
+        (784, 0),
+        (523.25, 0.07),
+    ];
+
     // An Idle Output Wakes Slowly And Swallows What Comes First
     private const double WakeLength = 0.5;
 
     // The Chime Starts A Moment Late, Its Mute Covers That
     private const double MuteMargin = 0.4;
 
-    // One Pinned Wave Per Tenth, Awake Or Waking
+    // One Pinned Wave Per Tenth, Awake Or Waking, Each Chime
     private const int Tenths = 11;
-    private static readonly byte[]?[] s_waves = new byte[Tenths * 2][];
+    private static readonly byte[]?[] s_waves = new byte[Tenths * 4][];
 
-    public static void Play(ReplayRecorder recorder, double volume)
+    public static void Play(ReplayRecorder recorder, double volume, bool failed = false)
     {
         // The Loopback Hears Silence, So No Clip Holds The Chime
         var lead = AudioDevices.IsOutputPlaying() ? 0 : WakeLength;
         recorder.MuteSystemAudio(TimeSpan.FromSeconds(lead + Length + MuteMargin));
         var tenth = (int)Math.Round(Math.Clamp(volume, 0, 1) * 10);
-        var slot = tenth + (lead > 0 ? Tenths : 0);
+        var slot = tenth + (lead > 0 ? Tenths : 0) + (failed ? Tenths * 2 : 0);
         var wave =
             Volatile.Read(ref s_waves[slot])
-            ?? Interlocked.CompareExchange(ref s_waves[slot], Render(tenth / 10.0, lead), null)
+            ?? Interlocked.CompareExchange(
+                ref s_waves[slot],
+                Render(tenth / 10.0, lead, failed ? s_failedNotes : s_notes),
+                null
+            )
             ?? s_waves[slot]!;
 
         // Safe From Any Thread, No Output Device Plays Nothing
@@ -52,7 +63,11 @@ public static partial class SaveChime
         );
     }
 
-    private static byte[] Render(double volume, double lead)
+    private static byte[] Render(
+        double volume,
+        double lead,
+        (double Frequency, double Delay)[] notes
+    )
     {
         var leadFrames = (int)(SampleRate * lead);
         var frames = (int)(SampleRate * Length);
@@ -84,7 +99,7 @@ public static partial class SaveChime
         {
             var time = frame / (double)SampleRate;
             var sample = 0.0;
-            foreach (var (frequency, delay) in s_notes)
+            foreach (var (frequency, delay) in notes)
             {
                 var local = time - delay;
                 if (local < 0)

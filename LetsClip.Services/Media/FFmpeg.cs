@@ -158,7 +158,15 @@ public static partial class FFmpeg
         {
             Kill(process);
             await process.WaitForExitAsync(CancellationToken.None);
-            await Task.WhenAny(Task.WhenAll(outputTask, errorTask), Task.Delay(s_drainLimit));
+            using (var drained = new CancellationTokenSource())
+            {
+                await Task.WhenAny(
+                    Task.WhenAll(outputTask, errorTask),
+                    Task.Delay(s_drainLimit, drained.Token)
+                );
+                drained.Cancel();
+            }
+
             token.ThrowIfCancellationRequested();
             throw new TimeoutException($"{Path.GetFileName(executable)} Took Too Long");
         }

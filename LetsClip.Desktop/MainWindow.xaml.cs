@@ -1,22 +1,16 @@
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Net.Http;
+using System.Runtime;
 using System.Windows;
 using System.Windows.Interop;
-using LetsClip.Data.Enums;
 using LetsClip.Data.Helpers;
-using LetsClip.Data.ViewModels;
 using LetsClip.Desktop.Components;
 using LetsClip.Desktop.Components.Pages;
 using LetsClip.Desktop.Interop;
-using LetsClip.Desktop.Theming;
 using LetsClip.Services.Capture;
-using LetsClip.Services.Games;
-using LetsClip.Services.Integration;
 using LetsClip.Services.Media;
 using Microsoft.AspNetCore.Components.WebView.Wpf;
 using Microsoft.Web.WebView2.Core;
-using MudBlazor.Utilities;
 using NLog;
 using Drawing = System.Drawing;
 using Forms = System.Windows.Forms;
@@ -25,8 +19,6 @@ namespace LetsClip.Desktop;
 
 public partial class MainWindow : Window
 {
-    private const int BalloonMilliseconds = 4000;
-
     // The Smallest Window The Page Is Laid Out For
     private const double PageWidth = 1280;
     private const double PageHeight = 540;
@@ -36,38 +28,20 @@ public partial class MainWindow : Window
 
     // Longer In The Tray, The Page Frees WebView2's 175 MB
     private static readonly TimeSpan s_releaseDelay = TimeSpan.FromMinutes(10);
-
-    // Looked For This Often, And Whenever The Window Opens
-    private static readonly TimeSpan s_updateCheckPeriod = TimeSpan.FromHours(6);
-
-    // Hidden This Long Is Idle, A Found Update Installs
-    private static readonly TimeSpan s_idleBeforeUpdate = TimeSpan.FromMinutes(10);
-    private static readonly TimeSpan s_idleCheckPeriod = TimeSpan.FromMinutes(1);
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
 
     private readonly IServiceProvider _services;
     private readonly CaptureController _controller;
     private readonly DesktopShell _shell;
-    private readonly Forms.NotifyIcon _trayIcon;
 
-    // Tray Icons Per State, Drawn Once
-    private readonly Drawing.Icon _plainIcon;
-    private readonly Drawing.Icon _recordingIcon;
-    private readonly Drawing.Icon _problemIcon;
-
-    private WindowMessages? _messages;
     private BlazorWebView? _page;
     private CoreWebView2? _browser;
 
     // Each Show Or Hide Counts, A Later Hide Waits Anew
     private int _visibility;
     private string? _mappedClipsFolder;
-
-    // What A Click On The Latest Balloon Does
-    private Action? _balloonClick;
-    private bool _isExiting;
-    private bool _isUpdating;
     private WindowState _windowedState;
+    private Size _windowedSize;
     private double _pageZoom = 1;
 
     // A Tray Start Counts As Hidden From Launch
@@ -95,74 +69,14 @@ public partial class MainWindow : Window
             }
         };
         IsVisibleChanged += (_, _) => _ = RestPageAsync();
-
-        _plainIcon = Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!)!;
-        _recordingIcon = WithDot(_plainIcon, ToDrawingColor(AppTheme.Custom.PaletteDark.Error));
-        _problemIcon = WithDot(_plainIcon, ToDrawingColor(AppTheme.Custom.PaletteDark.Warning));
-        _trayIcon = new Forms.NotifyIcon
-        {
-            Icon = _plainIcon,
-            Text = AppInfo.DisplayName,
-            Visible = true,
-        };
-        _trayIcon.MouseUp += (_, eventArgs) =>
-        {
-            if (eventArgs.Button == Forms.MouseButtons.Left)
-            {
-                ShowFromTray();
-            }
-            else if (eventArgs.Button == Forms.MouseButtons.Right)
-            {
-                ShowTrayMenu();
-            }
-        };
-        _trayIcon.BalloonTipClicked += (_, _) => (_balloonClick ?? ShowFromTray)();
-
-        controller.Recorder.StatusChanged += () => Dispatcher.InvokeAsync(UpdateTray);
-        controller.Recorder.SaveStarted += () =>
-        {
-            // A Soft Chime At The Press, Muted Out Of Clips
-            if (_controller.Settings.SaveSound)
-            {
-                SaveChime.Play(_controller.Recorder, _controller.Settings.SaveSoundVolume);
-            }
-        };
-        controller.Recorder.ClipSaved += clip => Dispatcher.InvokeAsync(() => NotifySaved(clip));
-        controller.Changed += () =>
-            Dispatcher.InvokeAsync(() =>
-            {
-                // A Game Found Or Lost Changes The Tray's Words
-                MapClipsFolder();
-                UpdateTray();
-            });
-        UpdateTray();
+        controller.Changed += () => Dispatcher.InvokeAsync(MapClipsFolder);
     }
 
-    public void Attach()
-    {
-        // The Handle Exists Before Showing, So The Hotkey Works Hidden
-        var handle = new WindowInteropHelper(this).EnsureHandle();
-        _messages = new WindowMessages(handle);
-        _messages.HotkeyPressed += () => _ = SaveFromHotkeyAsync();
-        _messages.DisplayPowerChanged += isOn =>
-            _ = isOn
-                ? _controller.ReleaseAsync(CaptureHolds.DisplayOff)
-                : _controller.HoldAsync(
-                    CaptureHolds.DisplayOff,
-                    "Stopped because the display turned off, history was cleared"
-                );
-        _shell.Attach(_messages);
-        _ = KeepUpdatedAsync();
+    // Only The Tray's Exit Ends LetsClip, Closing Hides
+    public bool IsExiting { get; set; }
 
-        // A Tray Start Shows No Panel, So Say It Here
-        if (
-            !_shell.ApplyHotkey(Hotkey.Parse(_controller.Settings.Hotkey))
-            && _shell.HotkeyProblem is { } problem
-        )
-        {
-            ShowBalloon("Save Hotkey Taken", problem, Forms.ToolTipIcon.Warning);
-        }
-    }
+    public TimeSpan? HiddenFor =>
+        _hiddenSince is { } hidden ? Stopwatch.GetElapsedTime(hidden) : null;
 
     public void ShowFromTray()
     {
@@ -175,198 +89,7 @@ public partial class MainWindow : Window
         Activate();
     }
 
-    public async Task ExitAsync()
-    {
-        if (_isExiting)
-        {
-            return;
-        }
-
-        // Capture Stops And A Running Save Finishes
-        _isExiting = true;
-        Hide();
-        await _controller.HoldAsync(CaptureHolds.Exiting, "Stopped because LetsClip is closing");
-        await _controller.Recorder.WaitForSavesAsync(TimeSpan.FromSeconds(15));
-        ExitNow();
-    }
-
-    public void ExitNow()
-    {
-        _isExiting = true;
-        _messages?.Dispose();
-        _trayIcon.Visible = false;
-        _trayIcon.Dispose();
-        _controller.Dispose();
-        Application.Current.Shutdown();
-    }
-
-    public async Task InstallUpdateAsync(
-        ReleaseInfo release,
-        IProgress<(long Received, long Total)>? progress
-    )
-    {
-        // One At A Time, The New Exe Waits For Us
-        if (_isUpdating || _isExiting)
-        {
-            return;
-        }
-
-        _isUpdating = true;
-        try
-        {
-            var path = await Task.Run(() => Updater.DownloadAsync(release, progress));
-            Updater.Launch(path, inTray: !IsVisible);
-            await ExitAsync();
-        }
-        finally
-        {
-            _isUpdating = false;
-        }
-    }
-
-    private async Task KeepUpdatedAsync()
-    {
-        // At Start And Every Six Hours, Installed Once Idle
-        while (!_isExiting)
-        {
-            if (await FindUpdateAsync() is { } release)
-            {
-                await InstallWhenIdleAsync(release);
-            }
-
-            await Task.Delay(s_updateCheckPeriod);
-        }
-    }
-
-    private async Task<ReleaseInfo?> FindUpdateAsync()
-    {
-        // A Newer Release Gets Its Dialog And The Red Dot
-        var latest = await Updater.CheckAsync();
-        if (latest is null || latest.Version <= AppInfo.Version)
-        {
-            return null;
-        }
-
-        _shell.ReportUpdate(latest);
-        return latest;
-    }
-
-    private async Task InstallWhenIdleAsync(ReleaseInfo release)
-    {
-        // Debug, Sandboxed And Renamed Builds Only Offer It
-        if (!Updater.CanInstall)
-        {
-            s_logger.Info($"Found Update {release.Tag}, Only A Release Exe Installs It Itself");
-            return;
-        }
-
-        // Hidden A While, Nothing Saving Or Exporting
-        while (!_isExiting)
-        {
-            if (
-                _hiddenSince is { } hidden
-                && Stopwatch.GetElapsedTime(hidden) is var idle
-                && idle >= s_idleBeforeUpdate
-                && !ClipExporter.IsExporting
-                && !_controller.Recorder.Status.IsSaving
-            )
-            {
-                s_logger.Info(
-                    $"Began Installing Update {release.Tag} In The Background, Hidden For {idle.TotalMinutes:0} Minutes"
-                );
-                try
-                {
-                    await InstallUpdateAsync(release, null);
-                }
-                catch (Exception exception)
-                    when (exception
-                            is HttpRequestException
-                                or IOException
-                                or InvalidDataException
-                                or OperationCanceledException
-                                or UnauthorizedAccessException
-                                or Win32Exception
-                    )
-                {
-                    // The Next Check Tries Again, The Running Version Keeps Recording
-                    s_logger.Warn($"Failed To Update In The Background {exception.GetType().Name}");
-                }
-
-                return;
-            }
-
-            await Task.Delay(s_idleCheckPeriod);
-        }
-    }
-
-    private async Task SaveFromHotkeyAsync()
-    {
-        // With No Game, The App In Front Is Likely Wanted
-        var front =
-            _controller.Settings.GamesOnly && _controller.Games.GameName is null
-                ? GameWatcher.ForegroundApp()
-                : null;
-
-        // The Hotkey Never Steals Focus, Only Failures Speak Here
-        var outcome = await Task.Run(_controller.SaveAsync);
-        if (outcome.Error is not { } error)
-        {
-            return;
-        }
-
-        await Dispatcher.InvokeAsync(() =>
-        {
-            if (front is { } app && _controller.Games.GameName is null)
-            {
-                ShowBalloon(
-                    "Clip Not Saved",
-                    $"Nothing is being recorded, click to record {app.Name} from now on",
-                    Forms.ToolTipIcon.Warning,
-                    () => RecordFromNowOn(app)
-                );
-                return;
-            }
-
-            ShowBalloon("Clip Not Saved", error, Forms.ToolTipIcon.Warning);
-        });
-    }
-
-    private void RecordFromNowOn(AddedGame app)
-    {
-        // One Click Turns A Missed Clip Into A Recorded Game
-        _controller.SetRecorded([app], true);
-        _balloonClick = null;
-        TrayBalloon.ShowQuiet(
-            _trayIcon,
-            BalloonMilliseconds,
-            "Added to Games and Apps",
-            $"{app.Name} is recorded from now on"
-        );
-    }
-
-    private void ShowBalloon(
-        string title,
-        string text,
-        Forms.ToolTipIcon icon,
-        Action? onClick = null
-    )
-    {
-        _balloonClick = onClick;
-        _trayIcon.ShowBalloonTip(BalloonMilliseconds, title, text, icon);
-    }
-
-    private void NotifySaved(ClipInfo clip)
-    {
-        _balloonClick = () => OpenClip(clip.Path);
-        TrayBalloon.ShowQuiet(
-            _trayIcon,
-            BalloonMilliseconds,
-            "Clip Saved",
-            $"{Formatter.FormatDuration(clip.Duration)} clip, click to open"
-        );
-    }
-
-    private void OpenClip(string path)
+    public void OpenClip(string path)
     {
         // A Clip Saved Elsewhere Shows In Explorer Instead
         if (!FilePaths.AreSame(Path.GetDirectoryName(path), _controller.Library.Folder))
@@ -402,6 +125,9 @@ public partial class MainWindow : Window
             HostPage = @"wwwroot\index.html",
             StartPath = startPath,
             Services = _services,
+
+            // The Plain Control, The Composition One Copies Every Frame
+            UseCompositionControl = false,
         };
         page.RootComponents.Add(
             new RootComponent { Selector = "#app", ComponentType = typeof(Routes) }
@@ -460,6 +186,14 @@ public partial class MainWindow : Window
         }
 
         Content = null;
+        if (!browserGone)
+        {
+            // The Page's Heap Goes Back Now, Measured 50 MB
+            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, true, true);
+            GC.WaitForPendingFinalizers();
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, true, true);
+        }
 
         s_logger.Info(
             $"Released The Page {(browserGone ? "After Its Browser Exited" : "After 10 Minutes In The Tray")} In {released.ElapsedMilliseconds} ms"
@@ -481,47 +215,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ShowTrayMenu()
-    {
-        var seconds = _controller.Settings.ReplaySeconds;
-        var open = new TrayMenuItem("Open LetsClip");
-        var save = new TrayMenuItem($"Save Last {seconds} Seconds", _controller.IsRecording);
-        var exit = new TrayMenuItem("Exit");
-        var picked = TrayMenu.Show(
-            new WindowInteropHelper(this).EnsureHandle(),
-            open,
-            save,
-            null,
-            exit
-        );
-        if (picked == open)
-        {
-            ShowFromTray();
-        }
-        else if (picked == save)
-        {
-            _ = SaveFromHotkeyAsync();
-        }
-        else if (picked == exit)
-        {
-            _ = ExitAsync();
-        }
-    }
-
-    private void UpdateTray()
-    {
-        // The Same Words As The Chip
-        var status = _controller.Recorder.Status;
-        _trayIcon.Icon =
-            _controller.ShowsError ? _problemIcon
-            : _controller.IsRecording ? _recordingIcon
-            : _plainIcon;
-        var text = _controller.ShowsError
-            ? $"{AppInfo.DisplayName}, Error, {status.Message}"
-            : $"{AppInfo.DisplayName}, {_controller.StatusText}";
-        _trayIcon.Text = text.Length > 127 ? text[..127] : text;
-    }
-
     private void FitToScreen()
     {
         // Small Or Heavily Scaled Screens Still Show The Whole Page
@@ -530,7 +223,15 @@ public partial class MainWindow : Window
         var (width, height) = (area.Width / scale, area.Height / scale);
         (MinWidth, MinHeight) = (Math.Min(PageWidth, width), Math.Min(PageHeight, height));
         (Width, Height) = (Math.Min(Width, width), Math.Min(Height, height));
-        _pageZoom = Math.Min(1, width / PageWidth);
+
+        // A Window Drag Asks Often, The Zoom Rarely Differs
+        var zoom = Math.Min(1, width / PageWidth);
+        if (zoom == _pageZoom)
+        {
+            return;
+        }
+
+        _pageZoom = zoom;
         if (_page?.WebView is { CoreWebView2: not null } control)
         {
             control.ZoomFactor = _pageZoom;
@@ -589,14 +290,17 @@ public partial class MainWindow : Window
         if (isFullScreen)
         {
             _windowedState = WindowState;
+            _windowedSize = new Size(Width, Height);
             WindowStyle = WindowStyle.None;
             WindowState = WindowState.Normal;
             WindowState = WindowState.Maximized;
             return;
         }
 
+        // The Size It Had, Full Screen Left It Screen Sized
         WindowStyle = WindowStyle.SingleBorderWindow;
         WindowState = _windowedState;
+        (Width, Height) = (_windowedSize.Width, _windowedSize.Height);
     }
 
     private void MapClipsFolder()
@@ -631,35 +335,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private static Drawing.Icon WithDot(Drawing.Icon baseIcon, Drawing.Color color)
-    {
-        using var bitmap = baseIcon.ToBitmap();
-        using (var graphics = Drawing.Graphics.FromImage(bitmap))
-        {
-            // A Ringed Dot In The Corner, Readable At 16 Pixels
-            graphics.SmoothingMode = Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            var size = bitmap.Width / 2;
-            var bounds = new Drawing.Rectangle(
-                bitmap.Width - size - 1,
-                bitmap.Height - size - 1,
-                size,
-                size
-            );
-            using var brush = new Drawing.SolidBrush(color);
-            using var ring = new Drawing.Pen(Drawing.Color.FromArgb(0x14, 0x14, 0x14), size / 6f);
-            graphics.FillEllipse(brush, bounds);
-            graphics.DrawEllipse(ring, bounds);
-        }
-
-        // Ponytail: Two Icon Handles Live For The App's Life
-        return Drawing.Icon.FromHandle(bitmap.GetHicon());
-    }
-
-    private static Drawing.Color ToDrawingColor(MudColor color)
-    {
-        return Drawing.Color.FromArgb(color.A, color.R, color.G, color.B);
-    }
-
     private async Task RestPageAsync()
     {
         var visibility = ++_visibility;
@@ -667,10 +342,9 @@ public partial class MainWindow : Window
         if (IsVisible)
         {
             EnsurePage();
-            _ = FindUpdateAsync();
         }
 
-        if (_page?.WebView is not { CoreWebView2: { } browser } control)
+        if (_page?.WebView is not UIElement { } control || _browser is not { } browser)
         {
             return;
         }
@@ -724,7 +398,7 @@ public partial class MainWindow : Window
     protected override void OnClosing(CancelEventArgs eventArgs)
     {
         // Closing Hides To The Tray, Only Exit Ends LetsClip
-        if (!_isExiting)
+        if (!IsExiting)
         {
             eventArgs.Cancel = true;
             Hide();

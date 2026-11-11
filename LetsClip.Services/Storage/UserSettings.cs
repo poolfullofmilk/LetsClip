@@ -33,7 +33,8 @@ public sealed record UserSettings(
     bool ExportAudio = true,
     bool DeleteOriginals = true,
     int DefaultsVersion = 0,
-    ClipSort ClipSort = ClipSort.Newest
+    ClipSort ClipSort = ClipSort.Newest,
+    string? AttemptedUpdate = null
 )
 {
     // Raised When New Defaults Reach Existing Users Once

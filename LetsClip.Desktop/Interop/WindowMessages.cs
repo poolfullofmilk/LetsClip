@@ -1,10 +1,10 @@
 using System.Runtime.InteropServices;
-using System.Windows.Interop;
 using LetsClip.Data.Helpers;
+using Forms = System.Windows.Forms;
 
 namespace LetsClip.Desktop.Interop;
 
-public sealed partial class WindowMessages : IDisposable
+public sealed partial class WindowMessages : Forms.NativeWindow, IDisposable
 {
     // Window Messages And Flags
     private const int HotkeyMessage = 0x0312;
@@ -14,15 +14,14 @@ public sealed partial class WindowMessages : IDisposable
     private const int HotkeyId = 1;
     private static readonly Guid s_displayState = new("6FE69556-704A-47A0-8F24-C28D936FDA47");
 
-    private readonly HwndSource _source;
     private readonly nint _powerRegistration;
     private bool _hotkeyRegistered;
 
-    public WindowMessages(nint window)
+    public WindowMessages()
     {
-        _source = HwndSource.FromHwnd(window);
-        _source.AddHook(Hook);
-        _powerRegistration = RegisterPowerSettingNotification(window, s_displayState, 0);
+        // A Plain Hidden Window, A WPF One Costs 50 MB
+        CreateHandle(new Forms.CreateParams());
+        _powerRegistration = RegisterPowerSettingNotification(Handle, s_displayState, 0);
     }
 
     public event Action? HotkeyPressed;
@@ -34,7 +33,7 @@ public sealed partial class WindowMessages : IDisposable
         // Held Keys Fire Once, The Combination Ours While Registered
         UnregisterHotkey();
         _hotkeyRegistered = RegisterHotKey(
-            _source.Handle,
+            Handle,
             HotkeyId,
             (uint)hotkey.Modifiers | NoRepeat,
             (uint)hotkey.VirtualKey
@@ -46,29 +45,32 @@ public sealed partial class WindowMessages : IDisposable
     {
         if (_hotkeyRegistered)
         {
-            _ = UnregisterHotKey(_source.Handle, HotkeyId);
+            _ = UnregisterHotKey(Handle, HotkeyId);
             _hotkeyRegistered = false;
         }
     }
 
-    private nint Hook(nint window, int message, nint wParam, nint lParam, ref bool handled)
+    protected override void WndProc(ref Forms.Message message)
     {
-        if (message == HotkeyMessage && wParam == HotkeyId)
+        if (message.Msg == HotkeyMessage && message.WParam == HotkeyId)
         {
-            handled = true;
             HotkeyPressed?.Invoke();
         }
-        else if (message == PowerBroadcast && wParam == PowerSettingChange && lParam != 0)
+        else if (
+            message.Msg == PowerBroadcast
+            && message.WParam == PowerSettingChange
+            && message.LParam != 0
+        )
         {
             // Data 0 Is Off, 1 On And 2 Dimmed
-            var setting = Marshal.PtrToStructure<PowerSetting>(lParam);
+            var setting = Marshal.PtrToStructure<PowerSetting>(message.LParam);
             if (setting.Setting == s_displayState)
             {
                 DisplayPowerChanged?.Invoke(setting.Data != 0);
             }
         }
 
-        return 0;
+        base.WndProc(ref message);
     }
 
     public void Dispose()
@@ -79,7 +81,7 @@ public sealed partial class WindowMessages : IDisposable
             _ = UnregisterPowerSettingNotification(_powerRegistration);
         }
 
-        _source.RemoveHook(Hook);
+        DestroyHandle();
         GC.SuppressFinalize(this);
     }
 

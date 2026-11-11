@@ -1,16 +1,27 @@
+using System.Runtime.InteropServices;
 using LetsClip.Data.Helpers;
 using Microsoft.Win32;
+using NLog;
 
 namespace LetsClip.Services.Integration;
 
-public static class StartupRegistration
+public static partial class StartupRegistration
 {
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
 
-    // Desktop Apps Folder Links To This Start Menu Folder
+    // Updates And Reboots Already Start It, Only Crashes And Hangs
+    private const int RestartNoPatch = 4;
+    private const int RestartNoReboot = 8;
+
+    // The Owner's 01 Apps Folder Where It Exists, Else Programs
+    private static readonly string s_programs = Environment.GetFolderPath(
+        Environment.SpecialFolder.Programs
+    );
     private static readonly string s_shortcutPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.Programs),
-        "01 Apps",
+        Directory.Exists(Path.Combine(s_programs, "01 Apps"))
+            ? Path.Combine(s_programs, "01 Apps")
+            : s_programs,
         $"{AppInfo.DisplayName}.lnk"
     );
 
@@ -28,6 +39,8 @@ public static class StartupRegistration
             return;
         }
 
+        // Windows Brings A Crashed Or Hung LetsClip Back, In Tray
+        _ = RegisterApplicationRestart(Updater.RestartArguments, RestartNoPatch | RestartNoReboot);
         try
         {
             using var runKey = Registry.CurrentUser.CreateSubKey(RunKeyPath);
@@ -44,9 +57,10 @@ public static class StartupRegistration
 
             WriteShortcut();
         }
-        catch
+        catch (Exception exception)
         {
             // A Locked Registry Must Not Stop Recording
+            s_logger.Warn($"Failed To Register With Windows {exception.GetType().Name}");
         }
     }
 
@@ -61,4 +75,7 @@ public static class StartupRegistration
         shortcut.Description = AppInfo.DisplayName;
         shortcut.Save();
     }
+
+    [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    private static partial int RegisterApplicationRestart(string commandLine, int flags);
 }

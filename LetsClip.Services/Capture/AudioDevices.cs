@@ -61,9 +61,9 @@ public static partial class AudioDevices
                 return output.AudioMeterInformation.MasterPeakValue > 0;
             }
         }
-        catch (COMException)
+        catch (Exception)
         {
-            // Unknown Reads As Idle, A Short Wait Costs Nothing
+            // A Sound Never Ends LetsClip, Unknown Reads As Idle
             return false;
         }
     }

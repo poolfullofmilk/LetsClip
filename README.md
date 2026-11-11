@@ -12,11 +12,13 @@
 - Clips are named after their game or app and show their resolution, bitrate and size, rename them, sort them and filter them by game
 - Rest the pointer on a clip to preview it
 - Copy any clip as a file and paste it straight into Discord
-- Starts with Windows in the tray, updates itself in the background and recovers from problems on its own
+- A different sound tells you when a press saved nothing
+- Finds your games wherever Steam is installed, and games from the Xbox app
+- Starts with Windows in the tray, updates itself in the background with signed updates and recovers from problems on its own, even a crash
 
 ## Quick start
 1. Download the exe from the [latest release](https://github.com/poolfullofmilk/LetsClip/releases/latest)
-2. Run it, there is nothing to install
+2. Run it from anywhere, it puts itself in place and there is nothing to install
 3. Press F10 to save a clip, then open it to trim and export
 
 ## ⚠️ Important
@@ -27,7 +29,7 @@
 - Windows may warn on the first run because the app is not signed: click More info, then Run anyway
 
 ## Technical details
-- .NET 10, WPF, Blazor and MudBlazor, one self-contained exe
+- .NET 11, WPF, Blazor and MudBlazor, one self-contained exe
 - A bundled FFmpeg 9.0.2 records and exports with your graphics card's encoder (AMD, NVIDIA or Intel), NAudio captures the audio
 - GPL-3.0, see [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)
 

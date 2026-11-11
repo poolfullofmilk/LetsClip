@@ -124,7 +124,7 @@ public partial class Settings : IDisposable
         if (_revealStorage)
         {
             _revealStorage = false;
-            await JavaScript.InvokeVoidAsync("letsClip.reveal", "storage");
+            await JavaScript.CallAsync("letsClip.reveal", "storage");
         }
     }
 
@@ -387,7 +387,7 @@ public partial class Settings : IDisposable
         (_hotkeyError, _pendingKey, _capturingKey) = (null, null, true);
         Shell.PauseHotkey();
         _reference ??= DotNetObjectReference.Create(this);
-        await JavaScript.InvokeVoidAsync("letsClip.watchKeys", _reference);
+        await JavaScript.CallAsync("letsClip.watchKeys", _reference);
     }
 
     [JSInvokable]
@@ -402,10 +402,11 @@ public partial class Settings : IDisposable
     }
 
     [JSInvokable]
-    public Task OnKeysDone(bool keep)
+    public async Task OnKeysDone(bool keep)
     {
         // Enter Keeps The Keys, Escape Or Hiding The Window Cancels
-        return keep ? ConfirmKeysAsync() : CancelKeysAsync();
+        await (keep ? ConfirmKeysAsync() : CancelKeysAsync());
+        StateHasChanged();
     }
 
     private async Task ConfirmKeysAsync()
@@ -426,8 +427,6 @@ public partial class Settings : IDisposable
             RestoreHotkey();
             _hotkeyError = $"{chosen} is taken by another app, kept {Controller.Settings.Hotkey}";
         }
-
-        StateHasChanged();
     }
 
     private async Task CancelKeysAsync()
@@ -435,7 +434,6 @@ public partial class Settings : IDisposable
         await StopKeysAsync();
         _hotkeyError = null;
         RestoreHotkey();
-        StateHasChanged();
     }
 
     private void RestoreHotkey()
@@ -446,14 +444,7 @@ public partial class Settings : IDisposable
     private async Task StopKeysAsync()
     {
         (_capturingKey, _pendingKey) = (false, null);
-        try
-        {
-            await JavaScript.InvokeVoidAsync("letsClip.stopKeys");
-        }
-        catch (JSDisconnectedException)
-        {
-            // The Window Is Closing, Its Listener Goes With It
-        }
+        await JavaScript.CallAsync("letsClip.stopKeys");
     }
     #endregion
 

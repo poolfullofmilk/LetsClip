@@ -51,10 +51,10 @@ public partial class UpdateDialog
         await SetClosableAsync(false);
         try
         {
-            // The Window Downloads, Starts The New Exe And Exits
-            if (Application.Current.MainWindow is MainWindow window)
+            // The Tray Downloads, Starts The New Exe And Exits
+            if (Application.Current is App { Tray: { } tray })
             {
-                await window.InstallUpdateAsync(
+                await tray.InstallUpdateAsync(
                     Release,
                     new Progress<(long Received, long Total)>(ShowProgress)
                 );
@@ -64,7 +64,7 @@ public partial class UpdateDialog
         {
             // An Unverified Download Never Runs, The Release Page Opens Instead
             s_logger.Error(exception, "Failed To Verify Update");
-            Snackbar.Add("The download did not match its checksum", Severity.Warning);
+            Snackbar.Add("The download could not be verified", Severity.Warning);
             OpenReleasePage();
         }
         catch (UnauthorizedAccessException exception)

@@ -576,6 +576,11 @@
     border-radius: var(--radius-pill) !important;
 }
 
+/* An Off Switch Keeps The Light Grey Labels Show */
+.mud-switch-base:not(.mud-checked) .mud-switch-thumb-medium {
+    background-color: var(--grip);
+}
+
 /* No Material Ripple, Buttons Fade Their Colour Instead */
 .mud-ripple-effect {
     display: none !important;

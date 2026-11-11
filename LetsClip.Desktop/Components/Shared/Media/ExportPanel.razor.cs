@@ -154,9 +154,6 @@ public partial class ExportPanel : IDisposable
     private string VerdictHintClass =>
         Budget?.Verdict == BudgetVerdict.TooSmall ? "mud-error-text" : "mud-text-secondary";
 
-    private ExportRequest Request =>
-        new(Clip.Path, Range, Plan, FrameRate, WithAudio, Controller.Settings.ExportsDirectory);
-
     private static string PlanLabel(DiscordPlan plan)
     {
         return plan switch
@@ -242,7 +239,14 @@ public partial class ExportPanel : IDisposable
         });
         try
         {
-            var request = Request;
+            var request = new ExportRequest(
+                Clip.Path,
+                Range,
+                Plan,
+                FrameRate,
+                WithAudio,
+                Controller.Settings.ExportsDirectory
+            );
             var token = _cancel.Token;
             _result = await Task.Run(
                 () => ClipExporter.ExportAsync(request, progress, token),
@@ -285,7 +289,7 @@ public partial class ExportPanel : IDisposable
         if (_revealResult)
         {
             _revealResult = false;
-            await JavaScript.InvokeVoidAsync("letsClip.reveal", "exported");
+            await JavaScript.CallAsync("letsClip.reveal", "exported");
         }
     }
 

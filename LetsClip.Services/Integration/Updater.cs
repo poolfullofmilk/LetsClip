@@ -15,6 +15,10 @@ public static class Updater
     private const string ExecutablePrefix = "LetsClip_v";
     private const string AfterUpdateArgument = "--after-update";
 
+    // The Owner's Public Key, The Private Half Stays Off GitHub
+    private const string SigningKey =
+        "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEXVuVWirBvHy4LvU4Tw+CV1+JO9hQWAiLIGOvP2QIWFAgmXclQKJ7laFwF8gttv+X7cZDkXiowsEkOxeWck30VQ==";
+
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
 
     // Checks Read The Redirect Itself, Downloads Follow It
@@ -32,6 +36,11 @@ public static class Updater
     // The Old Version May Finish A Save First
     private static readonly TimeSpan s_previousExitWait = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan s_stallTimeout = TimeSpan.FromMinutes(1);
+
+    static Updater()
+    {
+        Debug.Assert(SelfTestPasses(), "Updater SelfTest Failed");
+    }
 
     public static async Task<ReleaseInfo?> CheckAsync()
     {
@@ -70,11 +79,12 @@ public static class Updater
     {
         var started = Stopwatch.StartNew();
         var asset = $"LetsClip_{release.Tag}.exe";
-        var targetPath = Path.Combine(Path.GetDirectoryName(Environment.ProcessPath)!, asset);
+        Directory.CreateDirectory(AppInfo.InstallDirectory);
+        var targetPath = Path.Combine(AppInfo.InstallDirectory, asset);
 
         // A Name Only This Attempt Owns, Removed If It Fails
         var partialPath = $"{targetPath}.{Guid.NewGuid():N}.download";
-        var expectedDigest = await ExpectedDigestAsync(release.Tag, asset);
+        var (expectedDigest, signature) = await ExpectedDetailsAsync(release.Tag, asset);
 
         // A Body Stalled For A Minute Is Given Up
         using var stall = new CancellationTokenSource(s_stallTimeout);
@@ -120,6 +130,13 @@ public static class Updater
                 {
                     throw new InvalidDataException($"Checksum Mismatch For {release.Tag}");
                 }
+
+                // GitHub Vouches For The Download, The Signature For Its Author
+                downloaded.Position = 0;
+                if (!IsSigned(downloaded, signature))
+                {
+                    throw new InvalidDataException($"Bad Signature For {release.Tag}");
+                }
             }
 
             // Only A Complete Download Gets The Real Name
@@ -136,10 +153,44 @@ public static class Updater
         }
     }
 
-    private static async Task<string> ExpectedDigestAsync(string tag, string asset)
+    private static bool IsSigned(Stream file, string? signature)
     {
-        // GitHub Hashes Every Release Asset, Its API Lists The Hash
+        // An ECDSA P-256 Signature Of The Exe, OpenSSL's Form
+        var bytes = new byte[128];
+        if (!Convert.TryFromBase64String(signature ?? "", bytes, out var length))
+        {
+            return false;
+        }
+
+        using var key = ECDsa.Create();
+        key.ImportSubjectPublicKeyInfo(Convert.FromBase64String(SigningKey), out _);
+        return key.VerifyData(
+            file,
+            bytes.AsSpan(0, length).ToArray(),
+            HashAlgorithmName.SHA256,
+            DSASignatureFormat.Rfc3279DerSequence
+        );
+    }
+
+    private static bool SelfTestPasses()
+    {
+        // A Known Signature Holds, A Changed Byte Fails
+        const string signed =
+            "MEYCIQDrMuNndm0M94jttveQr5mazeLA5AKunFRNwQne4Nac6gIhAOjHUf4usmtVqF+Nc9DUNqZta8Y8FuPZGmrs3mJoZmPA";
+        return IsSigned(new MemoryStream("LetsClip"u8.ToArray()), signed)
+            && !IsSigned(new MemoryStream("LetsClap"u8.ToArray()), signed)
+            && !IsSigned(new MemoryStream("LetsClip"u8.ToArray()), null)
+            && !IsSigned(new MemoryStream("LetsClip"u8.ToArray()), "not a signature");
+    }
+
+    private static async Task<(string Digest, string? Signature)> ExpectedDetailsAsync(
+        string tag,
+        string asset
+    )
+    {
+        // GitHub Hashes Every Release Asset, The Body Holds The Signature
         string? digest = null;
+        string? signature = null;
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, AppInfo.ReleaseApiUrl + tag);
@@ -147,6 +198,9 @@ public static class Updater
             using var response = await s_checkClient.SendAsync(request);
             response.EnsureSuccessStatusCode();
             using var release = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            signature = release.RootElement.TryGetProperty("body", out var body)
+                ? body.GetString()?.Trim()
+                : null;
             if (release.RootElement.TryGetProperty("assets", out var assets))
             {
                 foreach (var listed in assets.EnumerateArray())
@@ -169,8 +223,53 @@ public static class Updater
 
         const string prefix = "sha256:";
         return digest?.StartsWith(prefix, StringComparison.Ordinal) == true
-            ? digest[prefix.Length..].ToLowerInvariant()
+            ? (digest[prefix.Length..].ToLowerInvariant(), signature)
             : throw new InvalidDataException($"Release {tag} Lists No Checksum");
+    }
+
+    // A Restart Waits For The Crashed Copy, Like An Update
+    public static string RestartArguments =>
+        $"{AfterUpdateArgument} {Environment.ProcessId} \"{Environment.ProcessPath}\" --tray";
+
+    public static bool MoveToInstallFolder(string[] arguments)
+    {
+        // Run From Downloads Once, It Lives In One Place After
+        var running = Environment.ProcessPath!;
+        if (
+            !CanInstall
+            || FilePaths.AreSame(Path.GetDirectoryName(running), AppInfo.InstallDirectory)
+        )
+        {
+            return false;
+        }
+
+        try
+        {
+            var installed = Path.Combine(AppInfo.InstallDirectory, Path.GetFileName(running));
+            Directory.CreateDirectory(AppInfo.InstallDirectory);
+            if (
+                !File.Exists(installed)
+                || new FileInfo(installed).Length != new FileInfo(running).Length
+            )
+            {
+                File.Copy(running, installed, overwrite: true);
+            }
+
+            var startInfo = new ProcessStartInfo(installed) { UseShellExecute = false };
+            foreach (var argument in arguments)
+            {
+                startInfo.ArgumentList.Add(argument);
+            }
+
+            Process.Start(startInfo);
+            return true;
+        }
+        catch (Exception exception)
+            when (exception is IOException or UnauthorizedAccessException or Win32Exception)
+        {
+            // Unwritable Or Blocked, It Runs From Where It Is
+            return false;
+        }
     }
 
     public static void Launch(string executablePath, bool inTray)
