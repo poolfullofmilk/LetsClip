@@ -12,7 +12,8 @@
 - Clips are named after their game or app and show their resolution, bitrate and size, rename them, sort them and filter them by game
 - Rest the pointer on a clip to preview it
 - Copy any clip as a file and paste it straight into Discord
-- A different sound tells you when a press saved nothing
+- A different sound tells you when a press saved nothing, and no notification ever plays a Windows sound over your game
+- Spamming the key saves one clip, not a pile of copies
 - Finds your games wherever Steam is installed, and games from the Xbox app
 - Starts with Windows in the tray, updates itself in the background with signed updates and recovers from problems on its own, even a crash
 

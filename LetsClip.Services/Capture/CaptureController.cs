@@ -58,6 +58,8 @@ public sealed class CaptureController : IDisposable
 
     public event Action? Changed;
 
+    public event Action? SaveFailed;
+
     public UserSettings Settings { get; private set; }
 
     public ReplayRecorder Recorder { get; }
@@ -351,7 +353,13 @@ public sealed class CaptureController : IDisposable
                     )
                 ) + 1
             : 0;
-        return await Recorder.SaveAsync(number > 0 ? number : null);
+        var outcome = await Recorder.SaveAsync(number > 0 ? number : null);
+        if (outcome.Error is not null)
+        {
+            SaveFailed?.Invoke();
+        }
+
+        return outcome;
     }
 
     public Task DisplaysChangedAsync()

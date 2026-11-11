@@ -33,9 +33,6 @@ public sealed class ReplayRecorder : IDisposable
     private const long MinimumFreeBytes = 2_000_000_000;
     private const long StopFreeBytes = 1_000_000_000;
 
-    // Saves Wait Behind The Running One, A Few At Most
-    private const int MaximumSaves = 3;
-
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
     private static readonly TimeSpan s_saveTimeout = TimeSpan.FromSeconds(8);
     private static readonly TimeSpan s_healthPeriod = TimeSpan.FromSeconds(1);
@@ -68,7 +65,6 @@ public sealed class ReplayRecorder : IDisposable
 
     private readonly ClipLibrary _library;
     private readonly SemaphoreSlim _transition = new(1, 1);
-    private readonly SemaphoreSlim _saveTurn = new(1, 1);
     private readonly Lock _gate = new();
     private readonly Timer _health;
     private CaptureSession? _session;
@@ -565,9 +561,10 @@ public sealed class ReplayRecorder : IDisposable
                 return new SaveOutcome(null, "Nothing is being recorded right now");
             }
 
-            if (_saves >= MaximumSaves)
+            // A Press While One Saves Does Nothing
+            if (_saves > 0)
             {
-                return new SaveOutcome(null, "Clips are already saving, try again in a moment");
+                return new SaveOutcome(null, null);
             }
 
             // The Press Ends The Clip, However Long Saving Takes
@@ -582,20 +579,12 @@ public sealed class ReplayRecorder : IDisposable
             // Inside The Try, A Failing Handler Never Leaks The Pin
             UpdateStatus(session, null);
             SaveStarted?.Invoke();
-            await _saveTurn.WaitAsync();
-            try
-            {
-                var clip = await SaveFromAsync(session, end, recordedAt, monitor);
-                ClipSaved?.Invoke(clip);
-                s_logger.Info(
-                    $"Saved {Path.GetFileName(clip.Path)} Of {Formatter.FormatDuration(clip.Duration)}, {Formatter.FormatSize(clip.SizeBytes)}, In {Stopwatch.GetElapsedTime(pressed).TotalSeconds:0.0} s"
-                );
-                return new SaveOutcome(clip, null);
-            }
-            finally
-            {
-                _saveTurn.Release();
-            }
+            var clip = await SaveFromAsync(session, end, recordedAt, monitor);
+            ClipSaved?.Invoke(clip);
+            s_logger.Info(
+                $"Saved {Path.GetFileName(clip.Path)} Of {Formatter.FormatDuration(clip.Duration)}, {Formatter.FormatSize(clip.SizeBytes)}, In {Stopwatch.GetElapsedTime(pressed).TotalSeconds:0.0} s"
+            );
+            return new SaveOutcome(clip, null);
         }
         catch (Exception exception)
             when (exception

@@ -46,3 +46,10 @@ The same tools on the published .NET 11 exe with the plain WebView2 host, 7800X3
 - Three saves and three refused presses in a row, the display off and on, the six size sweep (no sideways scroll, every batch loads, a sort starts over at the top, no console or log error), the lone exe, the hover preview, the overlays, a renderer and a browser crash: all as before.
 - Not repeated on .NET 11: the output meter for the chimes (its throwaway needed a runtime the PC does not have machine wide) and the timed page release; both ran on the same code on .NET 10 the day before.
 - The demo and the three stills were taken from the v2.0.4 exe alone in an empty folder with the library in `C:\LetsClip`: 38.4 s, 1479 frames, MP4 4.2 MB, WebP 1.2 MB; Settings at 1123 CSS pixels high. The demo script must reset the named clip's trim first (the throwaway that names the clips), or a second take starts from the last cut.
+
+## The Press On The Real Tray App, 11 November 2026
+
+- The hotkey without a key: post `WM_HOTKEY` (`0x0312`, wParam 1) to the sandboxed process's windows whose class starts with `WindowsForms` (the `WindowMessages` window and the tray icon's, which ignores it). Nothing is injected, so no other program sees a key and a game keeps its focus.
+- What sounded: a throwaway file-based app on `LetsClip.Services` (for NAudio) reads `AudioMeterInformation.MasterPeakValue` of every session on the default output every 10 ms, refreshing the sessions every 100 ms, and names each program that sounded with its peak and bursts. It works with the owner's own audio playing, where a loopback of the whole output cannot. A program recording the output (LetsClip while it records system audio, Discord) shows the whole mix on its own session.
+- What showed: `CopyFromScreen` of the primary screen's bottom right corner 1.5 s after the press, after `SetProcessDPIAware`.
+- Results are in `Docs/Capture.md`. v2.0.5 kept v2.0.4's demo and stills, taken that morning: the round changed no page, style or page script.

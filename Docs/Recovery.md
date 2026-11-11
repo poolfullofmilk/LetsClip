@@ -60,3 +60,11 @@ Tools, all throwaway and never committed:
 - A page exception is tested with a temporary `@page "/crash"` that throws, removed before the diff is carried over; a renderer crash with CDP's `Page.crash`.
 - Monitor mode without recording: rename the build's `FFmpeg\ffmpeg.exe` for the look.
 - The owner's G522 gives only silence to a process started from the Claude app, so the microphone path is proven with synthetic speech; the owner confirms by ear.
+
+## Injected In A Live Match, 11 November 2026
+
+The gaps the handoff's round 3 closed were exercised through a stand in `ffmpeg.exe` (a throwaway that hangs or fails when a file names a pattern in its arguments, else runs the real one) under a windowless harness on `CaptureController`, recording Overwatch with the owner's settings.
+
+- A failure streak long past counts anew: with `_failures` set to 9 and the last failure six minutes old, killing the video encoder 4 s into its session logged `Failure 1 In A Row, Brief, Out Of Sight`, kept the chip on Recording and was recording again 3.3 s later. The control, the same nine failures but recent, showed Recording Error at once and waited 60 s, which is what every later failure did before the fix.
+- A failed encoder test is not run again for that encoder's second start: with the AMF test failing once, the log holds one `Skipped AMD AMF`, then the x264 test, and recording on x264 4.9 s after launch.
+- A start throwing an unlisted exception was not injected, no way to make FFmpeg cause one was found; the catch is now unconditional.

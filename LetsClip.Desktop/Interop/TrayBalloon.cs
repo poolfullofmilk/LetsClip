@@ -9,6 +9,7 @@ public static unsafe partial class TrayBalloon
     private const uint ModifyIcon = 0x1;
     private const uint ShowsInfo = 0x10;
     private const uint NoSound = 0x10;
+    private const uint WarningSign = 0x2;
 
     // Ponytail: Private NotifyIcon Fields, May Break On A .NET Update
     private static readonly FieldInfo? s_window = typeof(Forms.NotifyIcon).GetField(
@@ -20,15 +21,22 @@ public static unsafe partial class TrayBalloon
         BindingFlags.NonPublic | BindingFlags.Instance
     );
 
-    public static void ShowQuiet(Forms.NotifyIcon icon, int milliseconds, string title, string text)
+    public static void ShowQuiet(
+        Forms.NotifyIcon icon,
+        int milliseconds,
+        string title,
+        string text,
+        bool isWarning = false
+    )
     {
+        var sign = isWarning ? Forms.ToolTipIcon.Warning : Forms.ToolTipIcon.None;
         // Without The Fields It Shows With The Windows Sound Instead
         if (
             s_window?.GetValue(icon) is not Forms.NativeWindow { Handle: not 0 } window
             || s_id?.GetValue(icon) is not uint id
         )
         {
-            icon.ShowBalloonTip(milliseconds, title, text, Forms.ToolTipIcon.None);
+            icon.ShowBalloonTip(milliseconds, title, text, sign);
             return;
         }
 
@@ -39,13 +47,13 @@ public static unsafe partial class TrayBalloon
             Id = id,
             Flags = ShowsInfo,
             Timeout = (uint)milliseconds,
-            InfoFlags = NoSound,
+            InfoFlags = NoSound | (isWarning ? WarningSign : 0),
         };
         Copy(text, data.Info, 256);
         Copy(title, data.InfoTitle, 64);
         if (!ShellNotifyIcon(ModifyIcon, &data))
         {
-            icon.ShowBalloonTip(milliseconds, title, text, Forms.ToolTipIcon.None);
+            icon.ShowBalloonTip(milliseconds, title, text, sign);
         }
     }
 

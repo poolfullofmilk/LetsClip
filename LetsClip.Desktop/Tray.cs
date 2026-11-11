@@ -73,14 +73,10 @@ public sealed class Tray
         _icon.BalloonTipClicked += (_, _) => (_balloonClick ?? _window.ShowFromTray)();
 
         controller.Recorder.StatusChanged += () => _window.Dispatcher.InvokeAsync(UpdateIcon);
-        controller.Recorder.SaveStarted += () =>
-        {
-            // A Soft Chime At The Press, Muted Out Of Clips
-            if (_controller.Settings.SaveSound)
-            {
-                SaveChime.Play(_controller.Recorder, _controller.Settings.SaveSoundVolume);
-            }
-        };
+
+        // A Chime At The Press, A Falling One On Failure
+        controller.Recorder.SaveStarted += () => Chime(failed: false);
+        controller.SaveFailed += () => Chime(failed: true);
         controller.Recorder.ClipSaved += clip =>
             _window.Dispatcher.InvokeAsync(() => NotifySaved(clip));
 
@@ -114,7 +110,7 @@ public sealed class Tray
             && _shell.HotkeyProblem is { } problem
         )
         {
-            ShowBalloon("Save Hotkey Taken", problem, Forms.ToolTipIcon.Warning);
+            ShowBalloon("Save Hotkey Taken", problem);
         }
     }
 
@@ -279,16 +275,6 @@ public sealed class Tray
             return;
         }
 
-        // A Balloon Hides Behind A Game, A Falling Chime Never
-        if (_controller.Settings.SaveSound)
-        {
-            SaveChime.Play(
-                _controller.Recorder,
-                _controller.Settings.SaveSoundVolume,
-                failed: true
-            );
-        }
-
         await _window.Dispatcher.InvokeAsync(() =>
         {
             if (front is { } app && _controller.Games.GameName is null)
@@ -296,13 +282,12 @@ public sealed class Tray
                 ShowBalloon(
                     "Clip Not Saved",
                     $"Nothing is being recorded, click to record {app.Name} from now on",
-                    Forms.ToolTipIcon.Warning,
                     () => RecordFromNowOn(app)
                 );
                 return;
             }
 
-            ShowBalloon("Clip Not Saved", error, Forms.ToolTipIcon.Warning);
+            ShowBalloon("Clip Not Saved", error);
         });
     }
 
@@ -319,15 +304,20 @@ public sealed class Tray
         );
     }
 
-    private void ShowBalloon(
-        string title,
-        string text,
-        Forms.ToolTipIcon icon,
-        Action? onClick = null
-    )
+    private void Chime(bool failed)
     {
+        // Every Sound Is Ours, Under The One Save Sound Setting
+        if (_controller.Settings.SaveSound)
+        {
+            SaveChime.Play(_controller.Recorder, _controller.Settings.SaveSoundVolume, failed);
+        }
+    }
+
+    private void ShowBalloon(string title, string text, Action? onClick = null)
+    {
+        // A Problem Shows Its Warning Sign, Windows' Sound Stays Out
         _balloonClick = onClick;
-        _icon.ShowBalloonTip(BalloonMilliseconds, title, text, icon);
+        TrayBalloon.ShowQuiet(_icon, BalloonMilliseconds, title, text, isWarning: true);
     }
 
     private void NotifySaved(ClipInfo clip)

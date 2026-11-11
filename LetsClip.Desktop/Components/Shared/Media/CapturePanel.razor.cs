@@ -227,12 +227,6 @@ public partial class CapturePanel : IDisposable
 
     private async Task SaveAsync()
     {
-        // A Press While Saving Does Nothing, The Spinner Shows Why
-        if (Status.IsSaving)
-        {
-            return;
-        }
-
         // The Same Save As The Hotkey, Off The Page's Thread
         var outcome = await Task.Run(Controller.SaveAsync);
         _saveError = outcome.Error;
