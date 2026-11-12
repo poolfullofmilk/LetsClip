@@ -46,7 +46,7 @@ public sealed record UserSettings(
     // First Clip At Half Volume, The Microphone Test Too
     public const double OpeningVolume = 0.5;
 
-    public static readonly int[] ReplayChoices = [30, 60, 120];
+    public static readonly int[] ReplayChoices = [30, 60, 120, 300, 600];
     public static readonly int[] FrameRateChoices = [30, 60, 120, 144, 165, 240];
 
     // Lines Of A 16 By 9 Box

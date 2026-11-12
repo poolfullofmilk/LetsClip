@@ -1,34 +1,44 @@
+@{
+    // A Spinner In The Icon's Place While The Press Works
+    RenderFragment spinner =
+        @<MudElement HtmlTag="span"
+                     Class="mud-button-icon-start mud-button-icon-size-small">
+            <MudProgressCircular Indeterminate
+                                 Class="button-spinner" />
+        </MudElement>;
+}
+
 @if (Controller.ShowsError)
 {
     @* Try Again Button *@
     <MudButton Variant="Variant.Filled"
                Color="Color.Info"
                Size="Size.Small"
-               StartIcon="@Icons.Material.Rounded.Refresh"
-               OnClick="Controller.StartAutomaticallyAsync">
+               StartIcon="@(_retrying ? null : Icons.Material.Rounded.Refresh)"
+               OnClick="TryAgainAsync">
+        @if (_retrying)
+        {
+            @spinner
+        }
         Try Again
     </MudButton>
 }
-else
+else if (Controller.IsRecording)
 {
     @* Save Button *@
     <Tooltip Text="@($"Or Press {Controller.Settings.Hotkey}")"
-             Disabled="@(!Controller.IsRecording || Shell.HotkeyProblem is not null)">
+             Placement="Placement.Bottom"
+             Disabled="@(Shell.HotkeyProblem is not null)">
         <MudButton Variant="Variant.Filled"
                    Color="Color.Info"
                    Size="Size.Small"
                    StartIcon="@(Status.IsSaving ? null : Icons.Material.Rounded.Save)"
-                   Disabled="@(!Controller.IsRecording)"
                    OnClick="SaveAsync">
             @if (Status.IsSaving)
             {
-                <MudElement HtmlTag="span"
-                            Class="mud-button-icon-start mud-button-icon-size-small">
-                    <MudProgressCircular Indeterminate
-                                         Class="button-spinner" />
-                </MudElement>
+                @spinner
             }
-            @($"Save Last {Controller.Settings.ReplaySeconds} Seconds")
+            @Controller.SaveText
         </MudButton>
     </Tooltip>
 }

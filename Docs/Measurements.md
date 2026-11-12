@@ -195,3 +195,41 @@ The owner's answers to the handoff's open questions: install .NET 11 and do roun
 - Ponytail ultra audit, whole tree (128 files, 18,008 lines, every member, CSS class and custom property named only where declared): nothing dead beyond the P/Invoke struct fields, `field-warning` and `field-error` (built by `FieldDetail`) and the extension class. Cut: `Clips.CallPageAsync` (a wrapper that only delegated, now a `Reference` property and two direct calls), four hand written `JSDisconnectedException` blocks (one `PageScript.CallAsync`), `ExportPanel.Request`, `MainWindow.Attach` and its tray half (`Tray`). Net about 60 lines gone, no dependency to drop.
 - Left alone on purpose: orphaned metadata of clips deleted while LetsClip was off (needs the path in the metadata), an `alimiter` on the mix (a media change that wants its measured test), a card component for the Clips page, a stable exe name.
 - Numbers: `Docs/Release.md` (.NET 11 host, signing), `Docs/Layout.md` (sweep), `Docs/Verify.md` (baselines).
+
+## Performance Report, 12 November 2026
+
+Measured on the work laptop (i5-1335U, Iris Xe, Quick Sync) in Debug sandboxes over CDP, the owner's pick being report only: nothing below was changed. Ranked by what a person would notice. Numbers on the gaming PC will be smaller.
+
+| # | What | Where | Measured | Possible fix | Effort |
+|---|---|---|---|---|---|
+| 1 | A fresh library's cards wait for the whole picture pass: the page re-renders when the pass ends (`PicturesDone`), so a picture already on disk shows only then | `ClipLibrary.FillThumbnails`, `Clips` | 60 new clips: cards at 8 ms, the first spinner at 8 ms, up to 46 spinning at once, the last picture at 73.1 s with two captures running beside it | Raise per picture, or once a second while a pass runs | Small |
+| 2 | A long selection encoded for Nitro Basic on Quick Sync overshoots and falls through to x264 two pass | `ClipExporter` retries | A 5 minute selection: 51.4 then 50.7 MB for a 50 MB limit (the retry lowered the bitrate 5.6% and the size only 1.4%), then x264 two pass ran past 10 minutes | Scale the retry's step by the overshoot, or cap Quick Sync with `maxrate`; a media change, so measured on FFmpeg's sources first | Medium |
+| 3 | A 10 minute clip's timeline strip | `ClipEditor.LoadStripAsync` | 7.15 s to the strip (its spinner covers it), the player and side panel ready long before | Decode the 12 tiles in parallel seeks instead of one pass over every keyframe | Medium |
+| 4 | Ten minute replays | `CaptureSession` | 23 to 24% of a core for both FFmpeg processes, LetsClip 1.1%, memory flat over 10 minutes (`Docs/Capture.md`) | None needed | |
+| 5 | The game check every 2 s | `GameWatcher` | 0.19% of a core (9 November, unchanged code) | A window based check opens game handles anti cheat may refuse, so it stays | |
+| 6 | Check for Updates | `Updater` | 0.12 to 0.52 s online, up to the 10 s timeout offline; More now spins meanwhile | None needed | |
+| 7 | Read, not measured: `ExportPanel` asks `File.Exists` for the exported file on every render, `Clips.ShownClips` filters and sorts the library on every render, and a failed session start's `Shutdown` waits on the UI thread | `ExportPanel`, `Clips`, `ReplayRecorder` | Sub-millisecond at 60 clips by reading; nothing showed in the frame recordings | Cache per render if a 1,000 clip library shows it | Small |
+
+Idle and playback, 20 s windows, one core = 100%:
+
+| State | LetsClip | WebView2 (7 processes) |
+|---|---|---|
+| Clips, top | 0.23% | 0.15% |
+| Clips, scrolled (the bar's shadow drawn) | 0.92% | 0.23% |
+| Settings | 0.61% | 0.15% |
+| Editor, paused | 0.23% | 0.00% |
+| Editor, a 2 minute 1080p clip playing, the timeline's mask on | 1.04 to 1.20% | 22.5 to 24.0% |
+| The same with the mask swapped for the old overflow clip | 0.90 to 1.35% | 19.9 to 25.9% |
+
+So the header bar's scroll driven shadow and the timeline's mask cost nothing measurable. The editor opened a 2 minute clip with its strip cached in 394 ms. Memory: LetsClip 245 to 251 MB and WebView2 332 to 397 MB across these states in a Debug build.
+
+Tools, all throwaway: a CDP driver (`cdp.js` with `until` and `evaluate`), page state scripts putting the page in each state, a PowerShell sampler of a sandbox's LetsClip and its own WebView2 processes by their command line, and per frame recorders of spinners and disabled controls (`Docs/Verify.md`).
+
+## Handoff Round On The Gaming PC, 12 November 2026
+
+The work laptop's round came in on a `temp` branch with a handoff file and was finished here: squashed onto `master`, checked on AMF and the owner's scale, cleaned up and released as v2.0.7.
+
+- Numbers: `Docs/Capture.md` (5 and 10 minute replays on AMF), `Docs/Export.md` (copy weights, Nitro Basic on AMF), `Docs/Layout.md` (sweep, header bar, style dump, locks).
+- Ponytail ultra audit, whole tree: every identifier named once in the sources is a framework name or a P/Invoke field, every style class but `field-warning` and `field-error` (built by `FieldDetail`) is used, every custom property is read, every page script export is called. Cut: `ExportPanel.TooLongText`'s unreachable fallback, `ClipExporter.TooSmallMessage` made private, a comment above the `PacketMap` record, 55 over long comments. Left alone: the four small spinners written out where they show (a component for three attributes would be a bare wrapper), `SizeBudget.KeepsClip` as the exporter's own first guess.
+- Performance, report only, the owner's rule: a Discord plan export of 5 minutes takes 90 s on AMF (about 200 FPS, `-quality quality`, `-preanalysis 1`, three B frames, decode and Lanczos on the CPU) and 149 s when x264 takes over. A faster AMF preset or a GPU decode would shorten it and wants a measured quality test first. The picture pass, the Quick Sync overshoot and the 10 minute strip from the table above stay open picks.
+- Open picks for the owner: a whole clip with Off can show its copy a few KB under the file on clips not made by LetsClip (605 against 602 KB on the portrait test clip), true but it reads as a change; the timeline keeps its look during a cut or restore.

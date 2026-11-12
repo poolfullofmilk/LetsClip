@@ -24,6 +24,8 @@ public partial class MainLayout : IDisposable
     public required ISnackbar Snackbar { get; set; }
 
     private SelfHealingBoundary? _errorBoundary;
+    private bool _checking;
+    private MudMenu? _moreMenu;
 
     protected override void OnInitialized()
     {
@@ -56,9 +58,31 @@ public partial class MainLayout : IDisposable
         });
     }
 
+    private Task OpenMoreAsync()
+    {
+        // A MudBlazor Button Keeps Its Press From The Activator
+        return _moreMenu?.ToggleMenuAsync(EventArgs.Empty) ?? Task.CompletedTask;
+    }
+
     private async Task CheckForUpdatesAsync()
     {
-        var latest = await Updater.CheckAsync();
+        // Offline It Waits Ten Seconds, More Spins Meanwhile
+        if (_checking)
+        {
+            return;
+        }
+
+        _checking = true;
+        ReleaseInfo? latest;
+        try
+        {
+            latest = await Updater.CheckAsync();
+        }
+        finally
+        {
+            _checking = false;
+        }
+
         if (latest is null)
         {
             Snackbar.Add("Unable to check for updates right now", Severity.Warning);

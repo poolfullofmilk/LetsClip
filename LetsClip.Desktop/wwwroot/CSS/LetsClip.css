@@ -156,6 +156,40 @@
     padding: 8px calc(var(--page-gutter) - var(--scrollbar-width)) var(--page-bottom) 16px;
     overflow-y: auto;
     scrollbar-gutter: stable;
+    scroll-timeline: --page-scroll block;
+}
+
+/* Its Header Is A Bar, Shadowed Once Content Passes Under */
+.scroll-header {
+    timeline-scope: --page-scroll;
+}
+
+    /* Into Both Gutters, With Room Under Its Buttons */
+    .scroll-header > .header-row {
+        position: relative;
+        margin-inline: -16px calc(-1 * var(--page-gutter));
+        padding: 0 var(--page-gutter) 8px 16px;
+    }
+
+        /* The App Bar's Drop, Under The Bottom Edge Only */
+        .scroll-header > .header-row::after {
+            content: "";
+            position: absolute;
+            z-index: 1;
+            inset: 0 -24px;
+            clip-path: inset(0 24px -32px);
+            box-shadow: var(--mud-elevation-4);
+            opacity: 0;
+            pointer-events: none;
+            animation: bar-shadow linear both;
+            animation-timeline: --page-scroll;
+            animation-range: 0 16px;
+        }
+
+@keyframes bar-shadow {
+    to {
+        opacity: 1;
+    }
 }
 
 /* Dialog Tables Scroll Inside A Box Rounded Like Fields */
@@ -394,6 +428,19 @@
     line-height: 1.6 !important;
 }
 
+/* A File Name Takes Two Centred Lines Before Its Dots */
+.file-name {
+    flex: 1 1 0;
+    min-width: 0;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    text-align: center;
+}
+
 /* Long Names Stop At The Edge Of Their Box */
 .ellipsis {
     min-width: 0;
@@ -417,6 +464,13 @@
     .loading-state.page-loading {
         height: 100%;
     }
+
+/* A Strip's Or Thumbnail's Spinner Waits Centred In Its Place */
+.centred-spinner {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+}
 
 /* Tooltips Rise On A Lighter Surface, Long Ones Wrap */
 .mud-tooltip.mud-tooltip-default {
@@ -664,10 +718,8 @@
     }
 }
 
-/* A Quick Load Never Shows Its Spinner */
-.player .mud-progress-circular-svg,
-.timeline .mud-progress-circular-svg,
-.loading-state .mud-progress-circular-svg {
+/* Quick Loads Show No Spinner, A Pressed Button's Does */
+.mud-progress-circular:not(.button-spinner) .mud-progress-circular-svg {
     animation: fade-in var(--fade) 300ms backwards;
 }
 
@@ -680,13 +732,15 @@
     .page > *,
     .timeline-strip,
     .player video,
-    .player .mud-progress-circular-svg,
-    .timeline .mud-progress-circular-svg,
-    .loading-state .mud-progress-circular-svg,
     ::view-transition-group(*),
     ::view-transition-old(*),
     ::view-transition-new(*) {
         animation: none;
+    }
+
+    /* Still Hidden 300 Ms, Then Shown Without A Fade */
+    .mud-progress-circular:not(.button-spinner) .mud-progress-circular-svg {
+        animation-duration: 1ms;
     }
 }
 
@@ -775,8 +829,10 @@
         text-overflow: ellipsis;
     }
 
-/* A Spinner Replaces A Button's Icon While It Works */
-.button-spinner {
+/* A Spinner Replaces A Button's Icon, As Specific As MudBlazor's Size */
+.mud-progress-circular.button-spinner {
+    /* A Block, Or Its Text Line Grows The Button */
+    display: block;
     width: 20px;
     height: 20px;
     color: inherit;
@@ -834,6 +890,12 @@
     overflow-y: auto;
 }
 
+/* Unedited Only Heads The List, The Footer Ends It, Lined Off */
+.filter-option {
+    padding: 4px 12px;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
+
 .filter-footer {
     border-top: 1px solid var(--mud-palette-lines-default);
 }
@@ -888,26 +950,43 @@ mark {
         display: block;
     }
 
-    /* The Date Sits Bottom Left, The Length Bottom Right */
-    .clip-thumb .clip-date {
+        /* Hidden Under Its Preview, Or Its Corners Rim The Video */
+        .clip-thumb:has(> .clip-preview[data-playing]) > img {
+            visibility: hidden;
+            transition: visibility 0s 150ms;
+        }
+
+    /* The Source Bottom Left, Time And Length Together Bottom Right */
+    .clip-thumb .clip-chips {
         position: absolute;
+        right: 8px;
         bottom: 8px;
         left: 8px;
+        display: flex;
+        gap: 8px;
     }
 
-    .clip-thumb .clip-duration {
-        position: absolute;
-        right: 8px;
-        bottom: 8px;
-    }
+        /* Chips On A Picture Take Its Shadow */
+        .clip-chips .mud-chip {
+            flex-shrink: 0;
+            box-shadow: var(--picture-shadow);
+        }
 
-    /* The Game Or Monitor Sits Top Right, Long Names Shortened */
-    .clip-thumb .source-chip {
-        position: absolute;
-        top: 8px;
-        right: 8px;
-        max-width: calc(100% - 16px);
-    }
+        /* The Source Takes The Room Left, Ending In Dots */
+        .clip-chips .source-chip {
+            flex-shrink: 1;
+            min-width: 0;
+            margin-inline-end: auto !important;
+        }
+
+            /* A Block For The Dots, Its Line Centred */
+            .clip-chips .source-chip .mud-chip-content {
+                display: block;
+                align-content: center;
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
 
 /* A Hover Preview Plays Over The Picture, Under The Chips */
 .clip-preview {
@@ -959,8 +1038,8 @@ mark {
     /* One 40 Px Line Of Fields And Buttons */
     --controls-height: 40px;
     --timeline-height: 72px;
-    /* Start And End Fit 1m59,9s Beside Their Icon And Arrows */
-    --trim-field-width: 138px;
+    /* Cut Start And End Fit 1m59,9s, Icon And Arrows */
+    --trim-field-width: 150px;
     /* Both Fields, The Clock And Three Icon Buttons */
     --controls-min-width: calc(2 * var(--trim-field-width) + 240px);
 }
@@ -1065,6 +1144,13 @@ mark {
     visibility: hidden;
 }
 
+/* The Timeline Lifts Like The Clip, Its Shadow Outside The Mask */
+.timeline-lift {
+    flex-shrink: 0;
+    border-radius: var(--radius-inner);
+    box-shadow: var(--mud-elevation-4);
+}
+
 /* Thumbnails In A Track, Handles Outside The Kept Part */
 .timeline {
     /* Whole Screen Pixels, Every Part Snaps Alike At Any Scale */
@@ -1073,14 +1159,14 @@ mark {
     --grip-height: round(22px, calc(2 * var(--device-pixel)));
     --bar-width: round(5px, var(--device-pixel));
     --handle-width: calc(2 * var(--grip-gap) + var(--grip-width));
-    flex-shrink: 0;
     height: var(--timeline-height);
     position: relative;
     padding: 0 var(--handle-width);
     border-radius: var(--radius-inner);
-    overflow: hidden;
     background-color: var(--inset-fill);
     user-select: none;
+    /* Rounded Once Over All, Or The Strip Rims Corners */
+    mask-image: linear-gradient(#000 0 0);
 }
 
 .timeline-track {
@@ -1088,13 +1174,6 @@ mark {
     height: 100%;
     touch-action: none;
     cursor: pointer;
-}
-
-/* The Strip's Spinner Waits Centred In The Bar */
-.timeline-spinner {
-    position: absolute;
-    inset: 0;
-    margin: auto;
 }
 
 .timeline-strip {
@@ -1123,6 +1202,12 @@ mark {
 
     .timeline-shade.after {
         margin-right: calc(-1 * var(--handle-width));
+    }
+
+    /* A Handle At Its End Lies On Frame Colour */
+    .timeline-track[data-at-start] .timeline-shade.before,
+    .timeline-track[data-at-end] .timeline-shade.after {
+        background-color: var(--grabber);
     }
 
 /* Handles And Bars Form One Frame, Shadowed Out And In */

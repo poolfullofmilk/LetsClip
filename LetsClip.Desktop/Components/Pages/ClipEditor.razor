@@ -123,17 +123,17 @@ else
                                     Class="player-controls">
                             <MudElement HtmlTag="div"
                                         Class="control-line">
-                                <TrimField Label="Start"
+                                <TrimField Edge="Start"
                                            Icon="@Icons.Material.Rounded.FirstPage"
                                            Value="_range.Start"
-                                           Disabled="@(!_ready)"
+                                           Disabled="@(!Editable)"
                                            OnCommit="@(start => PlaceAsync("start", start))"
                                            OnSet="@(() => MarkAsync("start"))"
                                            OnStep="@(direction => StepAsync("start", direction))" />
-                                <TrimField Label="End"
+                                <TrimField Edge="End"
                                            Icon="@Icons.Material.Rounded.LastPage"
                                            Value="_range.End"
-                                           Disabled="@(!_ready)"
+                                           Disabled="@(!Editable)"
                                            OnCommit="@(end => PlaceAsync("end", end))"
                                            OnSet="@(() => MarkAsync("end"))"
                                            OnStep="@(direction => StepAsync("end", direction))" />
@@ -147,81 +147,84 @@ else
                                 @* Play Button *@
                                 <IconButton Icon="@(_paused ? Icons.Material.Rounded.PlayArrow : Icons.Material.Rounded.Pause)"
                                             Text="@PlayTip"
-                                            Disabled="@(!_ready)"
+                                            Disabled="@(!Editable)"
                                             OnClick="TogglePlayAsync" />
                                 @* Mute Button *@
                                 <VolumeButton Text="@MuteTip"
-                                              Disabled="@(!_ready)"
+                                              Disabled="@(!Editable)"
                                               OnClick="ToggleMuteAsync"
                                               Value="@(_muted ? 0 : _volume)"
                                               ValueChanged="SetVolumeAsync" />
                                 @* Full Screen Button *@
                                 <IconButton Icon="@Icons.Material.Rounded.Fullscreen"
                                             Text="Full Screen"
-                                            Disabled="@(!_ready)"
+                                            Disabled="@(!Editable)"
                                             OnClick="FullScreenAsync" />
                             </MudElement>
                         </MudElement>
 
                         @* Timeline *@
                         <MudElement HtmlTag="div"
-                                    Class="@(_ready ? "timeline" : "timeline loading")">
-                            @if (_stripUrl is { } strip)
-                            {
-                                <MudImage Src="@strip"
-                                          Alt=""
-                                          Class="timeline-strip" />
-                            }
-                            else if (_stripLoading)
-                            {
-                                <MudProgressCircular Color="Color.Info"
-                                                     Size="Size.Small"
-                                                     Indeterminate
-                                                     Class="timeline-spinner" />
-                            }
-                            <MudElement @bind-Ref="_timeline"
-                                        HtmlTag="div"
-                                        Class="timeline-track"
-                                        aria-label="Trim Timeline">
-                                <MudElement HtmlTag="div"
-                                            Class="timeline-shade before"
-                                            Style="@($"left:0; width:{Percent(_range.Start)}")" />
-                                <MudElement HtmlTag="div"
-                                            Class="timeline-shade after"
-                                            Style="@($"left:{Percent(_range.End)}; right:0")" />
-                                <MudElement HtmlTag="div"
-                                            Class="timeline-selection"
-                                            Style="@($"left:{Percent(_range.Start)}; width:calc({Percent(_range.End)} - {Percent(_range.Start)})")" />
-                                <MudElement @bind-Ref="_playhead"
+                                    Class="timeline-lift">
+                            <MudElement HtmlTag="div"
+                                        Class="@(_ready ? "timeline" : "timeline loading")">
+                                @if (_stripUrl is { } strip)
+                                {
+                                    <MudImage Src="@strip"
+                                              Alt=""
+                                              Class="timeline-strip" />
+                                }
+                                else if (_stripLoading)
+                                {
+                                    <MudProgressCircular Color="Color.Info"
+                                                         Size="Size.Small"
+                                                         Indeterminate
+                                                         Class="centred-spinner" />
+                                }
+                                <MudElement @bind-Ref="_timeline"
                                             HtmlTag="div"
-                                            Class="timeline-playhead"
-                                            Style="left:0" />
-                                @* Start Handle *@
-                                <MudElement HtmlTag="div"
-                                            Class="timeline-handle"
-                                            Style="@($"left:{Percent(_range.Start)}")"
-                                            role="slider"
-                                            tabindex="0"
-                                            data-handle="start"
-                                            data-time="@Exact(_range.Start)"
-                                            aria-label="Trim Start"
-                                            aria-valuemin="0"
-                                            aria-valuemax="@Exact(_range.End)"
-                                            aria-valuenow="@Exact(_range.Start)"
-                                            aria-valuetext="@Formatter.FormatDuration(_range.Start)" />
-                                @* End Handle *@
-                                <MudElement HtmlTag="div"
-                                            Class="timeline-handle"
-                                            Style="@($"left:{Percent(_range.End)}")"
-                                            role="slider"
-                                            tabindex="0"
-                                            data-handle="end"
-                                            data-time="@Exact(_range.End)"
-                                            aria-label="Trim End"
-                                            aria-valuemin="@Exact(_range.Start)"
-                                            aria-valuemax="@Exact(_duration)"
-                                            aria-valuenow="@Exact(_range.End)"
-                                            aria-valuetext="@Formatter.FormatDuration(_range.End)" />
+                                            Class="timeline-track"
+                                            aria-label="Trim Timeline">
+                                    <MudElement HtmlTag="div"
+                                                Class="timeline-shade before"
+                                                Style="@($"left:0; width:{Percent(_range.Start)}")" />
+                                    <MudElement HtmlTag="div"
+                                                Class="timeline-shade after"
+                                                Style="@($"left:{Percent(_range.End)}; right:0")" />
+                                    <MudElement HtmlTag="div"
+                                                Class="timeline-selection"
+                                                Style="@($"left:{Percent(_range.Start)}; width:calc({Percent(_range.End)} - {Percent(_range.Start)})")" />
+                                    <MudElement @bind-Ref="_playhead"
+                                                HtmlTag="div"
+                                                Class="timeline-playhead"
+                                                Style="left:0" />
+                                    @* Start Handle *@
+                                    <MudElement HtmlTag="div"
+                                                Class="timeline-handle"
+                                                Style="@($"left:{Percent(_range.Start)}")"
+                                                role="slider"
+                                                tabindex="0"
+                                                data-handle="start"
+                                                data-time="@Exact(_range.Start)"
+                                                aria-label="Cut Start"
+                                                aria-valuemin="0"
+                                                aria-valuemax="@Exact(_range.End)"
+                                                aria-valuenow="@Exact(_range.Start)"
+                                                aria-valuetext="@Formatter.FormatDuration(_range.Start)" />
+                                    @* End Handle *@
+                                    <MudElement HtmlTag="div"
+                                                Class="timeline-handle"
+                                                Style="@($"left:{Percent(_range.End)}")"
+                                                role="slider"
+                                                tabindex="0"
+                                                data-handle="end"
+                                                data-time="@Exact(_range.End)"
+                                                aria-label="Cut End"
+                                                aria-valuemin="@Exact(_range.Start)"
+                                                aria-valuemax="@Exact(_duration)"
+                                                aria-valuenow="@Exact(_range.End)"
+                                                aria-valuetext="@Formatter.FormatDuration(_range.End)" />
+                                </MudElement>
                             </MudElement>
                         </MudElement>
 
@@ -254,6 +257,7 @@ else
                                           Placeholder="@clip.DefaultTitle"
                                           Variant="Variant.Outlined"
                                           Margin="Margin.Dense"
+                                          Disabled="_swapping"
                                           OnBlur="SettleTitle"
                                           OnKeyDown="TitleKeyAsync"
                                           aria-label="Clip Name"

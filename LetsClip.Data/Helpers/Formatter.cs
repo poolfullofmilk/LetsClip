@@ -102,9 +102,14 @@ public static partial class Formatter
         return time.ToLocalTime().ToString("d-M-yyyy 'at' H'h'mm", s_invariant);
     }
 
-    public static string FormatBitrate(double bitsPerSecond)
+    public static string FormatBitrate(double bitsPerSecond, bool roundUp = false)
     {
-        return (bitsPerSecond / 1e6).ToString("0.#", Shown) + " Mbps";
+        // Whole Kilobits Below A Megabit, Ceilings Round Up
+        var step = bitsPerSecond >= 1_000_000 ? 100_000 : 1_000;
+        var shown = roundUp ? Math.Ceiling(bitsPerSecond / step) * step : bitsPerSecond;
+        return shown >= 1_000_000
+            ? (shown / 1e6).ToString("0.#", Shown) + " Mbps"
+            : Math.Max(1, (long)Math.Round(shown / 1e3)).ToString(Shown) + " kbps";
     }
 
     private static bool SelfTestPasses()
@@ -125,6 +130,11 @@ public static partial class Formatter
             && FormatSize(1_250_000_000) == $"1{Point}25 GB"
             && FormatBitrate(11_570_000) == $"11{Point}6 Mbps"
             && FormatBitrate(30_010_000) == "30 Mbps"
+            && FormatBitrate(1_000_000) == "1 Mbps"
+            && FormatBitrate(122_400) == "122 kbps"
+            && FormatBitrate(70) == "1 kbps"
+            && FormatBitrate(1_125_000, roundUp: true) == $"1{Point}2 Mbps"
+            && FormatBitrate(999_200, roundUp: true) == "1 Mbps"
             && FormatDuration(0) == "0s"
             && FormatDuration(0.25) == $"0{Point}3s"
             && FormatSeconds(0.25) == $"0{Point}3"

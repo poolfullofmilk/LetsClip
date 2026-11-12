@@ -55,6 +55,17 @@ public static class VideoEncoders
         return (long)(LoadOf(width, height, frameRate) * TuningOf(quality).Scale * 40_000_000 / 8);
     }
 
+    public static long AverageBytesPerSecond(
+        int width,
+        int height,
+        int frameRate,
+        CaptureQuality quality
+    )
+    {
+        // Half The Peak, 20 Mbps At 1080p60
+        return PeakBytesPerSecond(width, height, frameRate, quality) / 2;
+    }
+
     private static (double Scale, string Level, string AmfLevel) TuningOf(CaptureQuality quality)
     {
         // AMF Counts Quality Up, Matched To x264 By PSNR

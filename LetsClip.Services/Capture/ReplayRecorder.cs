@@ -244,18 +244,31 @@ public sealed class ReplayRecorder : IDisposable
             );
         }
 
-        Directory.CreateDirectory(AppInfo.CacheDirectory);
-        if (FreeBytes(AppInfo.CacheDirectory) < MinimumFreeBytes)
-        {
-            throw new CaptureBlockedException("Less than 2 GB free for the replay cache");
-        }
-
         // A Window Keeps Its Own Shape, No Bars
         var box = OutputSize(monitor, options.Resolution);
         var (width, height) =
             options.GameWindow != 0 && MonitorCatalog.ClientSizeOf(options.GameWindow) is { } client
                 ? FitInside(box, client)
                 : box;
+
+        // The Margin Plus The Whole Replay
+        Directory.CreateDirectory(AppInfo.CacheDirectory);
+        var needed =
+            MinimumFreeBytes
+            + (
+                VideoEncoders.AverageBytesPerSecond(
+                    width,
+                    height,
+                    options.FrameRate,
+                    options.Quality
+                ) * options.Seconds
+            );
+        if (FreeBytes(AppInfo.CacheDirectory) < needed)
+        {
+            throw new CaptureBlockedException(
+                $"Less than {Formatter.FormatSize(needed)} free for a {Formatter.FormatDuration(options.Seconds)} replay, free some space or pick a shorter one"
+            );
+        }
         var skipped = new List<string>();
 
         // AMF Can Hang After A Killed Session, Two Starts

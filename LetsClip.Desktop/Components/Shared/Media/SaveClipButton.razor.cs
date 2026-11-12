@@ -17,7 +17,28 @@ public partial class SaveClipButton : IDisposable
     [Inject]
     public required ISnackbar Snackbar { get; set; }
 
+    private bool _retrying;
+
     private CaptureStatus Status => Controller.Recorder.Status;
+
+    private async Task TryAgainAsync()
+    {
+        // A Start Waits On Its Encoder Test
+        if (_retrying)
+        {
+            return;
+        }
+
+        _retrying = true;
+        try
+        {
+            await Controller.StartAutomaticallyAsync();
+        }
+        finally
+        {
+            _retrying = false;
+        }
+    }
 
     protected override void OnInitialized()
     {

@@ -97,12 +97,13 @@ public sealed class Tray
                 );
         _shell.Attach(_messages);
 
-        // Every Time The Window Opens Looks For An Update Too
+        // Every Open Looks For An Update And New Games
         _window.IsVisibleChanged += (_, _) =>
         {
             if (_window.IsVisible)
             {
                 _ = FindUpdateAsync();
+                _ = _controller.ScanGamesAsync();
             }
         };
         _ = KeepUpdatedAsync();
@@ -347,9 +348,8 @@ public sealed class Tray
     #region Icon And Menu
     private void ShowMenu()
     {
-        var seconds = _controller.Settings.ReplaySeconds;
         var open = new TrayMenuItem("Open LetsClip");
-        var save = new TrayMenuItem($"Save Last {seconds} Seconds", _controller.IsRecording);
+        var save = new TrayMenuItem(_controller.SaveText, _controller.IsRecording);
         var exit = new TrayMenuItem("Exit");
         var picked = TrayMenu.Show(_messages.Handle, open, save, null, exit);
         if (picked == open)

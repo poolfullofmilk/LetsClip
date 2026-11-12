@@ -63,7 +63,8 @@ public partial class Settings : IDisposable
     private string? _hotkeyError;
     private string? _microphoneError;
     private (long Used, long Free)? _space;
-    private long _originalsBytes;
+    private long? _originalsBytes;
+    private bool _listingOriginals;
     private bool _revealStorage;
 
     private string? SpaceText =>
@@ -171,7 +172,17 @@ public partial class Settings : IDisposable
     {
         // Names The Clips That Lose Their Way Back
         var folder = Controller.Settings.ClipsDirectory;
-        var listed = await Task.Run(() => Controller.Library.ListAsync(CancellationToken.None));
+        _listingOriginals = true;
+        IReadOnlyList<ClipInfo> listed;
+        try
+        {
+            listed = await Task.Run(() => Controller.Library.ListAsync(CancellationToken.None));
+        }
+        finally
+        {
+            _listingOriginals = false;
+        }
+
         List<ClipInfo> clips = [.. listed.Where(clip => clip.HasOriginal)];
         if (
             !await YesNoDialog.ConfirmAsync(

@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using LetsClip.Data.Enums;
+using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
 using LetsClip.Services.Games;
 using LetsClip.Services.Integration;
@@ -53,7 +54,7 @@ public sealed class CaptureController : IDisposable
         Recorder.Failed += failure => _ = RetryAsync(failure);
         Games.GameChanged += name => _ = OnGameChangedAsync(name);
         RefreshMonitors();
-        _ = LoadGamesAsync();
+        _ = ScanGamesAsync();
     }
 
     public event Action? Changed;
@@ -154,6 +155,19 @@ public sealed class CaptureController : IDisposable
             _ => "Not Recording",
         };
 
+    // Written Like Every Other Length, Save Last 2m
+    public string SaveText => $"Save Last {Formatter.FormatDuration(Settings.ReplaySeconds)}";
+
+    public long ReplayBytes(int seconds)
+    {
+        // A Replay's Cache At The Picked Settings
+        var (width, height) = (_gameMonitor ?? SelectedMonitor) is { } monitor
+            ? ReplayRecorder.OutputSize(monitor, Settings.Resolution)
+            : (1920, 1080);
+        return VideoEncoders.AverageBytesPerSecond(width, height, FrameRate, Settings.Quality)
+            * seconds;
+    }
+
     public bool GamesScanned => _installedGames is not null;
 
     private void RefreshMonitors()
@@ -194,16 +208,27 @@ public sealed class CaptureController : IDisposable
     }
 
     #region Games
-    private async Task LoadGamesAsync()
+    public async Task ScanGamesAsync()
     {
-        // The Library Scan Reads Many Folders, Off The Startup Thread
+        // At Launch And When The Window Or Dialog Opens
         var scanning = Stopwatch.StartNew();
         try
         {
-            _installedGames = await Task.Run(GameScanner.Scan).ConfigureAwait(false);
-            s_logger.Info(
-                $"Found {_installedGames.Count} Installed Games In {scanning.ElapsedMilliseconds} ms"
-            );
+            var found = await Task.Run(GameScanner.Scan).ConfigureAwait(false);
+
+            // A Game Installed Since Arrives Switched On
+            if (
+                _installedGames
+                    ?.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase)
+                    .SetEquals(found.Keys) != true
+            )
+            {
+                s_logger.Info(
+                    $"Found {found.Count} Installed Games In {scanning.ElapsedMilliseconds} ms"
+                );
+            }
+
+            _installedGames = found;
         }
         catch (Exception exception)
             when (exception
@@ -213,9 +238,9 @@ public sealed class CaptureController : IDisposable
                         or InvalidOperationException
             )
         {
-            // A Failed Scan Still Settles, Added Apps Keep Working
+            // A Failed Scan Keeps The Last List
             s_logger.Warn($"Failed To Scan For Games {exception.GetType().Name}");
-            _installedGames = new Dictionary<string, AddedGame>();
+            _installedGames ??= new Dictionary<string, AddedGame>();
         }
 
         if (_closing.IsCancellationRequested)

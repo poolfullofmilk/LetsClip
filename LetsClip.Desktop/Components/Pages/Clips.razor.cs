@@ -47,14 +47,18 @@ public partial class Clips : IDisposable
     // The Games Shown, Null For All, Kept While LetsClip Runs
     private static HashSet<string>? s_shownGames;
 
+    // Only Unedited Clips, Kept Like The Games
+    private static bool s_uneditedOnly;
+
     private HashSet<string> _draft = [];
+    private bool _draftUnedited;
     private string? _search;
     private bool _filterOpen;
 
     private DotNetObjectReference<Clips> Reference =>
         _reference ??= DotNetObjectReference.Create(this);
 
-    private static bool IsFiltered => s_shownGames is not null;
+    private static bool IsFiltered => s_shownGames is not null || s_uneditedOnly;
 
     // Sorted By Time, Each Day Gets Its Own Header
     private bool IsByDay => Controller.Settings.ClipSort is ClipSort.Newest or ClipSort.Oldest;
@@ -64,7 +68,9 @@ public partial class Clips : IDisposable
     {
         get
         {
-            var shown = (s_clips ?? []).Where(clip => s_shownGames?.Contains(clip.Source) != false);
+            var shown = (s_clips ?? []).Where(clip =>
+                s_shownGames?.Contains(clip.Source) != false && !(s_uneditedOnly && clip.IsEdited)
+            );
             var ordered = Controller.Settings.ClipSort switch
             {
                 ClipSort.Oldest => shown.OrderBy(clip => clip.RecordedAt),
@@ -100,8 +106,15 @@ public partial class Clips : IDisposable
     {
         // Saves List At Once, The Watcher Covers Explorer
         Controller.Library.Changed += OnLibraryChanged;
+        Controller.Library.PicturesDone += OnPicturesDone;
         Controller.Recorder.ClipSaved += OnClipSaved;
         await LoadAsync();
+    }
+
+    private void OnPicturesDone()
+    {
+        // A Pass That Made Nothing Still Stops The Tiles' Spinners
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private void OnLibraryChanged()
@@ -238,11 +251,12 @@ public partial class Clips : IDisposable
         return string.Join(", ", FactsOf(clip).Select(fact => $"{fact.Label} {fact.Value}"));
     }
 
-    #region Game Filter
+    #region Filter
     private void OpenFilter()
     {
         // The Popover Edits A Copy Until Apply
         _draft = new HashSet<string>(s_shownGames ?? [.. Games], StringComparer.OrdinalIgnoreCase);
+        _draftUnedited = s_uneditedOnly;
         _search = null;
         _filterOpen = true;
     }
@@ -265,6 +279,7 @@ public partial class Clips : IDisposable
     private void ResetFilter()
     {
         SetAll(true);
+        _draftUnedited = false;
         _search = null;
     }
 
@@ -274,13 +289,14 @@ public partial class Clips : IDisposable
         var shown = Games.All(_draft.Contains)
             ? null
             : new HashSet<string>(_draft, StringComparer.OrdinalIgnoreCase);
+        var unedited = _draftUnedited;
         _filterOpen = false;
-        await ChangeAsync(() => s_shownGames = shown, fromTop: true);
+        await ChangeAsync(() => (s_shownGames, s_uneditedOnly) = (shown, unedited), fromTop: true);
     }
 
     private async Task ShowAllAsync()
     {
-        await ChangeAsync(() => s_shownGames = null, fromTop: true);
+        await ChangeAsync(() => (s_shownGames, s_uneditedOnly) = (null, false), fromTop: true);
     }
     #endregion
 
@@ -320,6 +336,7 @@ public partial class Clips : IDisposable
     public void Dispose()
     {
         Controller.Library.Changed -= OnLibraryChanged;
+        Controller.Library.PicturesDone -= OnPicturesDone;
         Controller.Recorder.ClipSaved -= OnClipSaved;
         _closing.Cancel();
         _closing.Dispose();

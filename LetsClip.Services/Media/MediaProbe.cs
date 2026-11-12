@@ -20,12 +20,12 @@ public static class MediaProbe
     public static async Task<MediaInfo?> ProbeAsync(
         string path,
         CancellationToken token,
-        bool withFrameTimes = false
+        bool withPackets = false
     )
     {
-        // Frame Times Ride Along When Asked, Packets Read Without Decoding
-        IReadOnlyList<string> packets = withFrameTimes
-            ? ["-show_entries", "packet=stream_index,pts_time"]
+        // Packets Ride Along When Asked, Read Without Decoding
+        IReadOnlyList<string> packets = withPackets
+            ? ["-show_entries", "packet=stream_index,pts_time,size,flags"]
             : [];
         var result = await FFmpeg.RunAsync(
             FFmpeg.FFprobePath,
@@ -82,21 +82,6 @@ public static class MediaProbe
             video?.Duration is > 0 and var picture && format.Duration - picture < TrimRange.Step
                 ? picture
                 : format.Duration;
-        // Each Video Frame's Start, In Showing Order
-        double[]? frameTimes = probe.Packets is { } packets
-            ?
-            [
-                .. packets
-                    .Where(packet => packet.StreamIndex == video?.Index)
-                    .Select(packet =>
-                        double.TryParse(packet.PtsTime, CultureInfo.InvariantCulture, out var time)
-                            ? time
-                            : double.NaN
-                    )
-                    .Where(double.IsFinite)
-                    .Order(),
-            ]
-            : null;
         return new MediaInfo(
             duration,
             video?.CodecName,
@@ -105,8 +90,48 @@ public static class MediaProbe
             video?.Height ?? 0,
             frameRate,
             audio?.CodecName,
-            audio?.BitRate ?? 0,
-            frameTimes
+            probe.Packets is { } packets
+                ? MapOf(packets, video?.Index, audio?.Index, format.Duration)
+                : null
+        );
+    }
+
+    private static PacketMap MapOf(
+        ProbePacket[] packets,
+        int? videoIndex,
+        int? audioIndex,
+        double duration
+    )
+    {
+        // Each Video Frame's Start, Size And Keyframe, In Showing Order
+        var frames = packets
+            .Where(packet => packet.StreamIndex == videoIndex)
+            .Select(packet =>
+                (
+                    Time: double.TryParse(
+                        packet.PtsTime,
+                        CultureInfo.InvariantCulture,
+                        out var time
+                    )
+                        ? time
+                        : double.NaN,
+                    packet.Size,
+                    Key: packet.Flags?.Contains('K', StringComparison.Ordinal) == true
+                )
+            )
+            .Where(frame => double.IsFinite(frame.Time))
+            .OrderBy(frame => frame.Time)
+            .ToArray();
+
+        // The Sound Measured, Its Own Bytes And Packets Per Second
+        var audio = packets.Where(packet => packet.StreamIndex == audioIndex).ToArray();
+        var seconds = Math.Max(duration, 0.001);
+        return new PacketMap(
+            [.. frames.Select(frame => frame.Time)],
+            [.. frames.Select(frame => frame.Size)],
+            [.. Enumerable.Range(0, frames.Length).Where(index => frames[index].Key)],
+            audio.Sum(packet => packet.Size) / seconds,
+            audio.Length / seconds
         );
     }
 
@@ -132,7 +157,7 @@ public static class MediaProbe
     private sealed record ProbeFormat(double Duration);
 
     // Times Stay Text, A Packet Without One Reads N/A
-    private sealed record ProbePacket(int StreamIndex, string? PtsTime);
+    private sealed record ProbePacket(int StreamIndex, string? PtsTime, long Size, string? Flags);
 
     private sealed record ProbeStream(
         int Index,
@@ -144,8 +169,7 @@ public static class MediaProbe
         double? Duration,
         string? AvgFrameRate,
         string? RFrameRate,
-        ProbeDisposition? Disposition,
-        long? BitRate
+        ProbeDisposition? Disposition
     );
 
     private sealed record ProbeDisposition(int AttachedPic);

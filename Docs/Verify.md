@@ -61,3 +61,24 @@ The same tools on the published .NET 11 exe with the plain WebView2 host, 7800X3
 - Player volume: the slider set to 0.3 and mute pressed on one clip, the next clip opened muted at 0.3 and `settings.json` held both.
 - Spinners: Save Cut and Restore Original showed theirs within 100 ms of the press on a 248 MB clip, the timeline's showed while a new clip's strip was made, the Save button's while a save ran.
 - Ponytail audit over the whole repository: every style class, token, page script export and declared member is named somewhere else, no component is a bare wrapper, no package is spare. Cut: the capture panel's leftover styles (`game-row`, `icon-left`, `button-hint`, `--side-width`, the stretched split), the jump icons and their colours, `SourceChip`'s class parameter, stale build folders. Left alone: four components each subscribe to the controller's events by hand, the usual Blazor way, a shared base class would hide three lines each.
+
+## On The Work Laptop, 12 November 2026
+
+Where the round ran (i5-1335U, Iris Xe, Quick Sync, .NET 11.0.100 from `%LocalAppData%\Microsoft\dotnet11`).
+
+- Two sandboxes at once: give each its own `LETSCLIP_ROOT` and its own `--remote-debugging-port` in `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` (9333 and 9334 here); they never share a single instance handle. A build needs both stopped, since they run the same Debug exe.
+- A long replay test: both sandboxes recording the primary monitor at 1080p60 Normal for 11 minutes, Save pressed over CDP at 5 and 10 minutes, each clip probed for picture and sound length and frame count (`Docs/Capture.md`).
+- The number check: a CDP driver setting the editor through ranges, plans and Audio with real presses on the plan select, reading every row, exporting and comparing each file with FFprobe, then pressing Restore Original after any Export and Save, since a shorter selection's Export cuts the clip (`Docs/Export.md`).
+- Per frame recorders: a `requestAnimationFrame` loop started in the same evaluation as the press, logging each new state with its time, for spinners (size, button size before and while busy) and for which controls are disabled during a cut or restore (`Docs/Layout.md`).
+- CPU: a PowerShell sampler reading `TotalProcessorTime` of the sandbox's LetsClip (its pid file) and of the WebView2 processes whose command line holds the sandbox's folder, over 10 or 20 s (`Docs/Measurements.md`). Playback stops at the end point, so a window measuring playback must start from the clip's start and be shorter than the clip.
+- A sweep measures the busy state too: a button's spinner must not change its size, and a menu with a custom activator must open on a real mouse press (`Input.dispatchMouseEvent`), never only on a scripted `click()`.
+
+## On The Gaming PC, 12 November 2026
+
+- The sweep is one Node script over CDP: per state and size it lists a sideways scroll, anything past its panel, wrapped labels, overlapping row children, overlapping panels and text in dots, and shoots 1920 and 1264 wide. Sizes are multiplied by `cssVisualViewport.zoom` (0.9 on the second monitor).
+- Waiting on an element from `Runtime.evaluate` must return a boolean: an element returned by value never reads as true.
+- A long replay on one sandbox: raise Replay Length live and press Save only once the history is that long, the cache keeps what the shorter length held at the pick.
+- A copy's weight is checked by a throwaway that reads `ffprobe -show_entries packet=stream_index,pts_time,size,flags`, weighs like `SizeBudget.CopyBytes` and makes the real `-ss` before `-i`, `-c copy` file beside it for a list of ranges, with and without sound (`Docs/Export.md`).
+- Export and Save on a long clip locks the editor until its new strip is made: a script must wait for Restore Original to be enabled before pressing it.
+- The window's place is set with `MoveWindow` from a per monitor DPI aware PowerShell and read back with `DwmGetWindowAttribute` 9, the visible frame: `GetWindowRect` includes 8 px of invisible border on the left, right and bottom.
+- A script through the session's shell loses backslashes inside a heredoc: write throwaway scripts with the file tool.

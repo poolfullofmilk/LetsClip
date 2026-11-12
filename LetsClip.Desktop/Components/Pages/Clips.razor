@@ -18,8 +18,6 @@
                 @CountText(shown.Count)
             </MudText>
             <MudSpacer />
-            @* Save Button *@
-            <SaveClipButton />
             @* Sort Menu *@
             <Tooltip Text="Sort Clips"
                      Placement="Placement.Left"
@@ -47,94 +45,112 @@
                     </MudMenu>
                 </MudBadge>
             </Tooltip>
-            @* Game Filter Button *@
-            <MudBadge Dot
-                      Color="Color.Info"
-                      Overlap
-                      Visible="@IsFiltered"
-                      Class="d-flex">
-                <IconButton Icon="@Icons.Material.Rounded.FilterList"
-                            Text="Filter by Game or App"
-                            Placement="Placement.Left"
-                            Disabled="@(Games.Count < 2 && !IsFiltered)"
-                            OnClick="OpenFilter" />
-            </MudBadge>
-            @* Game Filter Popover *@
-            <MudPopover Open="_filterOpen"
-                        AnchorOrigin="Origin.BottomRight"
-                        TransformOrigin="Origin.TopRight"
-                        Class="filter-popover">
-                <MudElement HtmlTag="div"
-                            Class="pa-3">
-                    @* Game Search *@
-                    <MudTextField T="string"
-                                  @bind-Value="_search"
-                                  Immediate
-                                  Placeholder="Search"
-                                  Adornment="Adornment.Start"
-                                  AdornmentIcon="@Icons.Material.Rounded.Search"
-                                  Clearable
-                                  ClearIcon="@Icons.Material.Rounded.Clear"
-                                  Variant="Variant.Outlined"
-                                  Margin="Margin.Dense"
-                                  aria-label="Search Games and Apps"
-                                  Class="my-0" />
-                </MudElement>
-                <MudElement HtmlTag="div"
-                            Class="filter-list">
-                    @if (string.IsNullOrWhiteSpace(_search))
-                    {
-                        @* All Games Checkbox *@
-                        <MudCheckBox T="bool?"
-                                     Value="AllState"
-                                     ValueChanged="SetAll"
-                                     Color="Color.Info"
-                                     CheckedIcon="@Icons.Material.Rounded.CheckBox"
-                                     UncheckedIcon="@Icons.Material.Rounded.CheckBoxOutlineBlank"
-                                     IndeterminateIcon="@Icons.Material.Rounded.IndeterminateCheckBox"
-                                     Dense>
-                            <MudText Typo="Typo.body2">All</MudText>
-                        </MudCheckBox>
-                    }
-                    @foreach (var game in SearchedGames)
-                    {
-                        @* Game Checkbox *@
+            @* Filter *@
+            <MudElement HtmlTag="div"
+                        Class="d-flex">
+                @* Filter Button *@
+                <MudBadge Dot
+                          Color="Color.Info"
+                          Overlap
+                          Visible="@IsFiltered"
+                          Class="d-flex">
+                    <IconButton Icon="@Icons.Material.Rounded.FilterList"
+                                Text="Filter Clips"
+                                Placement="Placement.Left"
+                                Disabled="@(s_clips is not { Count: > 0 } && !IsFiltered)"
+                                OnClick="OpenFilter" />
+                </MudBadge>
+                @* Filter Popover *@
+                <MudPopover Open="_filterOpen"
+                            AnchorOrigin="Origin.BottomRight"
+                            TransformOrigin="Origin.TopRight"
+                            Class="filter-popover">
+                    <MudElement HtmlTag="div"
+                                Class="filter-option">
+                        @* Unedited Checkbox *@
                         <MudCheckBox T="bool"
-                                     Value="@_draft.Contains(game)"
-                                     ValueChanged="@(on => SetGame(game, on))"
+                                     @bind-Value="_draftUnedited"
                                      Color="Color.Info"
                                      CheckedIcon="@Icons.Material.Rounded.CheckBox"
                                      UncheckedIcon="@Icons.Material.Rounded.CheckBoxOutlineBlank"
                                      Dense>
-                            <MudText Typo="Typo.body2">
-                                <MudHighlighter Text="@game"
-                                                HighlightedText="@_search" />
-                            </MudText>
+                            <MudText Typo="Typo.body2">Only Unedited Clips</MudText>
                         </MudCheckBox>
-                    }
-                </MudElement>
-                <MudStack Row
-                          AlignItems="AlignItems.Center"
-                          Spacing="4"
-                          Class="filter-footer px-3 py-2">
-                    @* Reset Button *@
-                    <MudButton Variant="Variant.Text"
-                               Color="Color.Error"
-                               Size="Size.Small"
-                               OnClick="ResetFilter">
-                        Reset
-                    </MudButton>
-                    <MudSpacer />
-                    @* Apply Button *@
-                    <MudButton Variant="Variant.Filled"
-                               Color="Color.Info"
-                               Size="Size.Small"
-                               Disabled="@(_draft.Count == 0)"
-                               OnClick="ApplyFilterAsync">
-                        Apply
-                    </MudButton>
-                </MudStack>
-            </MudPopover>
+                    </MudElement>
+                    <MudElement HtmlTag="div"
+                                Class="pa-3">
+                        @* Game Search *@
+                        <MudTextField T="string"
+                                      @bind-Value="_search"
+                                      Immediate
+                                      Placeholder="Search"
+                                      Adornment="Adornment.Start"
+                                      AdornmentIcon="@Icons.Material.Rounded.Search"
+                                      Clearable
+                                      ClearIcon="@Icons.Material.Rounded.Clear"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      aria-label="Search Games and Apps"
+                                      Class="my-0" />
+                    </MudElement>
+                    <MudElement HtmlTag="div"
+                                Class="filter-list">
+                        @if (string.IsNullOrWhiteSpace(_search))
+                        {
+                            @* All Games Checkbox *@
+                            <MudCheckBox T="bool?"
+                                         Value="AllState"
+                                         ValueChanged="SetAll"
+                                         Color="Color.Info"
+                                         CheckedIcon="@Icons.Material.Rounded.CheckBox"
+                                         UncheckedIcon="@Icons.Material.Rounded.CheckBoxOutlineBlank"
+                                         IndeterminateIcon="@Icons.Material.Rounded.IndeterminateCheckBox"
+                                         Disabled="@(Games.Count < 2)"
+                                         Dense>
+                                <MudText Typo="Typo.body2">All</MudText>
+                            </MudCheckBox>
+                        }
+                        @foreach (var game in SearchedGames)
+                        {
+                            @* Game Checkbox *@
+                            <MudCheckBox T="bool"
+                                         Value="@_draft.Contains(game)"
+                                         ValueChanged="@(on => SetGame(game, on))"
+                                         Color="Color.Info"
+                                         CheckedIcon="@Icons.Material.Rounded.CheckBox"
+                                         UncheckedIcon="@Icons.Material.Rounded.CheckBoxOutlineBlank"
+                                         Disabled="@(Games.Count < 2)"
+                                         Dense>
+                                <MudText Typo="Typo.body2">
+                                    <MudHighlighter Text="@game"
+                                                    HighlightedText="@_search" />
+                                </MudText>
+                            </MudCheckBox>
+                        }
+                    </MudElement>
+                    <MudStack Row
+                              AlignItems="AlignItems.Center"
+                              Spacing="4"
+                              Class="filter-footer px-3 py-2">
+                        @* Reset Button *@
+                        <MudButton Variant="Variant.Text"
+                                   Color="Color.Error"
+                                   Size="Size.Small"
+                                   OnClick="ResetFilter">
+                            Reset
+                        </MudButton>
+                        <MudSpacer />
+                        @* Apply Button *@
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Info"
+                                   Size="Size.Small"
+                                   Disabled="@(_draft.Count == 0)"
+                                   OnClick="ApplyFilterAsync">
+                            Apply
+                        </MudButton>
+                    </MudStack>
+                </MudPopover>
+            </MudElement>
             @* Filter Overlay *@
             <MudOverlay Visible="_filterOpen"
                         OnClick="CloseFilter"
@@ -220,25 +236,37 @@
                                               loading="lazy"
                                               decoding="async" />
                                 }
+                                else if (Controller.Library.IsMakingPictures)
+                                {
+                                    @* Picture Spinner *@
+                                    <MudProgressCircular Color="Color.Info"
+                                                         Size="Size.Small"
+                                                         Indeterminate
+                                                         Class="centred-spinner" />
+                                }
                                 <MudElement HtmlTag="div"
                                             Class="clip-preview"
                                             data-clip="@DesktopShell.ClipUrl(clip)" />
-                                <SourceChip Clip="clip"
-                                            OnPicture />
-                                <MudChip T="string"
-                                         Size="Size.Small"
-                                         Variant="Variant.Filled"
-                                         Color="Color.Dark"
-                                         Class="clip-date ma-0">
-                                    @(IsByDay ? Formatter.FormatTime(clip.RecordedAt) : Formatter.FormatDateTime(clip.RecordedAt))
-                                </MudChip>
-                                <MudChip T="string"
-                                         Size="Size.Small"
-                                         Variant="Variant.Filled"
-                                         Color="Color.Dark"
-                                         Class="clip-duration ma-0">
-                                    @Formatter.FormatDuration(clip.Duration)
-                                </MudChip>
+                                @* Picture Chips *@
+                                <MudElement HtmlTag="div"
+                                            Class="clip-chips">
+                                    <SourceChip Clip="clip"
+                                                OnPicture />
+                                    <MudChip T="string"
+                                             Size="Size.Small"
+                                             Variant="Variant.Filled"
+                                             Color="Color.Dark"
+                                             Class="ma-0">
+                                        @(IsByDay ? Formatter.FormatTime(clip.RecordedAt) : Formatter.FormatDateTime(clip.RecordedAt))
+                                    </MudChip>
+                                    <MudChip T="string"
+                                             Size="Size.Small"
+                                             Variant="Variant.Filled"
+                                             Color="Color.Dark"
+                                             Class="ma-0">
+                                        @Formatter.FormatDuration(clip.Duration)
+                                    </MudChip>
+                                </MudElement>
                             </MudElement>
                             <MudStack Row
                                       AlignItems="AlignItems.Center"

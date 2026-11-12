@@ -1,3 +1,5 @@
+using LetsClip.Data.Helpers;
+
 namespace LetsClip.Data.ViewModels;
 
 public sealed record ClipMetadata(
@@ -15,5 +17,17 @@ public sealed record ClipMetadata(
     double? CutStart = null,
     double? CutEnd = null,
     bool ForeignOriginal = false,
-    int? Monitor = null
-);
+    int? Monitor = null,
+    bool Cut = false
+)
+{
+    // Named, Cut Or Trimmed Short, Only Unedited Leaves It Out
+    public bool IsEdited =>
+        Title is not null
+        || Cut
+        || (
+            TrimStart is { } start
+            && TrimEnd is { } end
+            && new TrimRange(start, end).CutsShort(Duration)
+        );
+}

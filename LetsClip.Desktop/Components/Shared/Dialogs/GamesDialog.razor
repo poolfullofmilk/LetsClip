@@ -1,3 +1,7 @@
+@{
+    var shown = ShownRows;
+}
+
 <MudDialog>
 
     <TitleContent>
@@ -44,7 +48,7 @@
             {
                 <Loading />
             }
-            else if (ShownRows.Count == 0)
+            else if (shown.Count == 0)
             {
                 <EmptyState Icon="@Icons.Material.Rounded.SearchOff"
                             Text="@(_showApps ? "No Apps Found" : "No Games Found")" />
@@ -53,7 +57,7 @@
             {
                 @* Games Table *@
                 <MudTable T="AddedGame"
-                          Items="ShownRows"
+                          Items="shown"
                           Dense
                           Hover
                           Outlined
@@ -99,12 +103,16 @@
         </MudStack>
     </DialogContent>
     <DialogActions>
-        @* Select All Button *@
-        <MudButton Variant="Variant.Text"
-                   Disabled="@(IsLoading || ShownRows.Count == 0)"
-                   OnClick="ToggleAll">
-            @(AllShownRecorded ? "Select None" : "Select All")
-        </MudButton>
+        @* All Chip *@
+        <MudChip T="string"
+                 Icon="@AllIcon(shown)"
+                 IconColor="@(shown.Any(IsRecorded) ? Color.Info : Color.Default)"
+                 Variant="Variant.Text"
+                 Disabled="@(IsLoading || shown.Count == 0)"
+                 OnClick="ToggleAll"
+                 Class="ma-0">
+            All
+        </MudChip>
         <MudSpacer />
         @* Browse Button *@
         <MudButton Variant="Variant.Filled"

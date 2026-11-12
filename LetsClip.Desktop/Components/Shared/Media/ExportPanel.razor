@@ -10,7 +10,7 @@
                           Value="Plan"
                           ValueChanged="SetPlan"
                           ToStringFunc="PlanLabel"
-                          Disabled="@(IsExporting || !AnyPlanChanges)"
+                          Disabled="@(IsExporting || Busy || !AnyPlanChanges)"
                           RelativeWidth="@DropdownWidth.Adaptive"
                           aria-label="Fit for Discord">
                 @foreach (var plan in Enum.GetValues<DiscordPlan>())
@@ -34,7 +34,7 @@
                         Placement="Placement.Left"
                         Color="@(WithAudio ? Color.Default : Color.Error)"
                         Filled
-                        Disabled="@IsExporting"
+                        Disabled="@(IsExporting || Busy)"
                         OnClick="ToggleAudio" />
         </SettingRow>
     }
@@ -47,7 +47,7 @@
         <ChangedValue Was="@Formatter.FormatSize(Clip.SizeBytes)"
                       Value="@ExportSizeText"
                       Prefix="@(Budget is null ? "About" : "Up to")"
-                      data-bytes-per-second="@CopyBytesPerSecond" />
+                      data-copy-audio="@CopyAudioText" />
     </SettingRow>
     <SettingRow Title="Resolution">
         <ChangedValue Was="@SizeText(Media.Width, Media.Height)"
@@ -65,12 +65,16 @@
 
     <MudStack Spacing="3"
               Class="pt-3 pb-4">
-        @if (VerdictHint is { } hint)
+        @if (IsTooLong)
+        {
+            <Notice Text="@TooLongText" />
+        }
+        else if (Budget?.Verdict == BudgetVerdict.Soft)
         {
             <MudText Typo="Typo.caption"
                      Align="Align.Center"
-                     Class="@VerdictHintClass">
-                @hint
+                     Class="mud-text-secondary">
+                Fast motion will look soft at this size, a shorter selection keeps it sharper
             </MudText>
         }
 
@@ -142,7 +146,7 @@
            Class="compact fade-in mt-6">
         <SettingRow Title="File">
             <MudText Typo="Typo.body2"
-                     Class="mud-text-secondary ellipsis">
+                     Class="mud-text-secondary file-name">
                 @Path.GetFileName(result)
             </MudText>
         </SettingRow>

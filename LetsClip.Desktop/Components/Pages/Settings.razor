@@ -181,14 +181,25 @@
                     <Notice Text="@folderError"
                             Class="mb-3" />
                 }
-                @if (SpaceText is { } spaceText)
+                @* Disk Space Row *@
+                @if (_originalsBytes is null || SpaceText is not null)
                 {
                     <MudDivider />
                     <SettingRow Title="Disk Space">
-                        <MudText Typo="Typo.body2"
-                                 Class="mud-text-secondary">
-                            @spaceText
-                        </MudText>
+                        @if (SpaceText is { } spaceText)
+                        {
+                            <MudText Typo="Typo.body2"
+                                     Class="mud-text-secondary">
+                                @spaceText
+                            </MudText>
+                        }
+                        else
+                        {
+                            @* Space Spinner *@
+                            <MudProgressCircular Color="Color.Info"
+                                                 Size="Size.Small"
+                                                 Indeterminate />
+                        }
                     </SettingRow>
                 }
                 <MudDivider />
@@ -197,17 +208,28 @@
                             SwitchChanged="SetDeleteOriginals" />
                 <MudDivider />
                 <SettingRow Title="Kept Originals">
-                    <MudText Typo="Typo.body2"
-                             Class="mud-text-secondary">
-                        @(_originalsBytes > 0 ? Formatter.FormatSize(_originalsBytes) : "None")
-                    </MudText>
+                    @if (_originalsBytes is { } originals)
+                    {
+                        <MudText Typo="Typo.body2"
+                                 Class="mud-text-secondary">
+                            @(originals > 0 ? Formatter.FormatSize(originals) : "None")
+                        </MudText>
+                    }
+                    else
+                    {
+                        @* Originals Spinner *@
+                        <MudProgressCircular Color="Color.Info"
+                                             Size="Size.Small"
+                                             Indeterminate />
+                    }
                     @* Delete Originals Button *@
                     <IconButton Icon="@Icons.Material.Rounded.Delete"
                                 Text="Delete Kept Originals"
                                 Placement="Placement.Left"
                                 Color="Color.Error"
                                 Filled
-                                Disabled="@(_originalsBytes == 0)"
+                                Disabled="@(_originalsBytes is not > 0)"
+                                Busy="_listingOriginals"
                                 OnClick="DeleteOriginalsAsync" />
                 </SettingRow>
             </Panel>

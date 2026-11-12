@@ -22,18 +22,23 @@
             </MudText>
 
             @* More Menu *@
-            <Tooltip Text="More">
-                <MudBadge Dot
-                          Color="Color.Error"
-                          Overlap
-                          Visible="@(Shell.AvailableUpdate is not null)"
-                          Class="d-flex">
-                    <MudMenu Icon="@Icons.Material.Rounded.MoreVert"
-                             AriaLabel="More"
-                             Size="Size.Small"
-                             Dense
-                             AnchorOrigin="Origin.BottomLeft"
-                             TransformOrigin="Origin.TopLeft">
+            <MudBadge Dot
+                      Color="Color.Error"
+                      Overlap
+                      Visible="@(Shell.AvailableUpdate is not null)"
+                      Class="d-flex">
+                <MudMenu @ref="_moreMenu"
+                         Dense
+                         AnchorOrigin="Origin.BottomLeft"
+                         TransformOrigin="Origin.TopLeft">
+                    <ActivatorContent>
+                        @* More Button *@
+                        <IconButton Icon="@Icons.Material.Rounded.MoreVert"
+                                    Text="More"
+                                    Busy="_checking"
+                                    OnClick="OpenMoreAsync" />
+                    </ActivatorContent>
+                    <ChildContent>
                         @* Check Updates *@
                         <MudMenuItem Icon="@Icons.Material.Rounded.SystemUpdateAlt"
                                      Label="Check for Updates"
@@ -48,12 +53,14 @@
                         <MudMenuItem Icon="@AppTheme.InfoIcon"
                                      Label="About"
                                      OnClick="ShowAboutAsync" />
-                    </MudMenu>
-                </MudBadge>
-            </Tooltip>
+                    </ChildContent>
+                </MudMenu>
+            </MudBadge>
 
             <MudSpacer />
 
+            @* Save Button, Only While Recording *@
+            <SaveClipButton />
             @* Capture Chip *@
             <CaptureChip />
         </MudStack>

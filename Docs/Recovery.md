@@ -12,7 +12,7 @@ The owner's rule: consistent on every kind of system, and anything that can fix 
 | Recording runs on a lesser encoder than the machine has | `UpgradeAsync` tries the better one after 1, 2, 5 and 15 minutes, then every 30: it runs beside the running session until it holds a whole replay, then takes over, so no history is lost and a failed try costs nothing | Nothing |
 | A window's encoder hangs, at the start or mid session | A hung encoder and a still window both send nothing, so after 20 s of no video segment `ProbeWindowAsync` starts a fresh capture beside it, on the same encoder and then x264, at most once per quiet spell. Only a fresh capture that draws while the old one still sends nothing takes over; a still window keeps its session and history | Recording throughout |
 | A session dies or stalls | Retries after 2, 5, 15, 30 s, then each minute | Recording for the first four in a row, about a minute, then the error with Try Again while retries go on |
-| HDR on, under 2 GB free, FFmpeg missing, monitor gone (`CaptureBlockedException`, `CaptureFailure.Blocked`) | Retried the same way | Shown at once, only the person can fix these |
+| HDR on, less free space than 2 GB plus the whole replay, FFmpeg missing, monitor gone (`CaptureBlockedException`, `CaptureFailure.Blocked`) | Retried the same way | Shown at once, only the person can fix these |
 | An audio device is pulled or restarts | Reconnects, falling back to the default | A Notice only after 5 s of it (`ProblemTicks`) |
 | Capture falls below its frame rate | Nothing to do | A Notice only after 10 slow reports (`SlowTicks`), never for a loading screen |
 | A save hits an IO error (a scanner holding the file) | Saved again after 1 s | Nothing |

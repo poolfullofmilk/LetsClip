@@ -5,8 +5,12 @@ namespace LetsClip.Desktop.Components.Shared.Media;
 
 public partial class TrimField
 {
+    // Start Or End, The Page Script's Key
     [Parameter]
-    public required string Label { get; set; }
+    public required string Edge { get; set; }
+
+    // Says What The Time Does, Not Only Which End
+    private string Label => $"Cut {Edge}";
 
     [Parameter]
     public required string Icon { get; set; }

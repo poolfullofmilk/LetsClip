@@ -64,7 +64,13 @@ public sealed class ClipLibrary : IDisposable
 
     public event Action? Changed;
 
+    // A Pass Ended, Waiting Tiles Settle
+    public event Action? PicturesDone;
+
     public string Folder { get; private set; }
+
+    // True While A Picture Pass Runs
+    public bool IsMakingPictures => Volatile.Read(ref _filling) == 1;
 
     // Missing Or Unreadable, Never The Same As Empty
     public bool IsUnavailable { get; private set; }
@@ -155,6 +161,8 @@ public sealed class ClipLibrary : IDisposable
                 {
                     Changed?.Invoke();
                 }
+
+                PicturesDone?.Invoke();
             }
         });
     }
@@ -191,7 +199,8 @@ public sealed class ClipLibrary : IDisposable
             metadata.Width,
             metadata.Height,
             metadata.Monitor,
-            file.LastWriteTimeUtc
+            file.LastWriteTimeUtc,
+            metadata.IsEdited
         );
     }
 
@@ -279,6 +288,7 @@ public sealed class ClipLibrary : IDisposable
                         CutStart = keepOriginal ? earlierStart + range.Start : null,
                         CutEnd = keepOriginal ? earlierStart + range.End : null,
                         ForeignOriginal = false,
+                        Cut = true,
                     },
                 media.Duration
             );
@@ -408,6 +418,7 @@ public sealed class ClipLibrary : IDisposable
                     TrimEnd = stored.CutEnd,
                     CutStart = null,
                     CutEnd = null,
+                    Cut = false,
                 },
             media?.Duration ?? metadata.Duration
         );

@@ -52,7 +52,6 @@ public partial class ClipEditor : IAsyncDisposable
     private ClipInfo? _clip;
     private MediaInfo? _media;
     private string? _stripUrl;
-    private double[] _frames = [];
     private string? _loadedName;
     private bool _missing;
     private bool _ready;
@@ -94,6 +93,9 @@ public partial class ClipEditor : IAsyncDisposable
     private double ClipAspect =>
         _media is { Width: > 0, Height: > 0 } media ? media.Width / (double)media.Height : 16 / 9.0;
 
+    // A Cut Or Restore Swapping The File Locks Every Edit
+    private bool Editable => _ready && !_swapping;
+
     private string PlayTip => _paused ? "Play" : "Pause";
 
     protected override async Task OnParametersSetAsync()
@@ -134,11 +136,11 @@ public partial class ClipEditor : IAsyncDisposable
         }
 
         var path = Path.Combine(Controller.Settings.ClipsDirectory, FileName);
-        // One Probe Reads The Streams And Every Frame's Start
+        // One Probe Reads The Streams And Every Packet
         var clip = await Task.Run(() => Controller.Library.GetAsync(path, token), token);
         var media = clip is null
             ? null
-            : await Task.Run(() => MediaProbe.ProbeAsync(path, token, withFrameTimes: true), token);
+            : await Task.Run(() => MediaProbe.ProbeAsync(path, token, withPackets: true), token);
 
         // Another Clip Opened Meanwhile, This Result Belongs To Nobody
         if (token.IsCancellationRequested)
@@ -166,7 +168,6 @@ public partial class ClipEditor : IAsyncDisposable
                 FrameRate = metadata?.FrameRate ?? media.FrameRate,
             },
             path,
-            media.FrameTimes ?? [],
             strip is null ? null : DesktopShell.ThumbnailUrl(strip),
             metadata is { TrimStart: { } start, TrimEnd: { } end }
                 ? TrimRange.Fit(start, end, media.Duration)
@@ -207,7 +208,7 @@ public partial class ClipEditor : IAsyncDisposable
         _exporting &= loaded.Path == _path;
 
         // One Step, So Nothing On Screen Changes Piecemeal
-        (_clip, _media, _path, _frames) = (loaded.Clip, loaded.Media, loaded.Path, loaded.Frames);
+        (_clip, _media, _path) = (loaded.Clip, loaded.Media, loaded.Path);
         (_stripUrl, _duration, _range) = (loaded.StripUrl, loaded.Media.Duration, loaded.Range);
         (_titleText, _swapping, _playError, _paused) = (
             loaded.Clip.CustomTitle ?? "",
@@ -258,7 +259,9 @@ public partial class ClipEditor : IAsyncDisposable
             _volume,
             _muted,
             CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator,
-            _frames,
+            _media?.Packets?.Times ?? [],
+            _media?.Packets?.Sizes ?? [],
+            _media?.Packets?.Keys ?? [],
             _autoPlay
         );
     }
@@ -552,7 +555,7 @@ public partial class ClipEditor : IAsyncDisposable
     private bool CanSaveCut()
     {
         // Only A Shorter Selection Has Anything To Cut
-        return _ready && !_exporting && _range.CutsShort(_duration);
+        return Editable && !_exporting && _range.CutsShort(_duration);
     }
 
     private async Task RestoreOriginalAsync()
@@ -659,7 +662,6 @@ public partial class ClipEditor : IAsyncDisposable
         ClipInfo Clip,
         MediaInfo Media,
         string Path,
-        double[] Frames,
         string? StripUrl,
         TrimRange Range,
         bool Opening,

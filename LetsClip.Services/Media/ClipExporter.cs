@@ -37,7 +37,7 @@ public static class ClipExporter
     // AMF Shows Progress Within A Second, A Silent Start Hung
     private static readonly TimeSpan s_hardwareStart = TimeSpan.FromSeconds(5);
 
-    public const string TooSmallMessage =
+    private const string TooSmallMessage =
         "Too long for this Discord plan, pick a shorter selection";
 
     private const string RejectedMessage = "The exported file did not check out, nothing was kept";

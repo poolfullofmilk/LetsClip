@@ -48,7 +48,9 @@ public partial class GamesDialog : IDisposable
 
     protected override async Task OnInitializedAsync()
     {
+        // A Game Installed Since Launch Joins The List When Found
         Controller.Changed += OnChanged;
+        _ = Controller.ScanGamesAsync();
         _apps = await Task.Run(GameWatcher.FindApps);
         await RefreshAsync();
     }
@@ -121,12 +123,20 @@ public partial class GamesDialog : IDisposable
         Controller.SetRecorded([row], on);
     }
 
-    // Every Shown Row At Once, None Once All Are On
-    private bool AllShownRecorded => ShownRows.All(IsRecorded);
+    private string AllIcon(IReadOnlyList<AddedGame> shown)
+    {
+        // All, Some Or None Of The Shown Rows
+        var recorded = shown.Count(IsRecorded);
+        return recorded == 0 ? Icons.Material.Rounded.CheckBoxOutlineBlank
+            : recorded == shown.Count ? Icons.Material.Rounded.CheckBox
+            : Icons.Material.Rounded.IndeterminateCheckBox;
+    }
 
     private void ToggleAll()
     {
-        Controller.SetRecorded(ShownRows, !AllShownRecorded);
+        // Every Shown Row At Once, None Once All Are On
+        var shown = ShownRows;
+        Controller.SetRecorded(shown, !shown.All(IsRecorded));
     }
 
     private void BrowseForGame()

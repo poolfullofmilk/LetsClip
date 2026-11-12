@@ -89,9 +89,24 @@ public partial class ExportPanel : IDisposable
 
     private double ClipBitsPerSecond => Clip.SizeBytes * 8 / Media.Duration;
 
-    // A Muted Copy Leaves The Sound's Bytes Behind
-    private double SourceBytesPerSecond =>
-        (ClipBitsPerSecond - (WithAudio ? 0 : Media.AudioBitsPerSecond)) / 8;
+    // A Copy's Packets, Weighed Once Per Range And Sound
+    private (TrimRange Range, bool WithAudio, long Bytes)? _copy;
+
+    private long CopyBytes
+    {
+        get
+        {
+            if (_copy is not { } copy || copy.Range != Range || copy.WithAudio != WithAudio)
+            {
+                var bytes = Media.Packets is { } packets
+                    ? SizeBudget.CopyBytes(packets, Range, WithAudio)
+                    : (long)(Clip.SizeBytes * Range.Length / Media.Duration);
+                _copy = copy = (Range, WithAudio, bytes);
+            }
+
+            return copy.Bytes;
+        }
+    }
 
     private bool IsExporting => _progress is not null;
 
@@ -104,10 +119,7 @@ public partial class ExportPanel : IDisposable
         : "Export Again";
 
     private bool CanExport =>
-        !IsExporting
-        && !Busy
-        && Range.IsValidFor(Media.Duration)
-        && Budget?.Verdict != BudgetVerdict.TooSmall;
+        !IsExporting && !Busy && Range.IsValidFor(Media.Duration) && !IsTooLong;
 
     private (int Width, int Height) OutputSize =>
         KeepsClip
@@ -129,34 +141,32 @@ public partial class ExportPanel : IDisposable
     private string ExportSizeText =>
         SizeBudget.LimitOf(Plan) is { } limit
             ? Formatter.FormatSize((long)(limit * 1_000_000))
-            : Formatter.FormatSize((long)Math.Round(SourceBytesPerSecond * Range.Length));
+            : Formatter.FormatSize(CopyBytes);
 
-    // A Copy's Share Follows Drags, About Since Keyframes Lead In
-    private string? CopyBytesPerSecond =>
-        Budget is null
-            ? SourceBytesPerSecond.ToString("0.###", CultureInfo.InvariantCulture)
-            : null;
+    // The Sound Rate The Page Script Adds While Dragging
+    private string? CopyAudioText =>
+        Budget is not null ? null
+        : WithAudio && Media.Packets is { } packets
+            ? SizeBudget
+                .SoundBytesPerSecond(packets)
+                .ToString("0.###", CultureInfo.InvariantCulture)
+        : "0";
 
-    // The Whole File's Rate, Never Raised By Muting
+    // A Copy's Own Rate, An Encode's Ceiling Rounded Up
     private string BitrateText =>
-        Budget is not { } budget ? Formatter.FormatBitrate(SourceBytesPerSecond * 8)
+        Budget is not { } budget ? Formatter.FormatBitrate(CopyBytes * 8 / Range.Length)
         : budget.VideoBitsPerSecond > 0
             ? Formatter.FormatBitrate(
-                budget.VideoBitsPerSecond + (WithAudio ? SizeBudget.AudioBitsPerSecond : 0)
+                budget.VideoBitsPerSecond + (WithAudio ? SizeBudget.AudioBitsPerSecond : 0),
+                roundUp: true
             )
         : "-";
 
-    private string? VerdictHint =>
-        Budget?.Verdict switch
-        {
-            BudgetVerdict.Soft =>
-                "Fast motion will look soft at this size, a shorter selection keeps it sharper",
-            BudgetVerdict.TooSmall => ClipExporter.TooSmallMessage,
-            _ => null,
-        };
+    private bool IsTooLong => Budget?.Verdict == BudgetVerdict.TooSmall;
 
-    private string VerdictHintClass =>
-        Budget?.Verdict == BudgetVerdict.TooSmall ? "mud-error-text" : "mud-text-secondary";
+    // Names The Longest Selection The Plan Fits
+    private string TooLongText =>
+        $"Too long for {PlanLabel(Plan)}, which fits about {Formatter.FormatDuration(SizeBudget.LongestSeconds(SizeBudget.LimitOf(Plan) ?? 0, Shape))}, pick a shorter selection";
 
     private static string PlanLabel(DiscordPlan plan)
     {
@@ -179,8 +189,7 @@ public partial class ExportPanel : IDisposable
     // A Plan The Selection Fits Would Only Copy, Like Off
     private bool Changes(DiscordPlan plan)
     {
-        return plan == DiscordPlan.Off
-            || !SizeBudget.KeepsClip(plan, Range.Length, SourceBytesPerSecond);
+        return SizeBudget.LimitOf(plan) is not { } limit || CopyBytes > limit * 1_000_000;
     }
 
     private static string SizeText(int width, int height)

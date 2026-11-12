@@ -15,7 +15,8 @@ public sealed record ClipInfo(
     int Width,
     int Height,
     int? Monitor,
-    DateTime WrittenUtc
+    DateTime WrittenUtc,
+    bool IsEdited
 )
 {
     // The Game, Else The Monitor By Its Place

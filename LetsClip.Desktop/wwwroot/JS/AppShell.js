@@ -188,7 +188,7 @@ window.letsClip = (() => {
     };
 
     // Opening A Clip Plays It, A Cut Or Restore Waits
-    const attach = (video, source, playhead, timeline, dotnet, length, start, end, volume, muted, separator, frames, autoPlay) => {
+    const attach = (video, source, playhead, timeline, dotnet, length, start, end, volume, muted, separator, frames, sizes, keys, autoPlay) => {
         detach();
         // Detach Removed The Source Behind Blazor's Back
         if (video.getAttribute("src") !== source) video.setAttribute("src", source);
@@ -197,11 +197,16 @@ window.letsClip = (() => {
         // One Signal Takes Every Listener Off On Detach
         const listening = new AbortController();
         const { signal } = listening;
-        state = { video, playhead, timeline, dotnet, separator, bounds, listening, duration: length, reported: 0, sent: -1, paused: true, stopAt: null, frame: 0, drag: null };
+        // Running Totals Of Frame Bytes, A Copy Weighs At Once
+        const totals = [0];
+        for (const size of sizes) totals.push(totals[totals.length - 1] + size);
+        const packets = { times: frames, totals, keys };
+        state = { video, playhead, timeline, dotnet, separator, bounds, packets, listening, duration: length, reported: 0, sent: -1, paused: true, stopAt: null, frame: 0, drag: null };
         // Points Saved Before Snapping Move Onto Their Frames
         const range = { start, end };
         setEdge(range, "start", start);
         setEdge(range, "end", end);
+        paint(range);
         if (range.start !== start || range.end !== end) commit(range);
         video.currentTime = range.start + inside;
         setVolume(volume, muted);
@@ -308,6 +313,10 @@ window.letsClip = (() => {
         after.style.left = percent(end);
         selection.style.left = percent(start);
         selection.style.width = `calc(${percent(end)} - ${percent(start)})`;
+        // Within Half A Pixel Of An End, Frame Colour
+        const half = duration() / state.timeline.clientWidth / devicePixelRatio / 2;
+        state.timeline.toggleAttribute("data-at-start", start < half);
+        state.timeline.toggleAttribute("data-at-end", duration() - end < half);
         handleOf("start").style.left = percent(start);
         handleOf("end").style.left = percent(end);
         // The Handles Stay The One Truth Between Inputs
@@ -339,8 +348,33 @@ window.letsClip = (() => {
         }
         // Length, And A Copy's Size, Struck Live Once They Differ
         showValue(document.querySelector("[data-length]"), formatTime(end - start));
-        const size = document.querySelector("[data-bytes-per-second]");
-        if (size) showValue(size, formatSize(size.dataset.bytesPerSecond * (end - start)));
+        const size = document.querySelector("[data-copy-audio]");
+        if (size) showValue(size, formatSize(copyBytes(start, end, Number(size.dataset.copyAudio))));
+    };
+
+    // Weighed Like SizeBudget.CopyBytes: From The Keyframe Before The Seek
+    const copyBytes = (start, end, soundPerSecond) => {
+        const { times, totals, keys } = state.packets;
+        const seek = Math.max(0, start - 0.001);
+        const stop = seek + (end - start);
+        let first = 0;
+        for (const key of keys) {
+            if (times[key] > seek) break;
+            first = key;
+        }
+        // The First Frame At Or After The Stop
+        let low = first;
+        let high = times.length;
+        while (low < high) {
+            const middle = (low + high) >> 1;
+            if (times[middle] < stop) low = middle + 1;
+            else high = middle;
+        }
+        // The Sound Is Copied From That Keyframe On Too
+        const lead = times.length ? Math.max(0, seek - times[first]) : 0;
+        const sound = Math.round((end - start + lead) * soundPerSecond);
+        // The MP4 Index Takes 12 Bytes A Packet
+        return totals[low] - totals[first] + 12 * (low - first) + sound + 1000;
     };
 
     // Its Own Text Node, Which Blazor Keeps Writing To

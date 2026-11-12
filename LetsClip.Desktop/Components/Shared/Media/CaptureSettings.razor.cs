@@ -70,6 +70,14 @@ public partial class CaptureSettings : IDisposable
             : Color.Default;
     }
 
+    private static Color ReplayColor(int seconds)
+    {
+        // Minutes Of Cache Weigh On The Disk, Ten The Most
+        return seconds >= 600 ? Color.Error
+            : seconds >= 300 ? Color.Warning
+            : Color.Default;
+    }
+
     private static Color FrameRateColor(int rate)
     {
         return rate >= 165 ? Color.Error
@@ -112,6 +120,12 @@ public partial class CaptureSettings : IDisposable
 
     private void SetReplay(int seconds)
     {
+        // The Cache And Every Clip Grow With The Length
+        WarnOnRaise(
+            seconds > Controller.Settings.ReplaySeconds && seconds > 120,
+            $"A {ReplayLabel(seconds)} replay keeps about {Formatter.FormatSize(Controller.ReplayBytes(seconds))} on disk while recording, and each clip is about as big",
+            everywhere: true
+        );
         Controller.UpdateSettings(settings => settings with { ReplaySeconds = seconds });
     }
 
