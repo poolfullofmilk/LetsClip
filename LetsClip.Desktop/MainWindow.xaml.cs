@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Interop;
 using LetsClip.Data.Helpers;
 using LetsClip.Desktop.Components;
@@ -162,7 +163,10 @@ public partial class MainWindow : Window
             Services = _services,
 
             // The Plain Control, The Composition One Copies Every Frame
-            UseCompositionControl = false,
+            Template = new ControlTemplate
+            {
+                VisualTree = new FrameworkElementFactory(typeof(PageWebView), "WebView"),
+            },
         };
         page.RootComponents.Add(
             new RootComponent { Selector = "#app", ComponentType = typeof(Routes) }
@@ -414,7 +418,7 @@ public partial class MainWindow : Window
 
         // Still Hidden Later, The Page Goes, Never During An Export
         await Task.Delay(s_releaseDelay);
-        while (visibility == _visibility && ClipExporter.IsExporting)
+        while (visibility == _visibility && _controller.Exports.Running is not null)
         {
             await Task.Delay(TimeSpan.FromMinutes(1));
         }

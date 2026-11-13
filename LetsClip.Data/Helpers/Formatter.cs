@@ -102,6 +102,16 @@ public static partial class Formatter
         return time.ToLocalTime().ToString("d-M-yyyy 'at' H'h'mm", s_invariant);
     }
 
+    public static string FormatResolution(int width, int height)
+    {
+        return $"{width} × {height}";
+    }
+
+    public static string FormatFrameRate(double rate)
+    {
+        return string.Create(CultureInfo.InvariantCulture, $"{rate:0} FPS");
+    }
+
     public static string FormatBitrate(double bitsPerSecond)
     {
         // Whole Kilobits Below A Megabit
@@ -131,6 +141,8 @@ public static partial class Formatter
             && FormatBitrate(1_000_000) == "1 Mbps"
             && FormatBitrate(122_400) == "122 kbps"
             && FormatBitrate(70) == "1 kbps"
+            && FormatResolution(1920, 1080) == "1920 × 1080"
+            && FormatFrameRate(59.94) == "60 FPS"
             && FormatDuration(0) == "0s"
             && FormatDuration(0.25) == $"0{Point}3s"
             && FormatSeconds(0.25) == $"0{Point}3"

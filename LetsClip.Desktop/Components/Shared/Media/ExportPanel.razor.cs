@@ -47,9 +47,6 @@ public partial class ExportPanel : IDisposable
     [Parameter]
     public bool Cutting { get; set; }
 
-    [Parameter]
-    public EventCallback<bool> ExportingChanged { get; set; }
-
     [Inject]
     public required CaptureController Controller { get; set; }
 
@@ -62,11 +59,9 @@ public partial class ExportPanel : IDisposable
     [Inject]
     public required IJSRuntime JavaScript { get; set; }
 
-    private CancellationTokenSource? _cancel;
-    private ExportProgress? _progress;
-    private string? _result;
-    private bool _disposed;
     private bool _revealResult;
+
+    private ExportRunner Exports => Controller.Exports;
 
     // The Saved Plan, Off While The Selection Already Fits
     private DiscordPlan Plan =>
@@ -114,18 +109,31 @@ public partial class ExportPanel : IDisposable
         }
     }
 
-    private bool IsExporting => _progress is not null;
+    private bool IsExporting => Exports.IsExporting(Clip.Path);
+
+    // One Export At A Time, Another Clip's Is Running
+    private bool OtherExporting => Exports.Running is not null && !IsExporting;
+
+    private ExportProgress? ShownProgress => IsExporting ? Exports.Progress : null;
+
+    // This Clip's Newest Export, Kept Past Leaving The Editor
+    private string? ExportedFile =>
+        Exports.Last is { File: { } file } last
+        && last.Request.SourcePath == Clip.Path
+        && File.Exists(file)
+            ? file
+            : null;
 
     private bool IsCut => Range.CutsShort(Media.Duration);
 
     // Once Exported, The Same Selection Reads Again
     private string ExportText =>
         IsCut ? "Export and Save"
-        : _result is null ? "Export"
+        : ExportedFile is null ? "Export"
         : "Export Again";
 
     private bool CanExport =>
-        !IsExporting && !Busy && Range.IsValidFor(Media.Duration) && !IsTooLong;
+        Exports.Running is null && !Busy && Range.IsValidFor(Media.Duration) && !IsTooLong;
 
     private (int Width, int Height) OutputSize =>
         Budget is { } budget
@@ -146,7 +154,24 @@ public partial class ExportPanel : IDisposable
     // A Copy's Weight, Or Where An Encode Lands
     private long ExportBytes => Budget?.TypicalBytes ?? CopyBytes;
 
-    private string ExportSizeText => Formatter.FormatSize(ExportBytes);
+    // Too Long Exports Nothing, So The Rows Show The Clip
+    private string ClipSizeText => Formatter.FormatSize(Clip.SizeBytes);
+
+    private string ExportSizeText => IsTooLong ? ClipSizeText : Formatter.FormatSize(ExportBytes);
+
+    private string ClipResolutionText => Formatter.FormatResolution(Media.Width, Media.Height);
+
+    private string ExportResolutionText =>
+        IsTooLong
+            ? ClipResolutionText
+            : Formatter.FormatResolution(OutputSize.Width, OutputSize.Height);
+
+    private string ClipFrameRateText => Formatter.FormatFrameRate(ClipFrameRate);
+
+    private string ExportFrameRateText =>
+        IsTooLong ? ClipFrameRateText : Formatter.FormatFrameRate(FrameRate);
+
+    private string ClipBitrateText => Formatter.FormatBitrate(ClipBitsPerSecond);
 
     // The Sound Rate The Page Script Adds While Dragging
     private string? CopyAudioText =>
@@ -159,9 +184,7 @@ public partial class ExportPanel : IDisposable
 
     // The Size Over The Length, So Both Rows Always Agree
     private string BitrateText =>
-        Budget is { VideoBitsPerSecond: <= 0 }
-            ? "-"
-            : Formatter.FormatBitrate(ExportBytes * 8 / Range.Length);
+        IsTooLong ? ClipBitrateText : Formatter.FormatBitrate(ExportBytes * 8 / Range.Length);
 
     private bool IsTooLong => Budget?.Verdict == BudgetVerdict.TooSmall;
 
@@ -193,16 +216,6 @@ public partial class ExportPanel : IDisposable
         return SizeBudget.LimitOf(plan) is not { } limit || CopyBytes > limit * 1_000_000;
     }
 
-    private static string SizeText(int width, int height)
-    {
-        return $"{width} × {height}";
-    }
-
-    private static string RateText(double rate)
-    {
-        return $"{rate:0} FPS";
-    }
-
     private void SetPlan(DiscordPlan plan)
     {
         Controller.UpdateSettings(settings => settings with { ExportDiscordPlan = plan });
@@ -228,77 +241,47 @@ public partial class ExportPanel : IDisposable
             || await YesNoDialog.ConfirmCutAsync(DialogService, title);
     }
 
+    protected override void OnInitialized()
+    {
+        Exports.Changed += OnExportsChanged;
+        Exports.Progressed += OnExportsChanged;
+        Exports.Finished += OnExportFinished;
+    }
+
+    private void OnExportsChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void OnExportFinished(ExportOutcome outcome)
+    {
+        _ = InvokeAsync(() =>
+        {
+            // A Short Window Scrolls The Side Panel To The Export
+            _revealResult = outcome.File is not null && outcome.Request.SourcePath == Clip.Path;
+            StateHasChanged();
+        });
+    }
+
     private async Task ExportAsync()
     {
-        if (IsCut && !await ConfirmCutAsync(ExportText))
+        var cut = IsCut;
+        if (cut && !await ConfirmCutAsync(ExportText))
         {
             return;
         }
 
-        _result = null;
-        _cancel = new CancellationTokenSource();
-        _progress = new ExportProgress("Starting", 0);
-        var duration = Media.Duration;
-        await ExportingChanged.InvokeAsync(true);
+        var request = new ExportRequest(
+            Clip.Path,
+            Range,
+            Plan,
+            FrameRate,
+            WithAudio,
+            Controller.Settings.ExportsDirectory
+        );
 
-        // Progress Lands On The UI Thread, Throttled To Whole Percents
-        var progress = new Progress<ExportProgress>(report =>
-        {
-            if (_progress is not null)
-            {
-                _progress = report;
-                StateHasChanged();
-            }
-        });
-        try
-        {
-            var request = new ExportRequest(
-                Clip.Path,
-                Range,
-                Plan,
-                FrameRate,
-                WithAudio,
-                Controller.Settings.ExportsDirectory
-            );
-            var token = _cancel.Token;
-            _result = await Task.Run(
-                () => ClipExporter.ExportAsync(request, progress, token),
-                token
-            );
-
-            // The Exported Selection, Only While Its Own Clip Is Open
-            if (!_disposed && request.Range.CutsShort(duration))
-            {
-                _progress = new ExportProgress("Saving the Cut", 1);
-                StateHasChanged();
-                await SaveCut(request.SourcePath, request.Range);
-            }
-        }
-        catch (OperationCanceledException) when (!_disposed)
-        {
-            Snackbar.Add("Export cancelled, nothing was kept", Severity.Info);
-        }
-        catch (OperationCanceledException)
-        {
-            // Leaving The Editor Cancels Quietly
-        }
-        catch (Exception exception) when (exception is ExportException or TimeoutException)
-        {
-            Snackbar.Add(exception.Message, Severity.Warning);
-            s_logger.Warn($"Failed To Export, {exception.Message}");
-        }
-        finally
-        {
-            // A Short Window Scrolls The Side Panel To The Export
-            _revealResult = _result is not null;
-            _progress = null;
-            _cancel.Dispose();
-            _cancel = null;
-            if (!_disposed)
-            {
-                await ExportingChanged.InvokeAsync(false);
-            }
-        }
+        // Runs On Past Leaving, The App Bar Shows It
+        _ = Exports.RunAsync(request, cut, !Controller.Settings.DeleteOriginals);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -312,22 +295,22 @@ public partial class ExportPanel : IDisposable
 
     private void Cancel()
     {
-        _cancel?.Cancel();
+        Exports.Cancel();
     }
 
     private void CopyFile()
     {
-        if (_result is { } result)
+        if (ExportedFile is { } file)
         {
-            DesktopShell.CopyFile(result, Snackbar);
+            DesktopShell.CopyFile(file, Snackbar);
         }
     }
 
     public void Dispose()
     {
-        // Leaving The Editor Ends A Running Export And Its File
-        _disposed = true;
-        _cancel?.Cancel();
+        Exports.Changed -= OnExportsChanged;
+        Exports.Progressed -= OnExportsChanged;
+        Exports.Finished -= OnExportFinished;
         GC.SuppressFinalize(this);
     }
 }

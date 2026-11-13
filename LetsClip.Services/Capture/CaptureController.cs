@@ -69,6 +69,8 @@ public sealed class CaptureController : IDisposable
 
     public GameWatcher Games { get; } = new();
 
+    public ExportRunner Exports { get; } = new();
+
     public IReadOnlyList<MonitorInfo> Monitors { get; private set; } = [];
 
     // Nothing Picked Or Unplugged Means The Primary Monitor

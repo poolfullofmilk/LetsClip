@@ -106,6 +106,7 @@ public sealed class Tray
                 _ = _controller.ScanGamesAsync();
             }
         };
+        _controller.Exports.Finished += NotifyExported;
         _ = KeepUpdatedAsync();
 
         // A Tray Start Shows No Panel, So Say It Here
@@ -239,7 +240,7 @@ public sealed class Tray
             if (
                 _window.HiddenFor is { } idle
                 && idle >= s_idleBeforeUpdate
-                && !ClipExporter.IsExporting
+                && _controller.Exports.Running is null
                 && !_controller.Recorder.Status.IsSaving
             )
             {
@@ -331,6 +332,30 @@ public sealed class Tray
         // A Problem Shows Its Warning Sign, Windows' Sound Stays Out
         _balloonClick = onClick;
         TrayBalloon.ShowQuiet(_icon, BalloonMilliseconds, title, text, isWarning: true);
+    }
+
+    private void NotifyExported(ExportOutcome outcome)
+    {
+        // Hidden Meanwhile, The Tray Says How It Ended
+        if (_window.IsVisible || (outcome.File is null && outcome.Problem is null))
+        {
+            return;
+        }
+
+        var path = outcome.Request.SourcePath;
+        if (outcome is { File: null, Problem: { } problem })
+        {
+            ShowBalloon("Export Failed", problem, () => _window.OpenClip(path));
+            return;
+        }
+
+        _balloonClick = () => _window.OpenClip(path);
+        TrayBalloon.ShowQuiet(
+            _icon,
+            BalloonMilliseconds,
+            "Clip Exported",
+            outcome.Problem ?? "Click to open it and copy the file"
+        );
     }
 
     private void NotifySaved(ClipInfo clip)

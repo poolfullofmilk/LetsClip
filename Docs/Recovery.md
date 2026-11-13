@@ -68,3 +68,13 @@ The gaps the handoff's round 3 closed were exercised through a stand in `ffmpeg.
 - A failure streak long past counts anew: with `_failures` set to 9 and the last failure six minutes old, killing the video encoder 4 s into its session logged `Failure 1 In A Row, Brief, Out Of Sight`, kept the chip on Recording and was recording again 3.3 s later. The control, the same nine failures but recent, showed Recording Error at once and waited 60 s, which is what every later failure did before the fix.
 - A failed encoder test is not run again for that encoder's second start: with the AMF test failing once, the log holds one `Skipped AMD AMF`, then the x264 test, and recording on x264 4.9 s after launch.
 - A start throwing an unlisted exception was not injected, no way to make FFmpeg cause one was found; the catch is now unconditional.
+
+## The Game Window Crash, Found 13 November 2026
+
+The owner's video FFmpeg died with `0xC0000005` seven times between 8 and 12 November, always on Overwatch's window with AMF, after 4 to 43 minutes, with no warning first. Reproduced outside the app: a full screen test window on the first monitor that animates and, every 9 s, minimises, bursts 40 random sizes, hides, shrinks to 1 x 1, goes windowed and moves, captured by the app's own command lines under a small debugger that records the faulting module and writes a minidump (`LcCrash`, started through Explorer so it outlived the session).
+
+- Window capture with AMF crashed after 29.8 minutes, in a resize burst. Window capture with x264 and monitor capture with AMF ran two hours each without one.
+- The faulting thread belonged to AMD's D3D11 driver itself (`amdxx64.dll` 32.0.32015.7029, `+0x5EC80`, reading address 0x8): every frame on its stack was the driver's own, down to the thread start. FFmpeg's filter thread was inside `hwdownload` and AMF was encoding at that moment.
+- The difference between the crashing setup and the two that held: FFmpeg hands an encoder the one D3D11 device it finds, so `gfxcapture` and AMF shared the capture's device (`Using device capture (type d3d11va) with h264_amf encoder`). `ddagrab` makes its own device, and x264 takes none.
+- Fix: a window capture initialises a second, unused device (`-init_hw_device d3d11va=spare:N`). With two devices of a type FFmpeg gives the encoder neither (`hw_device_get_by_type` returns none when two match), so AMF makes its own, like on a monitor. The log then shows no `Using device capture` line.
+- Soak: two separate-device copies and one shared-device baseline on a fresh stress window for four hours (see Measurements, 13 November).

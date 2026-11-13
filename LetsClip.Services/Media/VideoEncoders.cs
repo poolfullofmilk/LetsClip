@@ -11,7 +11,10 @@ public sealed record VideoEncoder(
     string Codec,
     bool IsHardware,
     bool GpuFrames = false
-);
+)
+{
+    public bool IsHevc => Codec.StartsWith("hevc_", StringComparison.Ordinal);
+}
 
 public static class VideoEncoders
 {
@@ -43,6 +46,16 @@ public static class VideoEncoders
 
         candidates.Add(Software);
         return candidates;
+    }
+
+    public static VideoEncoder HevcOf(VideoEncoder encoder)
+    {
+        // The Same Card's HEVC, Sharper At Every Discord Size
+        return encoder with
+        {
+            Codec = encoder.Codec.Replace("h264_", "hevc_", StringComparison.Ordinal),
+            GpuFrames = false,
+        };
     }
 
     public static long PeakBytesPerSecond(
@@ -191,6 +204,11 @@ public static class VideoEncoders
         }
 
         var size = string.Create(CultureInfo.InvariantCulture, $"{width}x{height}");
+
+        // HEVC Only Exports, So Its Test Needs No Capture Tuning
+        var encoding = encoder.IsHevc
+            ? ["-c:v", encoder.Codec, "-profile:v", "main"]
+            : CaptureArguments(encoder, frameRate, width, height, CaptureQuality.Normal);
         ProcessResult result;
         try
         {
@@ -209,7 +227,7 @@ public static class VideoEncoders
                     "12",
                     "-vf",
                     "format=nv12",
-                    .. CaptureArguments(encoder, frameRate, width, height, CaptureQuality.Normal),
+                    .. encoding,
                     "-f",
                     "null",
                     "-",

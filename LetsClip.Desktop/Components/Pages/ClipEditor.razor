@@ -46,28 +46,24 @@ else
                 @* Restore Button *@
                 <IconButton Icon="@Icons.Material.Rounded.Restore"
                             Text="Restore Original"
-                            Placement="Placement.Left"
-                            Disabled="@(_exporting || _swapping)"
+                            Disabled="@(Exporting || _swapping)"
                             Busy="_restoring"
                             OnClick="RestoreOriginalAsync" />
             }
             @* Copy Button *@
             <IconButton Icon="@Icons.Material.Rounded.ContentCopy"
                         Text="Copy File"
-                        Placement="Placement.Left"
                         Disabled="_swapping"
                         OnClick="CopyFile" />
             @* Show In Folder Button *@
             <IconButton Icon="@Icons.Material.Rounded.FolderOpen"
                         Text="Show in Folder"
-                        Placement="Placement.Left"
                         OnClick="ShowInFolder" />
             @* Delete Button *@
             <IconButton Icon="@Icons.Material.Rounded.Delete"
                         Text="Delete Clip"
-                        Placement="Placement.Left"
                         Color="Color.Error"
-                        Disabled="@(_exporting || _swapping)"
+                        Disabled="@(Exporting || _swapping)"
                         OnClick="DeleteAsync" />
         </MudStack>
 
@@ -170,9 +166,11 @@ else
                                         Class="@(_ready ? "timeline" : "timeline loading")">
                                 @if (_stripUrl is { } strip)
                                 {
-                                    <MudImage Src="@strip"
-                                              Alt=""
-                                              Class="timeline-strip" />
+                                    <MudElement @bind-Ref="_strip"
+                                                HtmlTag="canvas"
+                                                Class="timeline-strip"
+                                                data-src="@strip"
+                                                data-cells="@StripCells" />
                                 }
                                 else if (_stripLoading)
                                 {
@@ -243,7 +241,6 @@ else
                                  CanSaveCut="@CanSaveCut()"
                                  Cutting="_cutting"
                                  Busy="_swapping"
-                                 ExportingChanged="SetExporting"
                                  Range="_range"
                                  Media="media">
                         <SettingRow Title="Name">

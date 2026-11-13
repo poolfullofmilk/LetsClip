@@ -1,0 +1,17 @@
+@if (Exports.Running is not null)
+{
+    @* Export Chip *@
+    <Tooltip Text="Show Export"
+             Placement="Placement.Bottom"
+             RootClass="appbar-center">
+        <MudChip T="string"
+                 Icon="@Icons.Material.Rounded.Movie"
+                 IconColor="Color.Info"
+                 Size="Size.Small"
+                 Variant="Variant.Text"
+                 Class="action-chip"
+                 OnClick="Show">
+            @Text
+        </MudChip>
+    </Tooltip>
+}

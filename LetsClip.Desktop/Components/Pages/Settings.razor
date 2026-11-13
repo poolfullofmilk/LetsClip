@@ -14,7 +14,6 @@
                     @* Recommended Button *@
                     <IconButton Icon="@Icons.Material.Rounded.AutoFixHigh"
                                 Text="Use Recommended Settings"
-                                Placement="Placement.Left"
                                 Disabled="Controller.IsRecommended"
                                 OnClick="Controller.UseRecommended" />
                 </Actions>
@@ -248,7 +247,6 @@
                     @* Delete Originals Button *@
                     <IconButton Icon="@Icons.Material.Rounded.Delete"
                                 Text="Delete Kept Originals"
-                                Placement="Placement.Left"
                                 Color="Color.Error"
                                 Filled
                                 Disabled="@(_originalsBytes is not > 0)"

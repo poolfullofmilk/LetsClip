@@ -24,9 +24,9 @@ public sealed class CaptureSession(
     // Past 1440p Reading Whole Frames Back Costs Too Much
     private const int MaximumWholeWindowPixels = 2560 * 1440;
 
-    // Rumble Cut, Noise Reduced, Gaps Closed By The Voice Band
+    // Rumble Cut, Noise Reduced, Gaps Closed, Quiet Words Raised
     private const string VoiceCleaning =
-        "highpass=f=100,afftdn=nr=40:nf=-30:tn=1,asplit[dry][key];[key]highpass=f=200,lowpass=f=3000[band];[dry]adelay=12:all=1[late];[late][band]sidechaingate=threshold=0.01:ratio=6:range=0.01:attack=3:release=250";
+        "highpass=f=100,afftdn=nr=40:nf=-30:tn=1,asplit[dry][key];[key]highpass=f=200,lowpass=f=3000[band];[dry]adelay=12:all=1[late];[late][band]sidechaingate=threshold=0.01:ratio=6:range=0.01:attack=3:release=250,speechnorm=p=0.5:e=6:t=0.02";
 
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
     private static readonly TimeSpan s_startTimeout = TimeSpan.FromSeconds(12);
@@ -302,6 +302,18 @@ public sealed class CaptureSession(
             );
         }
 
+        // The Encoder Makes Its Own Device, Sharing Crashed AMD
+        string[] spareDevice = isWindow
+            ?
+            [
+                "-init_hw_device",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"d3d11va=spare:{monitor.AdapterIndex}"
+                ),
+            ]
+            : [];
+
         return
         [
             "-hide_banner",
@@ -315,6 +327,7 @@ public sealed class CaptureSession(
             "1",
             "-init_hw_device",
             string.Create(CultureInfo.InvariantCulture, $"d3d11va=capture:{monitor.AdapterIndex}"),
+            .. spareDevice,
             "-filter_hw_device",
             "capture",
             "-filter_complex",

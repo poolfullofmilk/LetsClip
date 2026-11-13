@@ -62,6 +62,16 @@
     }
 }
 
+/* Popovers Open And Close In The Crossfades' 150 Ms */
+.mud-popover {
+    transition-duration: 150ms !important;
+}
+
+    /* A Waiting Tooltip Still Closes At Once */
+    .mud-tooltip:not(.mud-popover-open) {
+        transition-delay: 0ms !important;
+    }
+
 /* Menus And Selects Frost Nearly Opaque */
 .mud-popover.mud-paper {
     background-color: color-mix(in srgb, var(--mud-palette-surface) var(--popover-opacity), transparent);
@@ -81,8 +91,8 @@
 
 /* Thin Scrollbars With No Arrows, Like The Rest Of Windows */
 ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: var(--scrollbar-width);
+    height: var(--scrollbar-width);
 }
 
 ::-webkit-scrollbar-track,
@@ -178,6 +188,8 @@
             z-index: 1;
             inset: 0 -24px;
             clip-path: inset(0 24px -32px);
+            /* Fades In At The Left, Where The Bar Starts */
+            mask-image: linear-gradient(to right, transparent 24px, #000 72px);
             box-shadow: var(--mud-elevation-4);
             opacity: 0;
             pointer-events: none;
@@ -259,12 +271,6 @@
         background-color: var(--mud-palette-info);
         transition: width 50ms linear;
     }
-
-/* A Button Waiting For Keys Wears The Focus Ring */
-.mud-button-root.waiting {
-    outline: 2px solid var(--mud-palette-info);
-    outline-offset: 2px;
-}
 
 /* The Clips Folder Button Shows Its Path, Long Ones Shortened */
 .path-button {
@@ -352,15 +358,6 @@
     flex-shrink: 0;
 }
 
-/* Info Icons Match An Icon Button's Box */
-.info-icon {
-    padding: 3px;
-}
-
-    .info-icon svg {
-        filter: drop-shadow(var(--icon-shadow));
-    }
-
 /* Clip Facts Read As Label And Value */
 .info-facts {
     display: grid;
@@ -374,6 +371,11 @@
         font-variant-numeric: tabular-nums;
         text-align: end;
     }
+
+/* A Card's Facts Step Aside For Its Buttons' Tooltips */
+body:has(.hover-card button:hover) .mud-tooltip.clip-facts {
+    visibility: hidden;
+}
 
 /* Badges Lift Off Their Surface Like Chips */
 .mud-badge {
@@ -516,15 +518,24 @@
         margin-left: 8px;
     }
 
-/* Keyboard Focus Shows Wherever Focus Lands */
+/* Keyboard Focus Shows Wherever Focus Lands, Key Picking Too */
 [data-keyclick]:focus-visible,
 .timeline-handle:focus-visible,
-.info-icon :focus-visible {
+.mud-button-root.waiting {
     outline: 2px solid var(--mud-palette-info);
     outline-offset: 2px;
 }
 
 /* #region MudBlazor Overrides */
+/* Moved Inside The Window, Tooltips Still Point At Buttons */
+.mud-tooltip {
+    translate: var(--tip-shift, 0px) 0;
+}
+
+    .mud-tooltip.mud-tooltip-arrow::after {
+        translate: calc(-1 * var(--tip-shift, 0px)) 0;
+    }
+
 /* Clip Horizontally Only So Sticky Children Still Work */
 .mud-main-content {
     min-height: 0 !important;
@@ -551,6 +562,32 @@
 .mud-snackbar {
     box-shadow: var(--mud-elevation-4);
 }
+
+    /* Dark Like The Notices, Coloured By Severity */
+    .mud-snackbar[class*="mud-alert-filled-"] {
+        background-color: color-mix(in srgb, var(--severity) 16%, var(--mud-palette-surface));
+        color: var(--severity);
+    }
+
+        .mud-snackbar[class*="mud-alert-filled-"] .mud-snackbar-icon {
+            color: var(--severity);
+        }
+
+    .mud-snackbar.mud-alert-filled-success {
+        --severity: var(--mud-palette-success);
+    }
+
+    .mud-snackbar.mud-alert-filled-info {
+        --severity: var(--mud-palette-info);
+    }
+
+    .mud-snackbar.mud-alert-filled-warning {
+        --severity: var(--mud-palette-warning);
+    }
+
+    .mud-snackbar.mud-alert-filled-error {
+        --severity: var(--mud-palette-error);
+    }
 
 /* Chips Carry The Slightest Shadow, Icon Clear Of Text */
 .mud-chip {
@@ -602,6 +639,15 @@
     96% {
         opacity: 0.8;
     }
+}
+
+/* Export Progress, Centred In The App Bar */
+.appbar-center {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    translate: -50% -50%;
+    font-variant-numeric: tabular-nums;
 }
 
 /* Switch Tracks Run Rounded Like Every Thin Bar */
@@ -799,6 +845,11 @@
 
     .mud-input.mud-input-outlined:focus-within .mud-input-outlined-border {
         border-color: var(--mud-palette-info);
+    }
+
+    /* Picked By Pointer, A Closed Select Drops Its Ring */
+    html[data-input="pointer"] .mud-input.mud-input-outlined:has(input[role="combobox"][aria-expanded="false"]):focus-within .mud-input-outlined-border {
+        border-color: transparent;
     }
 
 /* The Navigation Marks Its Page Tonal And Darkens On Hover */
@@ -1191,7 +1242,6 @@ mark {
     inset: 0;
     width: 100%;
     height: 100%;
-    object-fit: fill;
     pointer-events: none;
 }
 
@@ -1314,7 +1364,7 @@ mark {
         display: flex;
         align-items: center;
         gap: 8px;
-        height: 40px;
+        height: var(--controls-height);
     }
 
 .player-time {
@@ -1353,7 +1403,7 @@ mark {
 
     /* Typed Times At Label Size, As Tall As Every Field */
     .trim-field .mud-input {
-        min-height: 40px;
+        min-height: var(--controls-height);
         font-size: var(--mud-typography-body2-size);
         font-variant-numeric: tabular-nums;
     }
@@ -1373,7 +1423,7 @@ mark {
     padding-bottom: 8px;
     visibility: hidden;
     opacity: 0;
-    transform: translateX(-50%);
+    translate: -50% 0;
     transition: opacity var(--quick), visibility var(--quick);
 }
 

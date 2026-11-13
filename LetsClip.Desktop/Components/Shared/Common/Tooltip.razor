@@ -5,6 +5,7 @@
             Placement="Placement"
             Disabled="@(Disabled || (string.IsNullOrEmpty(Text) && Content is null))"
             ShowOnFocus="ShowOnFocus"
+            Class="@PopoverClass"
             Arrow>
     @ChildContent
 </MudTooltip>

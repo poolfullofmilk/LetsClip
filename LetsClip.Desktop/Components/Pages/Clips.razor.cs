@@ -39,10 +39,12 @@ public partial class Clips : IDisposable
     private DotNetObjectReference<Clips>? _reference;
     private Action? _nextChange;
     private int _loads;
-    private int _cards = BatchSize;
 
     // The Last List, So Coming Back Never Shows A Spinner
     private static IReadOnlyList<ClipInfo>? s_clips;
+
+    // Cards Drawn Before, So Coming Back Lands In Place
+    private static int s_cards = BatchSize;
 
     // The Games Shown, Null For All, Kept While LetsClip Runs
     private static HashSet<string>? s_shownGames;
@@ -107,6 +109,8 @@ public partial class Clips : IDisposable
         // Saves List At Once, The Watcher Covers Explorer
         Controller.Library.Changed += OnLibraryChanged;
         Controller.Library.PicturesDone += OnPicturesDone;
+        Controller.Library.PictureMade += OnPictureMade;
+        Controller.Exports.Changed += OnExportsChanged;
         Controller.Recorder.ClipSaved += OnClipSaved;
         await LoadAsync();
     }
@@ -114,6 +118,30 @@ public partial class Clips : IDisposable
     private void OnPicturesDone()
     {
         // A Pass That Made Nothing Still Stops The Tiles' Spinners
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void OnPictureMade(string path, string picture)
+    {
+        _ = InvokeAsync(() =>
+        {
+            // Only That Card Changes, No Reload
+            if (s_clips is { } clips)
+            {
+                s_clips =
+                [
+                    .. clips.Select(clip =>
+                        clip.Path == path ? clip with { ThumbnailPath = picture } : clip
+                    ),
+                ];
+                StateHasChanged();
+            }
+        });
+    }
+
+    private void OnExportsChanged()
+    {
+        // An Exporting Clip Cannot Be Deleted Meanwhile
         _ = InvokeAsync(StateHasChanged);
     }
 
@@ -174,7 +202,7 @@ public partial class Clips : IDisposable
         if (fromTop)
         {
             // A New Order Or Filter Starts At Its First Batch
-            _nextChange += () => _cards = BatchSize;
+            _nextChange += () => s_cards = BatchSize;
         }
 
         await JavaScript.CallAsync(
@@ -194,8 +222,14 @@ public partial class Clips : IDisposable
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        // Back Where It Was Left, Once Cached Cards Are Drawn
+        if (firstRender && s_clips is not null)
+        {
+            await JavaScript.CallAsync("letsClip.restoreScroll");
+        }
+
         // Ponytail: Each Batch Rebuilds Every Shown Card, Fine To Thousands
-        if (ShownClips.Count > _cards)
+        if (ShownClips.Count > s_cards)
         {
             await JavaScript.CallAsync("letsClip.watchEnd", Reference, nameof(ShowMoreCards));
         }
@@ -204,9 +238,9 @@ public partial class Clips : IDisposable
     [JSInvokable]
     public void ShowMoreCards()
     {
-        if (ShownClips.Count > _cards)
+        if (ShownClips.Count > s_cards)
         {
-            _cards += BatchSize;
+            s_cards += BatchSize;
             StateHasChanged();
         }
     }
@@ -226,24 +260,29 @@ public partial class Clips : IDisposable
             : $"{clips.Count}";
     }
 
-    private string? CardStyle(ClipInfo clip)
+    private static string? CardStyle(ClipInfo clip)
     {
         // Its Own Name, So The Card Moves Rather Than Fades
-        return _cards > NamedCards
+        return s_cards > NamedCards
             ? null
             : $"view-transition-name:clip-{(uint)clip.Path.GetHashCode(StringComparison.OrdinalIgnoreCase)}";
     }
 
     private static IEnumerable<(string Label, string Value)> FactsOf(ClipInfo clip)
     {
-        // Old Metadata May Not Know The Resolution Yet
+        // The Editor's Order, Old Metadata May Lack Some
+        yield return ("Size", Formatter.FormatSize(clip.SizeBytes));
         if (clip.Width > 0)
         {
-            yield return ("Resolution", $"{clip.Width} × {clip.Height}");
+            yield return ("Resolution", Formatter.FormatResolution(clip.Width, clip.Height));
+        }
+
+        if (clip.FrameRate > 0)
+        {
+            yield return ("Frame Rate", Formatter.FormatFrameRate(clip.FrameRate));
         }
 
         yield return ("Bitrate", Formatter.FormatBitrate(clip.SizeBytes * 8 / clip.Duration));
-        yield return ("Size", Formatter.FormatSize(clip.SizeBytes));
     }
 
     private static string FactsText(ClipInfo clip)
@@ -337,6 +376,8 @@ public partial class Clips : IDisposable
     {
         Controller.Library.Changed -= OnLibraryChanged;
         Controller.Library.PicturesDone -= OnPicturesDone;
+        Controller.Library.PictureMade -= OnPictureMade;
+        Controller.Exports.Changed -= OnExportsChanged;
         Controller.Recorder.ClipSaved -= OnClipSaved;
         _closing.Cancel();
         _closing.Dispose();

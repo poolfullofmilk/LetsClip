@@ -23,7 +23,7 @@
                                   AlignItems="AlignItems.End">
                             <MudText Typo="Typo.body2"
                                      Class="mud-text-secondary">
-                                @($"{monitor.Width} × {monitor.Height}")
+                                @Formatter.FormatResolution(monitor.Width, monitor.Height)
                             </MudText>
                             <MudText Typo="Typo.body2"
                                      Class="mud-text-secondary">

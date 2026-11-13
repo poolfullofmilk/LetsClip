@@ -11,7 +11,7 @@ namespace LetsClip.Services.Storage;
 
 public sealed record UserSettings(
     string? MonitorDevicePath = null,
-    int ReplaySeconds = 30,
+    int ReplaySeconds = 60,
     int FrameRate = 60,
     int Resolution = 1080,
     CaptureQuality Quality = CaptureQuality.Normal,
@@ -19,11 +19,11 @@ public sealed record UserSettings(
     string[]? RemovedGames = null,
     AddedGame[]? AddedGames = null,
     bool StartWithWindows = true,
-    bool SaveSound = false,
+    bool SaveSound = true,
     double SaveSoundVolume = 1,
     bool SystemAudio = true,
     string SystemAudioDeviceId = "",
-    bool OnlyGameAndDiscord = true,
+    bool OnlyGameAndDiscord = false,
     bool Microphone = true,
     string MicrophoneDeviceId = "",
     double MicrophoneVolume = 0.8,
@@ -42,7 +42,7 @@ public sealed record UserSettings(
 )
 {
     // Raised When New Defaults Reach Existing Users Once
-    public const int CurrentDefaults = 3;
+    public const int CurrentDefaults = 4;
 
     // First Clip At Half Volume, The Microphone Test Too
     public const double OpeningVolume = 0.5;
@@ -101,8 +101,9 @@ public sealed record UserSettings(
             }
 
             // Version 3 Gives Everyone The Owner's Settings Of 13 November
-            var updated = (
-                settings with
+            if (settings.DefaultsVersion < 3)
+            {
+                settings = settings with
                 {
                     ReplaySeconds = defaults.ReplaySeconds,
                     FrameRate = defaults.FrameRate,
@@ -117,6 +118,16 @@ public sealed record UserSettings(
                     MicrophoneVolume = defaults.MicrophoneVolume,
                     NoiseCancellation = defaults.NoiseCancellation,
                     DeleteOriginals = defaults.DeleteOriginals,
+                };
+            }
+
+            // Version 4 Restores A Minute, Save Sound And All Audio
+            var updated = (
+                settings with
+                {
+                    ReplaySeconds = defaults.ReplaySeconds,
+                    SaveSound = defaults.SaveSound,
+                    OnlyGameAndDiscord = defaults.OnlyGameAndDiscord,
                     DefaultsVersion = CurrentDefaults,
                 }
             ).Normalized();

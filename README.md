@@ -5,9 +5,10 @@
 - Games and Apps Only records just that window, so chats and notifications stay out, and you pick any installed game or app from one list
 - Press the key in a game LetsClip does not know yet and it offers to record that game from then on
 - One click picks the recommended quality, or record up to your monitor's own resolution and refresh rate
-- Records system audio, or only your game and Discord, and your microphone at the volume you set with its background noise cleaned out
+- Records system audio, or only your game and Discord, and your microphone at the volume you set with its background noise cleaned out and quiet words brought up
 - Test your microphone live and hear how it will sound in a clip
-- Trim a clip to the exact frame, by dragging, typing or stepping, and export an exact copy of it, or fit it to Discord's Free, Nitro Basic or Nitro limit at the size that looks sharpest, with or without sound
+- Trim a clip to the exact frame, by dragging, typing or stepping, and export an exact copy of it, or fit it to Discord's Free, Nitro Basic or Nitro limit as HEVC at the size that looks sharpest, with or without sound
+- Exports keep going when you leave the editor, with their progress in the top bar
 - Keep just the trimmed part without losing any quality, and keep the full clip to bring back if you want
 - The length, size and bitrate shown before an export are what the file comes out as, and a selection too long for a Discord plan tells you how long it can be
 - Clips sit under a header per day, each tagged with its game, app or monitor, with its resolution, bitrate and size one hover away
@@ -38,6 +39,7 @@
 ## Technical details
 - .NET 11, WPF, Blazor and MudBlazor, one self-contained exe
 - A bundled FFmpeg 9.0.2 records and exports with your graphics card's encoder (AMD, NVIDIA or Intel), NAudio captures the audio
+- Discord exports are HEVC, which Discord plays on desktop and web and almost every phone decodes; the card's H.264 takes over where HEVC is missing
 - GPL-3.0, see [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)
 
 ## Screenshots

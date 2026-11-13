@@ -6,6 +6,11 @@ document.addEventListener("keydown", (event) => {
     }
 });
 
+// Pointer Or Keys, So A Picked Select Keeps No Ring
+for (const [type, input] of [["pointerdown", "pointer"], ["keydown", "keys"]]) {
+    document.addEventListener(type, () => (document.documentElement.dataset.input = input), true);
+}
+
 // A Focused Trim Field Holds Plain Seconds, Selected
 document.addEventListener("focusin", (event) => {
     const field = event.target instanceof HTMLInputElement ? event.target.closest("[data-seconds]") : null;
@@ -108,7 +113,7 @@ trackDevicePixel();
     // Anywhere On The Card, Never On Its Buttons
     document.addEventListener("pointerover", (event) => {
         const target = event.target instanceof Element ? event.target : null;
-        const card = target && !target.closest("button, .info-icon") ? target.closest(".hover-card") : null;
+        const card = target && !target.closest("button") ? target.closest(".hover-card") : null;
         const holder = card?.querySelector(".clip-preview") ?? null;
         if (holder === (previewed?.holder ?? null)) return;
         stopPreview();
@@ -119,6 +124,31 @@ trackDevicePixel();
     document.addEventListener("pointerdown", stopPreview);
     document.addEventListener("visibilitychange", stopPreview);
     document.documentElement.addEventListener("pointerleave", stopPreview);
+})();
+
+// Tooltips Stay Inside The Window, Their Arrow On The Button
+(() => {
+    const margin = 8;
+    const keepInside = (tip) => {
+        // Layout Sizes, So The Opening Scale Never Misleads
+        const left = parseFloat(tip.style.left);
+        if (Number.isNaN(left)) return;
+        const right = left + tip.offsetWidth;
+        const shift = right > innerWidth - margin ? innerWidth - margin - right : left < margin ? margin - left : 0;
+        if (tip.style.getPropertyValue("--tip-shift") !== `${shift}px`) tip.style.setProperty("--tip-shift", `${shift}px`);
+    };
+    const observer = new MutationObserver((records) => {
+        for (const { target } of records) {
+            if (target instanceof HTMLElement && target.classList.contains("mud-tooltip") && target.classList.contains("mud-popover-open")) keepInside(target);
+        }
+    });
+    // Only The Popovers Are Watched, Never The Busy Player
+    const watch = () => {
+        const provider = document.querySelector(".mud-popover-provider");
+        if (!provider) return void setTimeout(watch, 500);
+        observer.observe(provider, { subtree: true, attributes: true, attributeFilter: ["class", "style"] });
+    };
+    watch();
 })();
 
 window.letsClip = (() => {
@@ -133,6 +163,18 @@ window.letsClip = (() => {
         if (!document.startViewTransition) return void change();
         // A Newer Change Skips This One, Which Rejects Ready
         document.startViewTransition(change).ready.catch(() => {});
+    };
+
+    // Each Page Remembers Its Scroll, Clips Comes Back There
+    const scrolled = new Map();
+    document.addEventListener(
+        "scroll",
+        (event) => event.target instanceof Element && event.target.classList.contains("page-scroll") && scrolled.set(location.pathname, event.target.scrollTop),
+        true
+    );
+    const restoreScroll = () => {
+        const scroller = document.querySelector(".page-scroll");
+        if (scroller) scroller.scrollTop = scrolled.get(location.pathname) ?? 0;
     };
 
     // The Last Card Nearing The View Asks For More Cards
@@ -471,6 +513,46 @@ window.letsClip = (() => {
 
     const pause = () => state?.video.pause();
 
+    // Whole Frames Across The Strip, Each The Moment Under It
+    const strips = new Set();
+    const paintStrip = (canvas) => {
+        if (!canvas.isConnected) {
+            strips.delete(canvas);
+            stripSizes.unobserve(canvas);
+            return;
+        }
+        const image = canvas.stripImage;
+        if (!image?.naturalWidth) return;
+        const { clientWidth: width, clientHeight: height } = canvas;
+        const pad = parseFloat(getComputedStyle(canvas.parentElement).paddingLeft) || 0;
+        const cells = Number(canvas.dataset.cells);
+        const cellWidth = image.naturalWidth / cells;
+        const count = Math.max(1, Math.round(width / ((height * cellWidth) / image.naturalHeight)));
+        canvas.width = Math.round(width * devicePixelRatio);
+        canvas.height = Math.round(height * devicePixelRatio);
+        const context = canvas.getContext("2d");
+        context.imageSmoothingQuality = "high";
+        for (let index = 0; index < count; index++) {
+            // Times Run Over The Track, Between The Handles
+            const centre = ((index + 0.5) * width) / count;
+            const share = Math.min(Math.max((centre - pad) / Math.max(1, width - 2 * pad), 0), 1);
+            const cell = Math.min(cells - 1, Math.floor(share * cells));
+            const left = Math.round((index * canvas.width) / count);
+            const right = Math.round(((index + 1) * canvas.width) / count);
+            context.drawImage(image, cell * cellWidth, 0, cellWidth, image.naturalHeight, left, 0, right - left, canvas.height);
+        }
+    };
+    const stripSizes = new ResizeObserver((entries) => entries.forEach((entry) => paintStrip(entry.target)));
+    addEventListener("resize", () => strips.forEach(paintStrip));
+    const showStrip = (canvas) => {
+        const image = new Image();
+        image.onload = () => paintStrip(canvas);
+        image.src = canvas.dataset.src;
+        canvas.stripImage = image;
+        strips.add(canvas);
+        stripSizes.observe(canvas);
+    };
+
     // A Typed Or Marked Point Moves Like A Drag
     const place = (edge, time) => {
         if (!state) return;
@@ -479,6 +561,10 @@ window.letsClip = (() => {
         paint(range);
         showEdge(range, edge);
         commit(range);
+
+        // The Typed Field Shows Where It Landed, Focus Kept
+        const input = document.querySelector(`.trim-field[data-edge="${edge === "start" ? "Start" : "End"}"] input`);
+        if (input) input.value = formatTime(range[edge]);
     };
 
     // A Field's Arrows Step Its Point Like A Handle's Keys
@@ -549,5 +635,5 @@ window.letsClip = (() => {
     // Scrolled Just Enough To Show The Whole Panel, Never Animated
     const reveal = (id) => document.getElementById(id)?.scrollIntoView({ block: "nearest" });
 
-    return { transition, watchEnd, attach, detach, play, pause, place, stepEdge, mark, setVolume, fullScreen, watchKeys, stopKeys: () => stopKeys(), reveal };
+    return { transition, watchEnd, restoreScroll, attach, detach, play, pause, place, stepEdge, mark, showStrip, setVolume, fullScreen, watchKeys, stopKeys: () => stopKeys(), reveal };
 })();

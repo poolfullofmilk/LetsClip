@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.ComponentModel;
+using System.Globalization;
 using System.Text.Json;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
@@ -16,8 +17,16 @@ public sealed class ClipLibrary : IDisposable
     // A Cut Clip's Full Original Waits Here, Hidden Beside It
     private const string OriginalsFolder = ".Originals";
     private const string ThumbnailSuffix = ".jpg";
-    private const string StripSuffix = ".strip.jpg";
 
+    // Frames In A Strip, Each Twice The Timeline's Height
+    public const int StripCells = 40;
+    private const int StripHeight = 144;
+
+    // A Picture Or Preview Reading The Clip Lets Go Soon
+    private const int ReplaceAttempts = 5;
+
+    private static readonly TimeSpan s_replaceRetry = TimeSpan.FromSeconds(1);
+    private static readonly string s_stripSuffix = $".strip{StripCells}.jpg";
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
     private static readonly string s_metadataDirectory = Path.Combine(
         AppInfo.DataDirectory,
@@ -66,6 +75,9 @@ public sealed class ClipLibrary : IDisposable
 
     // A Pass Ended, Waiting Tiles Settle
     public event Action? PicturesDone;
+
+    // Each Picture Shows On Its Card Once Made
+    public event Action<string, string>? PictureMade;
 
     public string Folder { get; private set; }
 
@@ -134,25 +146,26 @@ public sealed class ClipLibrary : IDisposable
         {
             try
             {
-                var made = 0;
                 foreach (var clip in missing.TakeWhile(_ => !_closing.IsCancellationRequested))
                 {
-                    if (await ThumbnailAsync(clip.Path, clip.Duration) is not null)
+                    try
                     {
-                        made++;
+                        if (await ThumbnailAsync(clip.Path, clip.Duration) is { } picture)
+                        {
+                            PictureMade?.Invoke(clip.Path, picture);
+                        }
+                    }
+                    catch (Exception exception)
+                        when (exception
+                                is IOException
+                                    or UnauthorizedAccessException
+                                    or TimeoutException
+                        )
+                    {
+                        // One Bad Clip Keeps A Plain Tile, Others Go On
+                        s_logger.Warn($"Failed To Make A Thumbnail {exception.GetType().Name}");
                     }
                 }
-
-                if (made > 0)
-                {
-                    Changed?.Invoke();
-                }
-            }
-            catch (Exception exception)
-                when (exception is IOException or UnauthorizedAccessException or TimeoutException)
-            {
-                // A Missing Picture Only Leaves A Plain Tile
-                s_logger.Warn($"Failed To Make Thumbnails {exception.GetType().Name}");
             }
             finally
             {
@@ -198,6 +211,7 @@ public sealed class ClipLibrary : IDisposable
             !metadata.ForeignOriginal && File.Exists(OriginalPathOf(path)),
             metadata.Width,
             metadata.Height,
+            metadata.FrameRate ?? 0,
             metadata.Monitor,
             file.LastWriteTimeUtc,
             metadata.IsEdited
@@ -262,14 +276,17 @@ public sealed class ClipLibrary : IDisposable
             // The First Cut Keeps The Full Clip If Asked
             var original = OwnedOriginalOf(path);
             var earlierStart = original is null ? 0 : metadata.CutStart ?? 0;
-            if (keepOriginal && original is null)
+            await ReplaceWhileBusyAsync(() =>
             {
-                KeepFullClip(path, temporary);
-            }
-            else
-            {
-                File.Move(temporary, path, overwrite: true);
-            }
+                if (keepOriginal && original is null)
+                {
+                    KeepFullClip(path, temporary);
+                }
+                else
+                {
+                    File.Move(temporary, path, overwrite: true);
+                }
+            });
 
             // Not Kept, An Earlier Original Goes Too, Leaving No History
             if (!keepOriginal && original is not null)
@@ -363,6 +380,25 @@ public sealed class ClipLibrary : IDisposable
         }
     }
 
+    private static async Task ReplaceWhileBusyAsync(Action replace)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                replace();
+                return;
+            }
+            catch (Exception exception)
+                when (attempt < ReplaceAttempts
+                    && exception is IOException or UnauthorizedAccessException
+                )
+            {
+                await Task.Delay(s_replaceRetry);
+            }
+        }
+    }
+
     private static void KeepFullClip(string path, string temporary)
     {
         // A Stale Backup Is Set Aside, Never Overwritten
@@ -395,7 +431,7 @@ public sealed class ClipLibrary : IDisposable
             throw new InvalidDataException("This clip has no original of its own");
         }
 
-        File.Move(original, path, overwrite: true);
+        await ReplaceWhileBusyAsync(() => File.Move(original, path, overwrite: true));
         RemoveEmptyFolder(Path.GetDirectoryName(original)!);
 
         // Past Here The Clip Is Back, Only Its Details Follow
@@ -564,11 +600,11 @@ public sealed class ClipLibrary : IDisposable
         CancellationToken token
     )
     {
-        // Twelve Keyframes Across The Clip, The Last Second Skipped
+        // Keyframes Across The Clip, The Page Draws What Fits
         // Sparse Keyframes Repeat Their Last, So No Tile Stays Black
-        var rate = FFmpeg.Seconds(12 / Math.Max(duration - 1, 0.5));
+        var rate = FFmpeg.Seconds(StripCells / Math.Max(duration - 1, 0.5));
         return RenderAsync(
-            PicturePathOf(path, StripSuffix),
+            PicturePathOf(path, s_stripSuffix),
             [
                 "-skip_frame",
                 "nokey",
@@ -576,7 +612,10 @@ public sealed class ClipLibrary : IDisposable
                 path,
                 "-an",
                 "-vf",
-                $"fps={rate},tpad=stop=12:stop_mode=clone,scale=-2:96,tile=12x1",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"fps={rate},tpad=stop={StripCells}:stop_mode=clone,scale=-2:{StripHeight},tile={StripCells}x1"
+                ),
                 "-frames:v",
                 "1",
                 "-fps_mode",
@@ -630,11 +669,14 @@ public sealed class ClipLibrary : IDisposable
     private static void DeleteOlderPictures(string target)
     {
         // Other Generations Of This Clip's Same Kind Of Picture
-        var isStrip = target.EndsWith(StripSuffix, StringComparison.Ordinal);
+        var isStrip = target.EndsWith(s_stripSuffix, StringComparison.Ordinal);
         var name = Path.GetFileName(target);
         foreach (var older in PicturesOf(name[..FilePaths.KeyLength]))
         {
-            if (older != target && older.EndsWith(StripSuffix, StringComparison.Ordinal) == isStrip)
+            if (
+                older != target
+                && older.EndsWith(s_stripSuffix, StringComparison.Ordinal) == isStrip
+            )
             {
                 TryDelete(older);
             }

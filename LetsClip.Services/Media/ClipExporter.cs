@@ -42,11 +42,6 @@ public static class ClipExporter
 
     private const string RejectedMessage = "The exported file did not check out, nothing was kept";
 
-    private static int s_running;
-
-    // The Window Keeps Its Page While Any Export Runs
-    public static bool IsExporting => Volatile.Read(ref s_running) > 0;
-
     public static (int Width, int Height) OutputSize(
         int width,
         int height,
@@ -70,7 +65,6 @@ public static class ClipExporter
     )
     {
         // Each Export Writes Its Own Temporary File And Work Folder
-        Interlocked.Increment(ref s_running);
         try
         {
             return await RunAsync(request, progress, token);
@@ -87,16 +81,13 @@ public static class ClipExporter
         }
         catch (UnauthorizedAccessException)
         {
+            s_logger.Warn("Failed To Export, The Exports Folder Refused Writing");
             throw new ExportException("Cannot write to the exports folder");
         }
         catch (IOException exception)
         {
             s_logger.Warn($"Failed To Export {exception.GetType().Name}");
             throw new ExportException("Export failed, the file could not be written");
-        }
-        finally
-        {
-            Interlocked.Decrement(ref s_running);
         }
     }
 
@@ -148,17 +139,21 @@ public static class ClipExporter
             throw new ExportException(TooSmallMessage);
         }
 
-        // The Graphics Card Measured Faster And Sharper, x264 Falls Back
+        // HEVC On The Graphics Card, Then Its H.264, x264 Last
+        var hardware = VideoEncoders
+            .Candidates()
+            .Where(candidate => candidate.IsHardware && !candidate.GpuFrames)
+            .ToList();
         var encoders = new List<VideoEncoder>();
-        foreach (var candidate in VideoEncoders.Candidates())
+        foreach (var family in new[] { hardware.Select(VideoEncoders.HevcOf), hardware })
         {
-            if (
-                candidate.IsHardware
-                && await VideoEncoders.WorksAsync(candidate, width, height, (int)frameRate, token)
-            )
+            foreach (var candidate in family)
             {
-                encoders.Add(candidate);
-                break;
+                if (await VideoEncoders.WorksAsync(candidate, width, height, (int)frameRate, token))
+                {
+                    encoders.Add(candidate);
+                    break;
+                }
             }
         }
 
@@ -209,7 +204,7 @@ public static class ClipExporter
                     var output = await MediaProbe.ProbeAsync(temporary, token);
                     if (
                         output is not { HasVideo: true }
-                        || output.VideoCodec != "h264"
+                        || output.VideoCodec != (encoder.IsHevc ? "hevc" : "h264")
                         || output.PixelFormat != "yuv420p"
                         || Math.Abs(output.Duration - duration) > DurationTolerance
                         || output.HasAudio != withAudio
@@ -228,7 +223,7 @@ public static class ClipExporter
                     {
                         var finalPath = Keep(request, temporary);
                         s_logger.Info(
-                            $"Exported {Path.GetFileName(finalPath)} At {Formatter.FormatSize(size)} With {encoder.Name} In {attempts} Attempts And {started.Elapsed.TotalSeconds:0.0} s"
+                            $"Exported {Path.GetFileName(finalPath)} At {Formatter.FormatSize(size)} As {(encoder.IsHevc ? "HEVC" : "H.264")} With {encoder.Name} In {attempts} Attempts And {started.Elapsed.TotalSeconds:0.0} s"
                         );
                         return finalPath;
                     }
@@ -461,9 +456,8 @@ public static class ClipExporter
                 "vbr_peak",
                 "-bf",
                 "3",
-                "-preanalysis",
-                "1",
             ],
+            "hevc_amf" => ["-usage", "transcoding", "-quality", "quality", "-rc", "vbr_peak"],
             "h264_nvenc" =>
             [
                 "-preset",
@@ -479,10 +473,28 @@ public static class ClipExporter
                 "-bf",
                 "3",
             ],
+            "hevc_nvenc" =>
+            [
+                "-preset",
+                "p6",
+                "-tune",
+                "hq",
+                "-rc",
+                "vbr",
+                "-multipass",
+                "fullres",
+                "-spatial-aq",
+                "1",
+            ],
             "h264_qsv" => ["-preset", "slower", "-bf", "3"],
+            "hevc_qsv" => ["-preset", "slower"],
             _ => ["-preset", "medium"],
         };
-        return ["-c:v", encoder.Codec, .. specific, "-profile:v", "high", .. rate];
+        // Tagged hvc1, So Apple Devices Play It Too
+        string[] profile = encoder.IsHevc
+            ? ["-profile:v", "main", "-tag:v", "hvc1"]
+            : ["-profile:v", "high"];
+        return ["-c:v", encoder.Codec, .. specific, .. profile, .. rate];
     }
 
     private static async Task RunPassAsync(

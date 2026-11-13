@@ -48,6 +48,10 @@ public partial class ClipEditor : IAsyncDisposable
     private ElementReference _video;
     private ElementReference _playhead;
     private ElementReference _timeline;
+    private ElementReference _strip;
+    private string? _drawnStrip;
+
+    private static int StripCells => ClipLibrary.StripCells;
     private string? _path;
     private ClipInfo? _clip;
     private MediaInfo? _media;
@@ -62,7 +66,6 @@ public partial class ClipEditor : IAsyncDisposable
     private bool _cutting;
     private bool _restoring;
     private bool _stripLoading;
-    private bool _exporting;
     private LoadedClip? _loaded;
     private DotNetObjectReference<ClipEditor>? _page;
     private bool _playError;
@@ -93,10 +96,23 @@ public partial class ClipEditor : IAsyncDisposable
     private double ClipAspect =>
         _media is { Width: > 0, Height: > 0 } media ? media.Width / (double)media.Height : 16 / 9.0;
 
+    // Its Export Reads The File, Nothing May Replace It
+    private bool Exporting => Controller.Exports.IsExporting(_path);
+
     // A Cut Or Restore Swapping The File Locks Every Edit
     private bool Editable => _ready && !_swapping;
 
     private string PlayTip => _paused ? "Play" : "Pause";
+
+    protected override void OnInitialized()
+    {
+        Controller.Exports.Changed += OnExportsChanged;
+    }
+
+    private void OnExportsChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -204,11 +220,9 @@ public partial class ClipEditor : IAsyncDisposable
 
     private void Show(LoadedClip loaded)
     {
-        // Another Clip Has No Export Of Its Own Running
-        _exporting &= loaded.Path == _path;
-
         // One Step, So Nothing On Screen Changes Piecemeal
         (_clip, _media, _path) = (loaded.Clip, loaded.Media, loaded.Path);
+        Controller.Exports.Editor = (loaded.Path, CutHereAsync);
         (_stripUrl, _duration, _range) = (loaded.StripUrl, loaded.Media.Duration, loaded.Range);
         (_titleText, _swapping, _playError, _paused) = (
             loaded.Clip.CustomTitle ?? "",
@@ -233,10 +247,27 @@ public partial class ClipEditor : IAsyncDisposable
     {
         (_clip, _media, _path, _stripUrl) = (null, null, null, null);
         (_missing, _swapping) = (true, false);
+        LetGoOfCuts();
+    }
+
+    private void LetGoOfCuts()
+    {
+        // Exports Ending Later Cut The File Directly
+        if (Controller.Exports.Editor?.Cut.Target == this)
+        {
+            Controller.Exports.Editor = null;
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        // A New Strip Is Drawn To Fit, Whole Frames Only
+        if (_stripUrl != _drawnStrip && !string.IsNullOrEmpty(_strip.Id))
+        {
+            _drawnStrip = _stripUrl;
+            await JavaScript.CallAsync("letsClip.showStrip", _strip);
+        }
+
         // Element References Arrive One Render After The Markup
         if (_attached || _swapping || _path is null || string.IsNullOrEmpty(_video.Id))
         {
@@ -520,17 +551,18 @@ public partial class ClipEditor : IAsyncDisposable
     #endregion
 
     #region Cut And Restore
-    private void SetExporting(bool exporting)
+    private Task<bool> CutHereAsync(TrimRange range)
     {
-        _exporting = exporting;
+        // An Export That Ended Here Cuts Through The Player
+        return _path is { } path ? SaveCutAsync(path, range) : Task.FromResult(false);
     }
 
-    private async Task SaveCutAsync(string path, TrimRange range)
+    private async Task<bool> SaveCutAsync(string path, TrimRange range)
     {
         // Cut To The Kept Part, The Original Kept If Asked
         if (path != _path)
         {
-            return;
+            return false;
         }
 
         var keepOriginal = !Controller.Settings.DeleteOriginals;
@@ -550,12 +582,14 @@ public partial class ClipEditor : IAsyncDisposable
                 Severity.Success
             );
         }
+
+        return cut;
     }
 
     private bool CanSaveCut()
     {
         // Only A Shorter Selection Has Anything To Cut
-        return Editable && !_exporting && _range.CutsShort(_duration);
+        return Editable && !Exporting && _range.CutsShort(_duration);
     }
 
     private async Task RestoreOriginalAsync()
@@ -651,6 +685,8 @@ public partial class ClipEditor : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         // Writes A Pending Trim, Then Lets Go Of The File
+        Controller.Exports.Changed -= OnExportsChanged;
+        LetGoOfCuts();
         _saveTimer?.Dispose();
         EndClip();
         await DetachAsync();

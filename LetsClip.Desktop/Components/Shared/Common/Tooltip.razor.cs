@@ -25,6 +25,9 @@ public partial class Tooltip
     [Parameter]
     public bool ShowOnFocus { get; set; }
 
+    [Parameter]
+    public string? PopoverClass { get; set; }
+
     // Most Tooltips Wrap One Button In A Row
     [Parameter]
     public string RootClass { get; set; } = "d-flex";

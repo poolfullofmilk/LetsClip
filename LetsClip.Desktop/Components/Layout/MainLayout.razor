@@ -35,6 +35,7 @@
                         @* More Button *@
                         <IconButton Icon="@Icons.Material.Rounded.MoreVert"
                                     Text="More"
+                                    Placement="Placement.Bottom"
                                     Busy="_checking"
                                     OnClick="OpenMoreAsync" />
                     </ActivatorContent>
@@ -56,6 +57,9 @@
                     </ChildContent>
                 </MudMenu>
             </MudBadge>
+
+            @* Export Chip *@
+            <ExportChip />
 
             <MudSpacer />
 

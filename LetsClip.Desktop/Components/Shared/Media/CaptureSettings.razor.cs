@@ -39,7 +39,7 @@ public partial class CaptureSettings : IDisposable
         // The Closed Field Shows Its Item's Detail On One Line
         return monitor is null
             ? null
-            : $"{monitor.Width} × {monitor.Height} · {monitor.RefreshRate} Hz";
+            : $"{Formatter.FormatResolution(monitor.Width, monitor.Height)} · {monitor.RefreshRate} Hz";
     }
 
     private static string? RecommendedText(bool isRecommended)
@@ -54,7 +54,7 @@ public partial class CaptureSettings : IDisposable
 
     private static string FrameRateLabel(int rate)
     {
-        return $"{rate} FPS";
+        return Formatter.FormatFrameRate(rate);
     }
 
     private static string ResolutionLabel(int lines)

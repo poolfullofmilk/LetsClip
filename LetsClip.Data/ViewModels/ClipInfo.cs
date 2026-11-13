@@ -14,6 +14,7 @@ public sealed record ClipInfo(
     bool HasOriginal,
     int Width,
     int Height,
+    int FrameRate,
     int? Monitor,
     DateTime WrittenUtc,
     bool IsEdited

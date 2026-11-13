@@ -20,7 +20,6 @@
             <MudSpacer />
             @* Sort Menu *@
             <Tooltip Text="Sort Clips"
-                     Placement="Placement.Left"
                      Disabled="@(shown.Count < 2)">
                 <MudBadge Dot
                           Color="Color.Info"
@@ -56,7 +55,6 @@
                           Class="d-flex">
                     <IconButton Icon="@Icons.Material.Rounded.FilterList"
                                 Text="Filter Clips"
-                                Placement="Placement.Left"
                                 Disabled="@(s_clips is not { Count: > 0 } && !IsFiltered)"
                                 OnClick="OpenFilter" />
                 </MudBadge>
@@ -158,7 +156,6 @@
             @* Open Folder *@
             <IconButton Icon="@Icons.Material.Rounded.FolderOpen"
                         Text="Open Clips Folder"
-                        Placement="Placement.Left"
                         OnClick="OpenFolder" />
         </TitleContent>
         <ChildContent>
@@ -181,7 +178,12 @@
                 <MudPaper Elevation="4"
                           Class="rounded-panel">
                     <EmptyState Icon="@Icons.Material.Rounded.VideoLibrary"
-                                Text="No Clips" />
+                                Text="No Clips Yet">
+                        <MudText Typo="Typo.body2"
+                                 Class="mud-text-secondary mt-n2">
+                            @($"Press {Controller.Settings.Hotkey} To Save One")
+                        </MudText>
+                    </EmptyState>
                 </MudPaper>
             }
             else if (shown.Count == 0)
@@ -205,7 +207,7 @@
                 @* Clip Cards *@
                 <MudElement HtmlTag="div"
                             Class="clip-grid">
-                    @foreach (var clip in shown.Take(_cards))
+                    @foreach (var clip in shown.Take(s_cards))
                     {
                         @if (IsByDay && clip.RecordedAt.LocalDateTime.Date != day)
                         {
@@ -218,108 +220,100 @@
                         }
 
                         @* Clip Card *@
-                        <MudPaper @key="clip.Path"
-                                  Elevation="4"
-                                  Class="rounded-panel pa-4 hover-card"
-                                  role="button"
-                                  tabindex="0"
-                                  data-keyclick
-                                  aria-label="@($"Open {clip.Title}")"
-                                  Style="@CardStyle(clip)"
-                                  @onclick="() => Open(clip)">
-                            <MudElement HtmlTag="div"
-                                        Class="clip-thumb rounded-inner">
-                                @if (clip.ThumbnailPath is not null)
-                                {
-                                    <MudImage Src="@DesktopShell.ThumbnailUrl(clip.ThumbnailPath)"
-                                              Alt="@clip.Title"
-                                              loading="lazy"
-                                              decoding="async" />
-                                }
-                                else if (Controller.Library.IsMakingPictures)
-                                {
-                                    @* Picture Spinner *@
-                                    <MudProgressCircular Color="Color.Info"
-                                                         Size="Size.Small"
-                                                         Indeterminate
-                                                         Class="centred-spinner" />
-                                }
+                        <Tooltip @key="clip.Path"
+                                 RootClass="d-grid"
+                                 PopoverClass="clip-facts"
+                                 ShowOnFocus>
+                            <Content>
                                 <MudElement HtmlTag="div"
-                                            Class="clip-preview"
-                                            data-clip="@DesktopShell.ClipUrl(clip)" />
-                                @* Picture Chips *@
-                                <MudElement HtmlTag="div"
-                                            Class="clip-chips">
-                                    <SourceChip Clip="clip"
-                                                OnPicture />
-                                    <MudChip T="string"
-                                             Size="Size.Small"
-                                             Variant="Variant.Filled"
-                                             Color="Color.Dark"
-                                             Class="ma-0">
-                                        @(IsByDay ? Formatter.FormatTime(clip.RecordedAt) : Formatter.FormatDateTime(clip.RecordedAt))
-                                    </MudChip>
-                                    <MudChip T="string"
-                                             Size="Size.Small"
-                                             Variant="Variant.Filled"
-                                             Color="Color.Dark"
-                                             Class="ma-0">
-                                        @Formatter.FormatDuration(clip.Duration)
-                                    </MudChip>
+                                            Class="info-facts">
+                                    @foreach (var fact in FactsOf(clip))
+                                    {
+                                        <MudText Typo="Typo.body2"
+                                                 Class="mud-text-secondary">
+                                            @fact.Label
+                                        </MudText>
+                                        <MudText Typo="Typo.body2">@fact.Value</MudText>
+                                    }
                                 </MudElement>
-                            </MudElement>
-                            <MudStack Row
-                                      AlignItems="AlignItems.Center"
-                                      Spacing="1"
-                                      Class="mt-2 clip-title-row">
-                                <MudText Typo="Typo.subtitle2"
-                                         Class="two-lines">
-                                    @clip.Title
-                                </MudText>
-                                <MudElement HtmlTag="span"
-                                            Class="d-flex align-center gap-1"
-                                            ClickPropagation="false">
-                                    @* Clip Info *@
-                                    <Tooltip Placement="Placement.Left"
-                                             ShowOnFocus
-                                             RootClass="d-inline-flex cursor-default info-icon">
-                                        <Content>
-                                            <MudElement HtmlTag="div"
-                                                        Class="info-facts">
-                                                @foreach (var fact in FactsOf(clip))
-                                                {
-                                                    <MudText Typo="Typo.body2"
-                                                             Class="mud-text-secondary">
-                                                        @fact.Label
-                                                    </MudText>
-                                                    <MudText Typo="Typo.body2">@fact.Value</MudText>
-                                                }
-                                            </MudElement>
-                                        </Content>
-                                        <ChildContent>
-                                            <MudElement HtmlTag="span"
-                                                        Class="d-inline-flex"
-                                                        tabindex="0"
-                                                        role="img"
-                                                        aria-label="@FactsText(clip)">
-                                                <MudIcon Icon="@AppTheme.InfoIcon"
-                                                         Color="Color.Default"
-                                                         Size="Size.Small" />
-                                            </MudElement>
-                                        </ChildContent>
-                                    </Tooltip>
-                                    @* Copy Button *@
-                                    <IconButton Icon="@Icons.Material.Rounded.ContentCopy"
-                                                Text="Copy File"
-                                                OnClick="() => DesktopShell.CopyFile(clip.Path, Snackbar)" />
-                                    @* Delete Button *@
-                                    <IconButton Icon="@Icons.Material.Rounded.Delete"
-                                                Text="Delete Clip"
-                                                Color="Color.Error"
-                                                OnClick="() => DeleteAsync(clip)" />
-                                </MudElement>
-                            </MudStack>
-                        </MudPaper>
+                            </Content>
+                            <ChildContent>
+                                <MudPaper Elevation="4"
+                                          Class="rounded-panel pa-4 hover-card"
+                                          role="button"
+                                          tabindex="0"
+                                          data-keyclick
+                                          aria-label="@($"Open {clip.Title}")"
+                                          aria-description="@FactsText(clip)"
+                                          Style="@CardStyle(clip)"
+                                          @onclick="() => Open(clip)">
+                                    <MudElement HtmlTag="div"
+                                                Class="clip-thumb rounded-inner">
+                                        @if (clip.ThumbnailPath is not null)
+                                        {
+                                            <MudImage Src="@DesktopShell.ThumbnailUrl(clip.ThumbnailPath)"
+                                                      Alt="@clip.Title"
+                                                      loading="lazy"
+                                                      decoding="async" />
+                                        }
+                                        else if (Controller.Library.IsMakingPictures)
+                                        {
+                                            @* Picture Spinner *@
+                                            <MudProgressCircular Color="Color.Info"
+                                                                 Size="Size.Small"
+                                                                 Indeterminate
+                                                                 Class="centred-spinner" />
+                                        }
+                                        <MudElement HtmlTag="div"
+                                                    Class="clip-preview"
+                                                    data-clip="@DesktopShell.ClipUrl(clip)" />
+                                        @* Picture Chips *@
+                                        <MudElement HtmlTag="div"
+                                                    Class="clip-chips">
+                                            <SourceChip Clip="clip"
+                                                        OnPicture />
+                                            <MudChip T="string"
+                                                     Size="Size.Small"
+                                                     Variant="Variant.Filled"
+                                                     Color="Color.Dark"
+                                                     Class="ma-0">
+                                                @(IsByDay ? Formatter.FormatTime(clip.RecordedAt) : Formatter.FormatDateTime(clip.RecordedAt))
+                                            </MudChip>
+                                            <MudChip T="string"
+                                                     Size="Size.Small"
+                                                     Variant="Variant.Filled"
+                                                     Color="Color.Dark"
+                                                     Class="ma-0">
+                                                @Formatter.FormatDuration(clip.Duration)
+                                            </MudChip>
+                                        </MudElement>
+                                    </MudElement>
+                                    <MudStack Row
+                                              AlignItems="AlignItems.Center"
+                                              Spacing="1"
+                                              Class="mt-2 clip-title-row">
+                                        <MudText Typo="Typo.subtitle2"
+                                                 Class="two-lines">
+                                            @clip.Title
+                                        </MudText>
+                                        <MudElement HtmlTag="span"
+                                                    Class="d-flex align-center gap-1"
+                                                    ClickPropagation="false">
+                                            @* Copy Button *@
+                                            <IconButton Icon="@Icons.Material.Rounded.ContentCopy"
+                                                        Text="Copy File"
+                                                        OnClick="() => DesktopShell.CopyFile(clip.Path, Snackbar)" />
+                                            @* Delete Button *@
+                                            <IconButton Icon="@Icons.Material.Rounded.Delete"
+                                                        Text="Delete Clip"
+                                                        Disabled="@Controller.Exports.IsExporting(clip.Path)"
+                                                        Color="Color.Error"
+                                                        OnClick="() => DeleteAsync(clip)" />
+                                        </MudElement>
+                                    </MudStack>
+                                </MudPaper>
+                            </ChildContent>
+                        </Tooltip>
                     }
                 </MudElement>
             }

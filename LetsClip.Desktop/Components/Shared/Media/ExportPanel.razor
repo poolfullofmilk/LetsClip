@@ -31,7 +31,6 @@
             @* Audio Button *@
             <IconButton Icon="@(WithAudio ? Icons.Material.Rounded.VolumeUp : Icons.Material.Rounded.VolumeOff)"
                         Text="@(WithAudio ? "Mute Audio" : "Unmute Audio")"
-                        Placement="Placement.Left"
                         Color="@(WithAudio ? Color.Default : Color.Error)"
                         Filled
                         Disabled="@(IsExporting || Busy)"
@@ -44,23 +43,23 @@
                       data-length />
     </SettingRow>
     <SettingRow Title="Size">
-        <ChangedValue Was="@Formatter.FormatSize(Clip.SizeBytes)"
+        <ChangedValue Was="@ClipSizeText"
                       Value="@ExportSizeText"
                       Prefix="About"
                       data-copy-audio="@CopyAudioText" />
     </SettingRow>
     <SettingRow Title="Resolution">
-        <ChangedValue Was="@SizeText(Media.Width, Media.Height)"
-                      Value="@SizeText(OutputSize.Width, OutputSize.Height)" />
+        <ChangedValue Was="@ClipResolutionText"
+                      Value="@ExportResolutionText" />
     </SettingRow>
     <SettingRow Title="Frame Rate">
-        <ChangedValue Was="@RateText(ClipFrameRate)"
-                      Value="@RateText(FrameRate)" />
+        <ChangedValue Was="@ClipFrameRateText"
+                      Value="@ExportFrameRateText" />
     </SettingRow>
     <SettingRow Title="Bitrate">
-        <ChangedValue Was="@Formatter.FormatBitrate(ClipBitsPerSecond)"
+        <ChangedValue Was="@ClipBitrateText"
                       Value="@BitrateText"
-                      Prefix="@(Budget is { VideoBitsPerSecond: > 0 } ? "About" : null)" />
+                      Prefix="About" />
     </SettingRow>
 
     <MudStack Spacing="3"
@@ -68,6 +67,14 @@
         @if (IsTooLong)
         {
             <Notice Text="@TooLongText" />
+        }
+        else if (OtherExporting)
+        {
+            <MudText Typo="Typo.caption"
+                     Align="Align.Center"
+                     Class="mud-text-secondary">
+                Another clip is exporting
+            </MudText>
         }
         else if (Budget?.Verdict == BudgetVerdict.Soft)
         {
@@ -78,7 +85,7 @@
             </MudText>
         }
 
-        @if (_progress is { } progress)
+        @if (ShownProgress is { } progress)
         {
             <MudStack Spacing="2"
                       Class="appear">
@@ -121,7 +128,6 @@
                 @* Save Cut Button *@
                 <IconButton Icon="@Icons.Material.Rounded.Save"
                             Text="Save Cut"
-                            Placement="Placement.Left"
                             Color="Color.Info"
                             Filled
                             Square
@@ -134,7 +140,7 @@
     </MudStack>
 </Panel>
 
-@if (_result is { } result && File.Exists(result))
+@if (ExportedFile is { } result)
 {
     @* Exported Panel *@
     <Panel Title="Exported"
@@ -162,7 +168,6 @@
             @* Show In Folder Button *@
             <IconButton Icon="@Icons.Material.Rounded.FolderOpen"
                         Text="Show in Folder"
-                        Placement="Placement.Left"
                         Filled
                         Square
                         OnClick="() => Explorer.ShowFile(result)" />

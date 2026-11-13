@@ -29,9 +29,9 @@ public static class SizeBudget
     private const int MiddleLines = 720;
     private const int SmallLines = 540;
 
-    // Bits Per 1080p Pixel Where A Smaller Frame Wins
-    private const double FullBitsPerPixel = 0.06;
-    private const double MiddleBitsPerPixel = 0.012;
+    // HEVC Keeps 1080p Down To 1.5 Mbps At 60
+    private const double FullBitsPerPixel = 0.012;
+    private const double MiddleBitsPerPixel = 0.005;
 
     static SizeBudget()
     {
@@ -178,8 +178,18 @@ public static class SizeBudget
             && Plan(10, clip with { Seconds = 600 }).Verdict == BudgetVerdict.TooSmall
             && Plan(50, clip with { Seconds = 10 }).Verdict == BudgetVerdict.Good
             && Plan(50, clip with { Seconds = 10 }).Lines == FullLines
-            && Plan(20, clip).Lines == MiddleLines
-            && Plan(20, clip with { Seconds = 120 }).Lines == SmallLines
+            && Plan(20, clip).Lines == FullLines
+            && Plan(20, clip with { Seconds = 120 }).Lines == MiddleLines
+            && Plan(
+                20,
+                clip with
+                {
+                    Seconds = 120,
+                    Width = 1280,
+                    Height = 720,
+                    FrameRate = 30,
+                }
+            ).Lines == FullLines
             && Plan(0.5, clip with { Seconds = 10 }).Verdict == BudgetVerdict.TooSmall
             && Plan(20, clip with { Seconds = 0 }).Verdict == BudgetVerdict.TooSmall
             && LimitOf(DiscordPlan.Off) is null

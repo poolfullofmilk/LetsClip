@@ -32,15 +32,9 @@ public partial class TrimField
     [Parameter]
     public EventCallback<int> OnStep { get; set; }
 
-    private int _version;
-
     private async Task CommitAsync(string text)
     {
-        // Enter Or Leaving Commits, A Typo Restores The Last Time
-        _version++;
-        if (Formatter.ParseDuration(text) is { } seconds)
-        {
-            await OnCommit.InvokeAsync(seconds);
-        }
+        // Placed On Enter Or Leaving, A Typo Restores The Time
+        await OnCommit.InvokeAsync(Formatter.ParseDuration(text) ?? Value);
     }
 }

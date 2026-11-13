@@ -4,8 +4,7 @@
             data-edge="@Edge"
             data-seconds="@Formatter.FormatSeconds(Value)">
     @* Time Field *@
-    <MudTextField @key="_version"
-                  T="string"
+    <MudTextField T="string"
                   Label="@Label"
                   Value="@Formatter.FormatDuration(Value)"
                   ValueChanged="CommitAsync"
