@@ -19,13 +19,14 @@ public sealed record UserSettings(
     string[]? RemovedGames = null,
     AddedGame[]? AddedGames = null,
     bool StartWithWindows = true,
-    bool SaveSound = true,
+    bool SaveSound = false,
     double SaveSoundVolume = 1,
     bool SystemAudio = true,
     string SystemAudioDeviceId = "",
-    bool OnlyGameAndDiscord = false,
+    bool OnlyGameAndDiscord = true,
     bool Microphone = true,
     string MicrophoneDeviceId = "",
+    double MicrophoneVolume = 0.8,
     bool NoiseCancellation = true,
     string Hotkey = "F10",
     string? ClipsFolder = null,
@@ -41,10 +42,13 @@ public sealed record UserSettings(
 )
 {
     // Raised When New Defaults Reach Existing Users Once
-    public const int CurrentDefaults = 2;
+    public const int CurrentDefaults = 3;
 
     // First Clip At Half Volume, The Microphone Test Too
     public const double OpeningVolume = 0.5;
+
+    // A Quiet Microphone Can Be Doubled
+    public const double MaximumMicrophoneVolume = 2;
 
     public static readonly int[] ReplayChoices = [30, 60, 120, 300, 600];
     public static readonly int[] FrameRateChoices = [30, 60, 120, 144, 165, 240];
@@ -96,11 +100,23 @@ public sealed record UserSettings(
                 };
             }
 
-            // Version 2 Turns The Microphone On For Everyone, Once
+            // Version 3 Gives Everyone The Owner's Settings Of 13 November
             var updated = (
                 settings with
                 {
+                    ReplaySeconds = defaults.ReplaySeconds,
+                    FrameRate = defaults.FrameRate,
+                    Resolution = defaults.Resolution,
+                    Quality = defaults.Quality,
+                    GamesOnly = defaults.GamesOnly,
+                    StartWithWindows = defaults.StartWithWindows,
+                    SaveSound = defaults.SaveSound,
+                    SystemAudio = defaults.SystemAudio,
+                    OnlyGameAndDiscord = defaults.OnlyGameAndDiscord,
                     Microphone = defaults.Microphone,
+                    MicrophoneVolume = defaults.MicrophoneVolume,
+                    NoiseCancellation = defaults.NoiseCancellation,
+                    DeleteOriginals = defaults.DeleteOriginals,
                     DefaultsVersion = CurrentDefaults,
                 }
             ).Normalized();
@@ -191,6 +207,9 @@ public sealed record UserSettings(
             SaveSoundVolume = double.IsFinite(SaveSoundVolume)
                 ? Math.Clamp(Math.Round(SaveSoundVolume, 1), 0.1, 1)
                 : defaults.SaveSoundVolume,
+            MicrophoneVolume = double.IsFinite(MicrophoneVolume)
+                ? Math.Clamp(Math.Round(MicrophoneVolume, 1), 0.1, MaximumMicrophoneVolume)
+                : defaults.MicrophoneVolume,
             PlayerVolume = double.IsFinite(PlayerVolume)
                 ? Math.Clamp(Math.Round(PlayerVolume, 1), 0.1, 1)
                 : defaults.PlayerVolume,

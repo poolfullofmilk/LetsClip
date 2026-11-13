@@ -65,7 +65,6 @@ public partial class ExportPanel : IDisposable
     private CancellationTokenSource? _cancel;
     private ExportProgress? _progress;
     private string? _result;
-    private string? _error;
     private bool _disposed;
     private bool _revealResult;
 
@@ -82,8 +81,15 @@ public partial class ExportPanel : IDisposable
         Enum.GetValues<DiscordPlan>().Any(plan => plan != DiscordPlan.Off && Changes(plan));
 
     // The Selection As The Size Budget Reads It
-    private ExportShape Shape =>
-        new(Range.Length, OutputSize.Width, OutputSize.Height, FrameRate, WithAudio);
+    private ExportShape Shape
+    {
+        get
+        {
+            // Budgeted At Full Size, The Budget Then Picks The Lines
+            var (width, height) = ClipExporter.OutputSize(Media.Width, Media.Height);
+            return new(Range.Length, width, height, FrameRate, WithAudio);
+        }
+    }
 
     private bool WithAudio => Controller.Settings.ExportAudio && Media.HasAudio;
 
@@ -122,9 +128,9 @@ public partial class ExportPanel : IDisposable
         !IsExporting && !Busy && Range.IsValidFor(Media.Duration) && !IsTooLong;
 
     private (int Width, int Height) OutputSize =>
-        KeepsClip
-            ? (Media.Width, Media.Height)
-            : ClipExporter.OutputSize(Media.Width, Media.Height);
+        Budget is { } budget
+            ? ClipExporter.OutputSize(Media.Width, Media.Height, budget.Lines)
+            : (Media.Width, Media.Height);
 
     // Odd Probes Read As 60
     private double ClipFrameRate =>
@@ -137,11 +143,10 @@ public partial class ExportPanel : IDisposable
     private ExportBudget? Budget =>
         SizeBudget.LimitOf(Plan) is { } limit ? SizeBudget.Plan(limit, Shape) : null;
 
-    // Copies Weigh Their Share, Encodes At Most Their Plan
-    private string ExportSizeText =>
-        SizeBudget.LimitOf(Plan) is { } limit
-            ? Formatter.FormatSize((long)(limit * 1_000_000))
-            : Formatter.FormatSize(CopyBytes);
+    // A Copy's Weight, Or Where An Encode Lands
+    private long ExportBytes => Budget?.TypicalBytes ?? CopyBytes;
+
+    private string ExportSizeText => Formatter.FormatSize(ExportBytes);
 
     // The Sound Rate The Page Script Adds While Dragging
     private string? CopyAudioText =>
@@ -152,15 +157,11 @@ public partial class ExportPanel : IDisposable
                 .ToString("0.###", CultureInfo.InvariantCulture)
         : "0";
 
-    // A Copy's Own Rate, An Encode's Ceiling Rounded Up
+    // The Size Over The Length, So Both Rows Always Agree
     private string BitrateText =>
-        Budget is not { } budget ? Formatter.FormatBitrate(CopyBytes * 8 / Range.Length)
-        : budget.VideoBitsPerSecond > 0
-            ? Formatter.FormatBitrate(
-                budget.VideoBitsPerSecond + (WithAudio ? SizeBudget.AudioBitsPerSecond : 0),
-                roundUp: true
-            )
-        : "-";
+        Budget is { VideoBitsPerSecond: <= 0 }
+            ? "-"
+            : Formatter.FormatBitrate(ExportBytes * 8 / Range.Length);
 
     private bool IsTooLong => Budget?.Verdict == BudgetVerdict.TooSmall;
 
@@ -234,7 +235,6 @@ public partial class ExportPanel : IDisposable
             return;
         }
 
-        _error = null;
         _result = null;
         _cancel = new CancellationTokenSource();
         _progress = new ExportProgress("Starting", 0);
@@ -274,13 +274,17 @@ public partial class ExportPanel : IDisposable
                 await SaveCut(request.SourcePath, request.Range);
             }
         }
+        catch (OperationCanceledException) when (!_disposed)
+        {
+            Snackbar.Add("Export cancelled, nothing was kept", Severity.Info);
+        }
         catch (OperationCanceledException)
         {
-            _error = "Export cancelled, nothing was kept";
+            // Leaving The Editor Cancels Quietly
         }
         catch (Exception exception) when (exception is ExportException or TimeoutException)
         {
-            _error = exception.Message;
+            Snackbar.Add(exception.Message, Severity.Warning);
             s_logger.Warn($"Failed To Export, {exception.Message}");
         }
         finally

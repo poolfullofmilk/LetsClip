@@ -18,10 +18,16 @@ public sealed record CaptureOptions(
     string? SystemAudioId,
     string? MicrophoneId,
     bool CleanMicrophone,
+    double MicrophoneVolume,
     nint GameWindow,
     string? GameName,
     int GameProcess
-);
+)
+{
+    // Cleaning And Volume Both Filter The Microphone Alone
+    public bool SeparatesMicrophone =>
+        MicrophoneId is not null && (CleanMicrophone || MicrophoneVolume != 1);
+}
 
 public sealed record SaveOutcome(ClipInfo? Clip, string? Error);
 

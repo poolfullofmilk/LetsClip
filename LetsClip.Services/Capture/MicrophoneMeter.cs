@@ -39,7 +39,7 @@ public sealed class MicrophoneMeter : IDisposable
     // Only An Unexpected End, Stopping On Purpose Leaves It Open
     public Task Ended => _ended.Task;
 
-    public MicrophoneMeter(string deviceId, bool noiseCancellation)
+    public MicrophoneMeter(string deviceId, bool noiseCancellation, double volume)
     {
         try
         {
@@ -67,7 +67,7 @@ public sealed class MicrophoneMeter : IDisposable
             _player.Init(_heard);
             _filters = FFmpeg.Start(
                 FFmpeg.FFmpegPath,
-                ArgumentsFor(noiseCancellation, sampleRate),
+                ArgumentsFor(noiseCancellation, volume, sampleRate),
                 redirectInput: true
             );
             _toFilters = _filters.StandardInput.BaseStream;
@@ -107,11 +107,10 @@ public sealed class MicrophoneMeter : IDisposable
         return Math.Clamp(1 + (20 * Math.Log10(Math.Max(peak, 1e-6)) / 60), 0, 1);
     }
 
-    private static List<string> ArgumentsFor(bool noiseCancellation, int sampleRate)
+    private static List<string> ArgumentsFor(bool noiseCancellation, double volume, int sampleRate)
     {
         // The Filters A Clip Gets, As Loud As One Opens
-        var volume = UserSettings.OpeningVolume.ToString(CultureInfo.InvariantCulture);
-        var cleaning = noiseCancellation ? $"{CaptureSession.VoiceCleaning}," : "";
+        var voice = CaptureSession.VoiceFilters(noiseCancellation, volume);
         return
         [
             "-hide_banner",
@@ -130,7 +129,7 @@ public sealed class MicrophoneMeter : IDisposable
             "-af",
             string.Create(
                 CultureInfo.InvariantCulture,
-                $"{cleaning}volume={volume},aresample={sampleRate}"
+                $"{voice},volume={UserSettings.OpeningVolume},aresample={sampleRate}"
             ),
             "-f",
             "f32le",

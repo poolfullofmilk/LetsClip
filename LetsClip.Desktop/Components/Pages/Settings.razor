@@ -43,6 +43,21 @@
             @* Saving Settings *@
             <Panel Title="Saving">
                 <SettingRow Title="Save Hotkey">
+                    @if (HotkeyChipText is { } hotkeyChip)
+                    {
+                        @* Hotkey Problem Chip *@
+                        <Tooltip Text="@HotkeyChipTooltip">
+                            <MudChip T="string"
+                                     Icon="@Icons.Material.Rounded.Warning"
+                                     Color="Color.Warning"
+                                     Size="Size.Small"
+                                     Variant="Variant.Text"
+                                     Class="@(_capturingKey ? "ma-0" : "ma-0 action-chip")"
+                                     OnClick="StartKeysAsync">
+                                @hotkeyChip
+                            </MudChip>
+                        </Tooltip>
+                    }
                     @if (_capturingKey)
                     {
                         @* Cancel Keys Button *@
@@ -73,11 +88,6 @@
                         </MudButton>
                     </Tooltip>
                 </SettingRow>
-                @if ((_hotkeyError ?? Shell.HotkeyProblem) is { } hotkeyProblem)
-                {
-                    <Notice Text="@hotkeyProblem"
-                            Class="mb-3" />
-                }
                 <MudDivider />
                 <SettingRow Title="Save Sound">
                     @* Save Sound Volume *@
@@ -131,11 +141,29 @@
                         }
                     </DeviceSelect>
                 </SettingRow>
-                @if (_microphoneError is { } microphoneError)
-                {
-                    <Notice Text="@microphoneError"
-                            Class="mb-3" />
-                }
+                <MudDivider />
+                <SettingRow Title="Microphone Volume">
+                    <MudText Typo="Typo.body2"
+                             Class="mud-text-secondary">
+                        @MicrophoneVolumeText
+                    </MudText>
+                    @* Microphone Volume Slider *@
+                    <MudElement HtmlTag="div"
+                                Class="fixed-width d-flex">
+                        <MudSlider T="double"
+                                   Value="MicrophoneVolume"
+                                   ValueChanged="SetMicrophoneVolume"
+                                   Min="VolumeButton.Step"
+                                   Max="UserSettings.MaximumMicrophoneVolume"
+                                   Step="VolumeButton.Step"
+                                   Color="Color.Info"
+                                   Size="Size.Medium"
+                                   Variant="Variant.Filled"
+                                   Immediate
+                                   Disabled="@(!Controller.Settings.Microphone)"
+                                   aria-label="Microphone Volume" />
+                    </MudElement>
+                </SettingRow>
                 <MudDivider />
                 <SettingRow Title="Noise Cancellation"
                             Switch="Controller.Settings.NoiseCancellation"
@@ -176,11 +204,6 @@
                         Change
                     </MudButton>
                 </SettingRow>
-                @if (_folderError is { } folderError)
-                {
-                    <Notice Text="@folderError"
-                            Class="mb-3" />
-                }
                 @* Disk Space Row *@
                 @if (_originalsBytes is null || SpaceText is not null)
                 {

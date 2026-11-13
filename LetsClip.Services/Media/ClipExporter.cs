@@ -47,7 +47,11 @@ public static class ClipExporter
     // The Window Keeps Its Page While Any Export Runs
     public static bool IsExporting => Volatile.Read(ref s_running) > 0;
 
-    public static (int Width, int Height) OutputSize(int width, int height, int lines = 1080)
+    public static (int Width, int Height) OutputSize(
+        int width,
+        int height,
+        int lines = SizeBudget.FullLines
+    )
     {
         // A 16 By 9 Box In Its Orientation, Never Upscaled
         var portrait = height > width;
@@ -129,12 +133,13 @@ public static class ClipExporter
             return copied;
         }
 
-        // Too Big For The Plan, Encoded To Fit At 1080p
+        // Too Big For The Plan, Encoded Smaller To Fit
         var limit = SizeBudget.LimitOf(request.Plan)!.Value;
-        var (width, height) = OutputSize(source.Width, source.Height);
+        var (fullWidth, fullHeight) = OutputSize(source.Width, source.Height);
         var frameRate = request.FrameRate;
-        var clip = new ExportShape(duration, width, height, frameRate, withAudio);
+        var clip = new ExportShape(duration, fullWidth, fullHeight, frameRate, withAudio);
         var budget = SizeBudget.Plan(limit, clip);
+        var (width, height) = OutputSize(source.Width, source.Height, budget.Lines);
         s_logger.Info(
             $"Exporting {Path.GetFileName(request.SourcePath)} From {Formatter.FormatDuration(request.Range.Start)} To {Formatter.FormatDuration(request.Range.End)} At {width} × {height}, {frameRate} FPS, {(withAudio ? "With Audio" : "Without Audio")}, Aiming Under {Formatter.FormatSize((long)(limit * 1_000_000))}, {budget.Verdict}"
         );
@@ -384,13 +389,13 @@ public static class ClipExporter
         }
 
         output.AddRange(["-movflags", "+faststart", "-f", "mp4", job.Output]);
-        var label = attempt == 1 ? "" : $", Try {attempt}";
+        var label = attempt == 1 ? "" : $"Try {attempt}, ";
         if (encoder.IsHardware)
         {
             await RunPassAsync(
                 [.. input, .. output],
                 range.Length,
-                $"Encoding on {encoder.Name}{label}",
+                $"{label}Encoding on {encoder.Name}",
                 0,
                 1,
                 progress,
@@ -405,7 +410,7 @@ public static class ClipExporter
         await RunPassAsync(
             [.. input, "-passlogfile", passLog, "-pass", "1", "-an", "-f", "null", "NUL"],
             range.Length,
-            $"Analysing{label}",
+            $"{label}Analysing",
             0,
             0.5,
             progress,
@@ -414,7 +419,7 @@ public static class ClipExporter
         await RunPassAsync(
             [.. input, "-passlogfile", passLog, "-pass", "2", .. output],
             range.Length,
-            $"Encoding{label}",
+            $"{label}Encoding",
             0.5,
             0.5,
             progress,

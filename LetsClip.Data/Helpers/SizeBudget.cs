@@ -24,6 +24,15 @@ public static class SizeBudget
     private const double SoftBitsPerPixel = 0.008;
     private const double MinimumVideoBitsPerSecond = 250_000;
 
+    // Lines Of The 16 By 9 Box An Encode Fits
+    public const int FullLines = 1080;
+    private const int MiddleLines = 720;
+    private const int SmallLines = 540;
+
+    // Bits Per 1080p Pixel Where A Smaller Frame Wins
+    private const double FullBitsPerPixel = 0.06;
+    private const double MiddleBitsPerPixel = 0.012;
+
     static SizeBudget()
     {
         Debug.Assert(SelfTestPasses());
@@ -123,7 +132,14 @@ public static class SizeBudget
                 ? BudgetVerdict.TooSmall
             : bitsPerPixel < GoodBitsPerPixel ? BudgetVerdict.Soft
             : BudgetVerdict.Good;
-        return new ExportBudget(targetBytes, video, verdict);
+
+        // Few Bits Look Better On Fewer Pixels
+        var perFullPixel = video / (1920 * 1080 * Math.Max(1, clip.FrameRate));
+        var lines =
+            perFullPixel < MiddleBitsPerPixel ? SmallLines
+            : perFullPixel < FullBitsPerPixel ? MiddleLines
+            : FullLines;
+        return new ExportBudget(targetBytes, video, verdict, lines);
     }
 
     private static bool SelfTestPasses()
@@ -161,6 +177,9 @@ public static class SizeBudget
             && silent.VideoBitsPerSecond - minute.VideoBitsPerSecond is > 128_000 and < 136_000
             && Plan(10, clip with { Seconds = 600 }).Verdict == BudgetVerdict.TooSmall
             && Plan(50, clip with { Seconds = 10 }).Verdict == BudgetVerdict.Good
+            && Plan(50, clip with { Seconds = 10 }).Lines == FullLines
+            && Plan(20, clip).Lines == MiddleLines
+            && Plan(20, clip with { Seconds = 120 }).Lines == SmallLines
             && Plan(0.5, clip with { Seconds = 10 }).Verdict == BudgetVerdict.TooSmall
             && Plan(20, clip with { Seconds = 0 }).Verdict == BudgetVerdict.TooSmall
             && LimitOf(DiscordPlan.Off) is null

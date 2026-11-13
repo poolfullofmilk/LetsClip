@@ -82,3 +82,4 @@ Where the round ran (i5-1335U, Iris Xe, Quick Sync, .NET 11.0.100 from `%LocalAp
 - Export and Save on a long clip locks the editor until its new strip is made: a script must wait for Restore Original to be enabled before pressing it.
 - The window's place is set with `MoveWindow` from a per monitor DPI aware PowerShell and read back with `DwmGetWindowAttribute` 9, the visible frame: `GetWindowRect` includes 8 px of invisible border on the left, right and bottom.
 - A script through the session's shell loses backslashes inside a heredoc: write throwaway scripts with the file tool.
+- Tests read copies, never the owner's own clips: on 12 November 2026 a benchmark's hung AMF process kept one of his clips open for two hours and his Save Cut failed with the clip may be in use. Copy a clip into the sandbox first, and give every test FFmpeg a time limit.

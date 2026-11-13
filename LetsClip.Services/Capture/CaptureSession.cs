@@ -24,12 +24,9 @@ public sealed class CaptureSession(
     // Past 1440p Reading Whole Frames Back Costs Too Much
     private const int MaximumWholeWindowPixels = 2560 * 1440;
 
-    // Rumble Cut, Steady Noise Reduced, Quiet Gaps Gated
-    public const string VoiceCleaning =
-        "highpass=f=80,afftdn=nr=20:nf=-45:tn=1,agate=threshold=0.01:ratio=3:range=0.06:attack=5:release=250";
-
-    private const string MicrophoneCleaning =
-        $"[0:a]asplit[a][b];[a]pan=stereo|c0=c0|c1=c1[system];[b]pan=stereo|c0=c2|c1=c3,{VoiceCleaning}[voice];[system][voice]amix=inputs=2:normalize=0[audio]";
+    // Rumble Cut, Noise Reduced, Gaps Closed By The Voice Band
+    private const string VoiceCleaning =
+        "highpass=f=100,afftdn=nr=40:nf=-30:tn=1,asplit[dry][key];[key]highpass=f=200,lowpass=f=3000[band];[dry]adelay=12:all=1[late];[late][band]sidechaingate=threshold=0.01:ratio=6:range=0.01:attack=3:release=250";
 
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
     private static readonly TimeSpan s_startTimeout = TimeSpan.FromSeconds(12);
@@ -109,12 +106,12 @@ public sealed class CaptureSession(
                 OriginTimestamp,
                 Options.SystemAudioId,
                 Options.MicrophoneId,
-                Options.CleanMicrophone,
+                Options.SeparatesMicrophone,
                 Options.GameProcess
             );
             Audio = new SegmentProcess(
                 "Audio",
-                AudioArguments(Options.CleanMicrophone),
+                AudioArguments(Options),
                 true,
                 Folder,
                 OnSegmentAdded
@@ -352,14 +349,32 @@ public sealed class CaptureSession(
         ];
     }
 
-    private static List<string> AudioArguments(bool cleanMicrophone)
+    public static string VoiceFilters(bool clean, double volume)
     {
-        // The Cleaned Microphone Arrives On Channels Three And Four
-        IReadOnlyList<string> layout = cleanMicrophone
+        // Cleaned First, The Gate Hears The Microphone Unchanged
+        var cleaning = clean ? $"{VoiceCleaning}," : "";
+
+        // A Boost Is Held Under Full Scale
+        var limiter = volume > 1 ? ",alimiter=limit=0.95:level=0" : "";
+        return string.Create(CultureInfo.InvariantCulture, $"{cleaning}volume={volume}{limiter}");
+    }
+
+    private static List<string> AudioArguments(CaptureOptions options)
+    {
+        // A Filtered Microphone Arrives On Channels Three And Four
+        var separate = options.SeparatesMicrophone;
+        var voice = VoiceFilters(options.CleanMicrophone, options.MicrophoneVolume);
+        IReadOnlyList<string> layout = separate
             ? ["-ac", "4", "-ch_layout", "4.0"]
             : ["-ac", "2", "-ch_layout", "stereo"];
-        IReadOnlyList<string> cleaning = cleanMicrophone
-            ? ["-filter_complex", MicrophoneCleaning, "-map", "[audio]"]
+        IReadOnlyList<string> cleaning = separate
+            ?
+            [
+                "-filter_complex",
+                $"[0:a]asplit[a][b];[a]pan=stereo|c0=c0|c1=c1[system];[b]pan=stereo|c0=c2|c1=c3,{voice}[voice];[system][voice]amix=inputs=2:normalize=0[audio]",
+                "-map",
+                "[audio]",
+            ]
             : [];
         return
         [

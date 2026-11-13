@@ -1,6 +1,5 @@
 using LetsClip.Data.Enums;
 using LetsClip.Data.ViewModels;
-using LetsClip.Desktop.Interop;
 using LetsClip.Services.Capture;
 using Microsoft.AspNetCore.Components;
 using MudBlazor;
@@ -12,15 +11,11 @@ public partial class CaptureNotice : IDisposable
     [Inject]
     public required CaptureController Controller { get; set; }
 
-    [Inject]
-    public required DesktopShell Shell { get; set; }
-
     private CaptureStatus Status => Controller.Recorder.Status;
 
     // One Alert At Most, The Most Pressing First
     private (Severity Severity, string Text)? Alert =>
         Controller.ShowsError && Status.Message is { } error ? (Severity.Error, error)
-        : Shell.HotkeyProblem is { } hotkey ? (Severity.Warning, hotkey)
         : Status is { State: CaptureState.Recording, Warning: { } warning }
             ? (Severity.Warning, warning)
         : null;
@@ -29,7 +24,6 @@ public partial class CaptureNotice : IDisposable
     {
         Controller.Recorder.StatusChanged += OnChanged;
         Controller.Changed += OnChanged;
-        Shell.HotkeyChanged += OnChanged;
     }
 
     private void OnChanged()
@@ -41,7 +35,6 @@ public partial class CaptureNotice : IDisposable
     {
         Controller.Recorder.StatusChanged -= OnChanged;
         Controller.Changed -= OnChanged;
-        Shell.HotkeyChanged -= OnChanged;
         GC.SuppressFinalize(this);
     }
 }

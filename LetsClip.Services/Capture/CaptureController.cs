@@ -570,7 +570,7 @@ public sealed class CaptureController : IDisposable
         // One Line A Log Reader Can Compare Between Steps
         return options is null
             ? "Nothing"
-            : $"{(options.GameWindow != 0 ? "A Game Window On " : "")}{options.Monitor.Label}, {options.Seconds} s, {options.Resolution}p, {options.FrameRate} FPS, {options.Quality}, System Audio {(options.GameProcess != 0 ? "Of The Game And Discord" : options.SystemAudioId switch { null => "Off", "" => "Automatic", _ => "Picked" })}, Microphone {options.MicrophoneId switch { null => "Off", "" => "Automatic", _ => "Picked" }}{(options.CleanMicrophone ? " Cleaned" : "")}";
+            : $"{(options.GameWindow != 0 ? "A Game Window On " : "")}{options.Monitor.Label}, {options.Seconds} s, {options.Resolution}p, {options.FrameRate} FPS, {options.Quality}, System Audio {(options.GameProcess != 0 ? "Of The Game And Discord" : options.SystemAudioId switch { null => "Off", "" => "Automatic", _ => "Picked" })}, Microphone {options.MicrophoneId switch { null => "Off", "" => "Automatic", _ => "Picked" }}{(options.CleanMicrophone ? " Cleaned" : "")}{(options.MicrophoneId is null ? "" : $" At {options.MicrophoneVolume * 100:0}%")}";
     }
 
     private CaptureOptions? WantedOptions()
@@ -602,6 +602,7 @@ public sealed class CaptureController : IDisposable
             settings.SystemAudio ? settings.SystemAudioDeviceId : null,
             settings.Microphone ? settings.MicrophoneDeviceId : null,
             settings.Microphone && settings.NoiseCancellation,
+            settings.Microphone ? settings.MicrophoneVolume : 1,
             window,
             window != 0 ? Games.GameName : null,
             gameAudio

@@ -1,0 +1,16 @@
+@if (Shell.HotkeyProblem is not null)
+{
+    @* Hotkey Chip *@
+    <Tooltip Text="Change Hotkey"
+             Placement="Placement.Bottom">
+        <MudChip T="string"
+                 Icon="@Icons.Material.Rounded.Keyboard"
+                 Color="Color.Warning"
+                 Size="Size.Small"
+                 Variant="Variant.Text"
+                 Class="action-chip"
+                 OnClick="OpenSettings">
+            @($"{Shell.HotkeyText} Is Taken")
+        </MudChip>
+    </Tooltip>
+}

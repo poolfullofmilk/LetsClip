@@ -76,3 +76,8 @@ Update Now hides the X and Escape until the download fails (`UpdateDialog.SetClo
 - The demo: rest on a card, filter to Rocket League, open Ceiling Shot, drag Cut Start and Cut End, step Cut Start twice, Save Cut with Yes, then Settings: 23.0 s, 1237 frames, MP4 2.8 MB, WebP 0.9 MB. The stills at 2560 x 1351, Settings 2560 x 2270 (1419 CSS pixels high).
 - Taken with the owner in a match: Overwatch stays in the demo library's `RemovedGames`, so the chip reads Waiting for a Game or App and nothing of his is recorded; the app bar's Save button therefore does not show in the stills.
 - The stills need the default settings: a seeded `SaveSound` off or `PlayerMuted` on shows red buttons in Settings and the editor.
+
+## v2.0.8, 13 November 2026
+
+- The demo library in `C:\LetsClip` was renewed in place again like v2.0.7: Ceiling Shot made again (silent, 30 s, 16 Mbps, 60,732,699 bytes, its write time set to a fixed value), its metadata given that size and time, untrimmed and uncut, and every clip's `RecordedAt` moved a day on. The library's settings hold F9, Overwatch in `RemovedGames` and `DefaultsVersion` 3, so the new defaults show as shipped (Save Sound muted, 80%) and nothing is pushed over them.
+- The stills from the lone exe at 2560 x 1352, Settings 2560 x 2355 (1472 CSS pixels high, the Microphone Volume row added). The demo: rest on Triple Save, filter to Rocket League, open Ceiling Shot, drag Cut Start and Cut End, step Cut Start twice, Save Cut with Yes, then Settings: 27.0 s, 1455 frames, MP4 3.2 MB, WebP 0.98 MB. Taken on the second monitor at 125%, so the screencast came at 2000 x 1057 and was scaled to 1920 wide.

@@ -36,3 +36,28 @@ The same check on real AMF recordings (7800X3D, RX 9070 XT, a 5 minute 1080p60 m
 - Nitro Basic on the whole 5 minute clip: AMF landed 46.3 MB for 50 MB on its first try in 90.2 s (about 200 FPS) with capture running, 18,000 frames, 300.000 s. Quick Sync's overshoot does not happen on AMF. The first run of the same export stopped responding twice after its first progress line (15.6 s each, the stall guard) and x264 two pass finished it at 47.8 MB in 149 s; the same command by hand and two more runs in the app then ran clean, so it is the known AMF hang, not the length.
 - Free on the 10 minute clip reads `Too long for Free, which fits about 2m14s, pick a shorter selection` with Export off, the Notice three balanced lines in the 300 px panel.
 - An Off copy of a 2m15s selection took 0.2 s to write, 2.6 s with its cut and reload.
+
+## Best Encoder And Size, Measured 12 And 13 November 2026
+
+The owner asked for the best possible export, and the most consistent one. A throwaway Node driver encoded two real Overwatch clips (a 12 s fight at 50 Mbps and 30 s of a 60 s clip at 28 Mbps, both 1080p60) with the export's own arguments and scored each against its source with `libvmaf` at 1080p (6 points is about one visible step). Where a line above says otherwise, this section wins.
+
+| Mbps | AMF 1080p | AMF 720p | AMF 540p | x264 Medium 1080p | AMF HEVC 1080p |
+|---|---|---|---|---|---|
+| 1.1, fight | 33.4 at 1.97 written | 30.9 | 33.1 | 8.3 | 39.8 |
+| 2.5, fight | 43.4 | 51.1 | 51.9 | 27.6 | 59.4 |
+| 5, fight | 63.9 | 69.8 | - | 58.0 | 78.3 |
+| 12, fight | 87.6 | 88.7 | - | 91.4 | 96.4 |
+| 1.1, long | 47.6 at 1.68 written | 48.4 | 49.1 | 16.2 | 59.1 |
+| 2.5, long | 62.5 | 69.0 | 67.4 | 50.4 | 76.6 |
+| 5, long | 81.6 | 83.8 | - | 80.3 | 90.4 |
+| 8, long | 91.4 | 90.5 | - | 92.7 | 96.3 |
+| 12, long | 96.5 | 94.2 | - | 97.3 | 98.7 |
+
+- The encoder's settings were already the best H.264 gives: VBAQ changed nothing to the byte, the `high_quality` preset lost 0.5, full pre-analysis (`pa_lookahead_buffer_depth 40`, TAQ, CAQ) gained 3 at 12 Mbps and lost 3 at 2.5, x264 `slow` and `slower` gained 1 to 2 over `medium` for two to five times the wait, and `hqvbr` ignores the bitrate (5.3 Mbps whatever was asked). Left as they were.
+- The size is what decides it, so an encode now picks its lines from its bits (`SizeBudget.Plan`, `ExportBudget.Lines`): 1080p from 0.06 bits per 1080p pixel and frame (7.5 Mbps at 60 FPS), 720p below that, 540p below 0.012 (1.5 Mbps), never above the clip's own size (`ClipExporter.OutputSize`). 720p scored 6 to 8 higher at 2.5 Mbps and 2 to 6 at 5, the same at 8 and 2 lower at 12; 540p matches 720p at 2.5 and is the only size AMF writes at the asked size below 1.5 Mbps, since AMF H.264 has a floor (about 1.7 to 2 Mbps at 1080p, 1.2 at 720p, 0.7 at 540p), which at 1080p sent a long clip through two oversized tries to x264 at a score of 8 to 16. The budget, Good, Soft and Too Long still read the 1080p shape, so no limit moved. The Resolution row shows the size picked (`1920 × 1080` struck, `1280 × 720`).
+- AMF stays first and x264 two pass second: AMF wins below 8 Mbps at every size, x264 by 1 to 4 above it at three to five times the wait. AMF is repeatable to the byte (12 runs each of two encodes, the same size and score every time).
+- HEVC and AV1 on AMF score 9 to 16 higher at every size. Not used: Discord plays H.264 everywhere, HEVC and AV1 only where the viewer's device decodes them, and the owner asked for consistent. The owner's pick if that ever changes.
+- In the app, sandbox, AMF on the first try each time: 60 s for Free 18.7 MB at 1280 × 720 in 14.5 s, the 12 s fight for Free 18 MB at 1920 × 1080 in 4.8 s, 5 minutes for Nitro Basic 47.3 MB at 960 × 540 in 66 s (90 s at 1080p before), 60 s for Nitro Basic 46.5 MB at 720p in 13 s.
+- Size and Bitrate of an encode read `About`, like a copy, the owner's ask (`Up to` over a file that came out 6 to 14% smaller read as wrong): the size is where encodes land, 92% of the limit (`ExportBudget.TypicalBytes`, measured 86 to 95% over eleven exports), and the bitrate is that size over the length, so both rows always agree (`About 18,4 MB` and `About 2,5 Mbps` over an 18.7 MB, 2.50 Mbps file). `Formatter.FormatBitrate`'s `roundUp` went with the ceiling.
+- A retry leads the progress line (`Try 2, Encoding on AMD AMF`), the owner's ask: behind the phase it was cut off.
+- An AMF encode hung twice during these tests, both while the owner played and another AMF session ran; the second only because the first hung process was still alive. The stall guard and the x264 fallback cover it in the app. The hung test process kept the owner's clip open for two hours, so his Save Cut said the clip may be in use: tests read copies of clips, never the owner's own files (`Docs/Verify.md`).

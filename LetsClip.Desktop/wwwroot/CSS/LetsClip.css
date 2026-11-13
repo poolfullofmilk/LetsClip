@@ -428,8 +428,8 @@
     line-height: 1.6 !important;
 }
 
-/* A File Name Takes Two Centred Lines Before Its Dots */
-.file-name {
+/* Two Lines Before The Dots */
+.two-lines {
     flex: 1 1 0;
     min-width: 0;
     display: -webkit-box;
@@ -438,7 +438,11 @@
     line-clamp: 2;
     overflow: hidden;
     overflow-wrap: anywhere;
-    text-align: center;
+}
+
+/* Every Card's Title Row Holds Two Lines, Content Centred */
+.clip-title-row {
+    min-height: calc(2 * var(--mud-typography-subtitle2-size) * var(--mud-typography-subtitle2-lineheight));
 }
 
 /* Long Names Stop At The Edge Of Their Box */
@@ -556,6 +560,12 @@
 
     .mud-chip .mud-chip-icon {
         margin-inline-end: 6px;
+    }
+
+    /* A Chip That Opens Its Fix Is Underlined */
+    .mud-chip.action-chip .mud-chip-content {
+        text-decoration: underline;
+        text-underline-offset: 2px;
     }
 
     /* The Record Dot Pulses Every Two Seconds In Three Steps */
@@ -966,10 +976,10 @@ mark {
         gap: 8px;
     }
 
-        /* Chips On A Picture Take Its Shadow */
+        /* Chips On A Picture Take The Icon's Softer Shadow */
         .clip-chips .mud-chip {
             flex-shrink: 0;
-            box-shadow: var(--picture-shadow);
+            box-shadow: var(--icon-shadow);
         }
 
         /* The Source Takes The Room Left, Ending In Dots */

@@ -46,7 +46,7 @@
     <SettingRow Title="Size">
         <ChangedValue Was="@Formatter.FormatSize(Clip.SizeBytes)"
                       Value="@ExportSizeText"
-                      Prefix="@(Budget is null ? "About" : "Up to")"
+                      Prefix="About"
                       data-copy-audio="@CopyAudioText" />
     </SettingRow>
     <SettingRow Title="Resolution">
@@ -60,7 +60,7 @@
     <SettingRow Title="Bitrate">
         <ChangedValue Was="@Formatter.FormatBitrate(ClipBitsPerSecond)"
                       Value="@BitrateText"
-                      Prefix="@(Budget is { VideoBitsPerSecond: > 0 } ? "Up to" : null)" />
+                      Prefix="@(Budget is { VideoBitsPerSecond: > 0 } ? "About" : null)" />
     </SettingRow>
 
     <MudStack Spacing="3"
@@ -131,10 +131,6 @@
             </MudStack>
         }
 
-        @if (_error is { } error)
-        {
-            <Notice Text="@error" />
-        }
     </MudStack>
 </Panel>
 
@@ -146,7 +142,8 @@
            Class="compact fade-in mt-6">
         <SettingRow Title="File">
             <MudText Typo="Typo.body2"
-                     Class="mud-text-secondary file-name">
+                     Align="Align.Center"
+                     Class="mud-text-secondary two-lines">
                 @Path.GetFileName(result)
             </MudText>
         </SettingRow>

@@ -57,11 +57,11 @@ public partial class Settings : IDisposable
     private Timer? _deviceTimer;
     private bool _closed;
     private Timer? _chimeTimer;
+    private Timer? _volumeTimer;
+    private double? _slidVolume;
     private bool _capturingKey;
     private Hotkey? _pendingKey;
-    private string? _folderError;
-    private string? _hotkeyError;
-    private string? _microphoneError;
+    private string? _keysHint;
     private (long Used, long Free)? _space;
     private long? _originalsBytes;
     private bool _listingOriginals;
@@ -101,6 +101,14 @@ public partial class Settings : IDisposable
     // The Saved Keys, Or While Picking The Last Keys Pressed
     private string HotkeyButtonText =>
         !_capturingKey ? Shell.HotkeyText : _pendingKey?.ToString() ?? "Waiting for Keys";
+
+    // A Key Needing A Modifier While Picking, Else Taken Keys
+    private string? HotkeyChipText =>
+        _capturingKey ? (_keysHint is null ? null : "Add Ctrl, Alt or Win")
+        : Shell.HotkeyProblem is null ? null
+        : "Taken by Another App";
+
+    private string HotkeyChipTooltip => _capturingKey ? _keysHint ?? "" : "Change Hotkey";
 
     protected override async Task OnInitializedAsync()
     {
@@ -238,6 +246,33 @@ public partial class Settings : IDisposable
         await RestartMicrophoneTestAsync();
     }
 
+    private double MicrophoneVolume => _slidVolume ?? Controller.Settings.MicrophoneVolume;
+
+    private string MicrophoneVolumeText => $"{MicrophoneVolume * 100:0}%";
+
+    private void SetMicrophoneVolume(double level)
+    {
+        // Shown At Once, Applied Once The Slider Rests
+        _slidVolume = Math.Round(level, 1);
+        _volumeTimer ??= new Timer(_ => _ = InvokeAsync(ApplyMicrophoneVolumeAsync));
+        _volumeTimer.Change(s_deviceSettle, Timeout.InfiniteTimeSpan);
+    }
+
+    private async Task ApplyMicrophoneVolumeAsync()
+    {
+        if (_slidVolume is not { } level)
+        {
+            return;
+        }
+
+        _slidVolume = null;
+        Controller.UpdateSettings(settings => settings with { MicrophoneVolume = level });
+        if (!_closed)
+        {
+            await RestartMicrophoneTestAsync();
+        }
+    }
+
     private async Task SetMicrophoneDevice(string id)
     {
         Controller.UpdateSettings(settings => settings with { MicrophoneDeviceId = id });
@@ -256,8 +291,6 @@ public partial class Settings : IDisposable
 
     private async Task ToggleMicrophoneTestAsync()
     {
-        _microphoneError = null;
-
         if (_meter is not null || _testStarting)
         {
             StopMicrophoneTest();
@@ -267,11 +300,12 @@ public partial class Settings : IDisposable
         // Opening The Devices Takes A Moment, Off The UI Thread
         var id = Controller.Settings.MicrophoneDeviceId;
         var noiseCancellation = Controller.Settings.NoiseCancellation;
+        var volume = Controller.Settings.MicrophoneVolume;
         var start = ++_testStart;
         _testStarting = true;
         try
         {
-            var meter = await Task.Run(() => new MicrophoneMeter(id, noiseCancellation));
+            var meter = await Task.Run(() => new MicrophoneMeter(id, noiseCancellation, volume));
 
             // Stopped Or Left Meanwhile, It Never Starts
             if (start != _testStart)
@@ -301,7 +335,10 @@ public partial class Settings : IDisposable
             if (start == _testStart)
             {
                 _testStarting = false;
-                _microphoneError = "The microphone could not be opened, check it in Windows";
+                Snackbar.Add(
+                    "The microphone could not be opened, check it in Windows",
+                    Severity.Warning
+                );
             }
         }
     }
@@ -313,9 +350,10 @@ public partial class Settings : IDisposable
         if (_meter == meter && !meter.HeardSound)
         {
             s_logger.Warn("Microphone Test Heard Only Silence");
-            _microphoneError =
-                "No sound reaches LetsClip from this microphone, check its mute key and Windows privacy settings";
-            StateHasChanged();
+            Snackbar.Add(
+                "No sound reaches LetsClip from this microphone, check its mute key and Windows privacy settings",
+                Severity.Warning
+            );
         }
     }
 
@@ -336,7 +374,10 @@ public partial class Settings : IDisposable
         if (_meter == meter)
         {
             s_logger.Warn("Microphone Test Lost Its Device");
-            _microphoneError = "The test stopped, check your microphone and output in Windows";
+            Snackbar.Add(
+                "The test stopped, check your microphone and output in Windows",
+                Severity.Warning
+            );
             StopMicrophoneTest();
             StateHasChanged();
         }
@@ -395,7 +436,7 @@ public partial class Settings : IDisposable
         }
 
         // The Old Hotkey Lets Go So Keys Reach The Page
-        (_hotkeyError, _pendingKey, _capturingKey) = (null, null, true);
+        (_keysHint, _pendingKey, _capturingKey) = (null, null, true);
         Shell.PauseHotkey();
         _reference ??= DotNetObjectReference.Create(this);
         await JavaScript.CallAsync("letsClip.watchKeys", _reference);
@@ -406,9 +447,7 @@ public partial class Settings : IDisposable
     {
         // Each Press Replaces The Last, A Slip Is Pressed Again
         _pendingKey = Hotkey.FromBrowser(code, key, control, alt, shift, meta);
-        _hotkeyError = _pendingKey is { IsUsable: true }
-            ? null
-            : "Use Ctrl, Alt or Win with a key, or a function key alone";
+        _keysHint = _pendingKey is { IsUsable: true } ? null : "Or Pick A Function Key Alone";
         StateHasChanged();
     }
 
@@ -436,14 +475,17 @@ public partial class Settings : IDisposable
         {
             // The New Keys Are Taken, The Old Ones Come Back
             RestoreHotkey();
-            _hotkeyError = $"{chosen} is taken by another app, kept {Controller.Settings.Hotkey}";
+            Snackbar.Add(
+                $"{chosen} is taken by another app, kept {Controller.Settings.Hotkey}",
+                Severity.Warning
+            );
         }
     }
 
     private async Task CancelKeysAsync()
     {
         await StopKeysAsync();
-        _hotkeyError = null;
+        _keysHint = null;
         RestoreHotkey();
     }
 
@@ -472,7 +514,6 @@ public partial class Settings : IDisposable
 
     private async Task PickFolderAsync()
     {
-        _folderError = null;
         if (DesktopShell.PickFolder(Controller.Settings.ClipsDirectory) is not { } folder)
         {
             return;
@@ -482,13 +523,13 @@ public partial class Settings : IDisposable
         var full = Path.GetFullPath(folder);
         if (FilePaths.IsInside(full, AppInfo.LocalDirectory))
         {
-            _folderError = "Pick a folder outside LetsClip's own cache";
+            Snackbar.Add("Pick a folder outside LetsClip's own cache", Severity.Warning);
             return;
         }
 
         if (!ClipLibrary.CanWriteTo(full))
         {
-            _folderError = "LetsClip cannot write there, pick another folder";
+            Snackbar.Add("LetsClip cannot write there, pick another folder", Severity.Warning);
             return;
         }
 
@@ -498,7 +539,6 @@ public partial class Settings : IDisposable
 
     private async Task UseDefaultFolderAsync()
     {
-        _folderError = null;
         Controller.UpdateSettings(settings => settings with { ClipsFolder = null });
         await MeasureSpaceAsync();
     }
@@ -530,6 +570,9 @@ public partial class Settings : IDisposable
             _ = StopKeysAsync();
         }
 
+        // A Volume Slid Just Before Leaving Still Lands
+        _volumeTimer?.Dispose();
+        _ = ApplyMicrophoneVolumeAsync();
         _reference?.Dispose();
         _chimeTimer?.Dispose();
         GC.SuppressFinalize(this);
