@@ -166,7 +166,8 @@ public partial class App : Application
         var controller = new CaptureController();
         s_logger.Info($"Settings {System.Text.Json.JsonSerializer.Serialize(controller.Settings)}");
 
-        controller.RegisterWithWindows(isInstall: download is not null);
+        // A Fresh Download Adds The Desktop Shortcut, Never An Update
+        controller.RegisterWithWindows(isInstall: download is not null && previousVersion is null);
         if (download is not null)
         {
             _ = Task.Run(() => Updater.DeleteDownload(download));
