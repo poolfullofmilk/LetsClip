@@ -39,6 +39,9 @@ public sealed class AudioMixer : IDisposable
     private volatile AudioSource[] _sources = [];
     private readonly Lock _sourcesGate = new();
     private readonly Timer? _voiceWatch;
+
+    // The Game And Its Starter, Both Trees Hold It
+    private readonly int[] _holdingGame = [];
     private Thread? _writer;
     private volatile bool _stopping;
     private long _emittedFrames;
@@ -100,6 +103,15 @@ public sealed class AudioMixer : IDisposable
 
         if (systemId is not null && gameProcess != 0)
         {
+            // A Voice App Holding The Game Would Record It Twice
+            _holdingGame = [gameProcess, GameWatcher.StarterOf(gameProcess)];
+            if (GameWatcher.VoiceProcesses().Intersect(_holdingGame).ToList() is [_, ..] holding)
+            {
+                s_logger.Info(
+                    $"Left Out {VoiceKind} From Process {string.Join(", ", holding)}, It Holds The Game And Would Record It Twice"
+                );
+            }
+
             _voiceWatch = new Timer(_ => FollowVoiceApps());
             _voiceWatch.Change(TimeSpan.Zero, Timeout.InfiniteTimeSpan);
         }
@@ -117,7 +129,7 @@ public sealed class AudioMixer : IDisposable
         // Each Running Voice App Gets A Recorder, Closed Ones Go
         try
         {
-            var running = GameWatcher.VoiceProcesses();
+            var running = GameWatcher.VoiceProcesses().Except(_holdingGame).ToList();
             lock (_sourcesGate)
             {
                 foreach (

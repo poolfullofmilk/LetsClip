@@ -5,12 +5,12 @@
 - Games and Apps Only records just that window, so chats and notifications stay out, and you pick any installed game or app from one list
 - Press the key in a game LetsClip does not know yet and it offers to record that game from then on
 - Recommended marks the best quality for your PC, or record up to your monitor's own resolution and refresh rate
-- Records system audio, or only your game and voice chat (Discord, Vesktop, TeamSpeak, Mumble, Steam), and your microphone at the volume you set with its background noise cleaned out and quiet words brought up
+- Records only your game and voice chat (Discord, Vesktop, TeamSpeak, Mumble, Steam), or everything your PC plays, and your microphone at the volume you set with its background noise cleaned out and quiet words brought up
 - Your microphone also gets its own track, so an export can leave out your voice or the game
 - Test your microphone live and hear how it will sound in a clip
 - A small toast over your full screen game says when a clip is saved
 - Clips are named after their game and time, and renaming a clip renames its file, so it shares under that name
-- Trim a clip to the exact frame, by dragging, typing or stepping, over a strip that shows its sound, and export an exact copy of it, or fit it to Discord's Free, Nitro Basic or Nitro limit as HEVC at the size that looks sharpest
+- Trim a clip to the exact frame, by dragging, typing or stepping, over a strip with its sound drawn across it, and export an exact copy of it, or fit it to Discord's Free, Nitro Basic or Nitro limit as HEVC at the size that looks sharpest
 - Exports keep going when you leave the editor, with their progress in the top bar
 - Keep just the trimmed part without losing any quality, and keep the full clip to bring back if you want
 - The length, size and bitrate shown before an export are what the file comes out as, and a selection too long for a Discord plan tells you how long it can be

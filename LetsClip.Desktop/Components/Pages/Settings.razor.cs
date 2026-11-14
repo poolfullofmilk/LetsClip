@@ -625,7 +625,16 @@ public partial class Settings : IDisposable
                 return;
             }
 
-            var (moved, failed) = await MoveDialog.MoveAsync(DialogService, from, to);
+            // A Move That Broke Off Keeps The Old Folder
+            if (await MoveDialog.MoveAsync(DialogService, from, to) is not var (moved, failed))
+            {
+                Snackbar.Add(
+                    $"The clips could not be moved, they stay in {from}",
+                    Severity.Warning
+                );
+                return;
+            }
+
             Snackbar.Add(
                 failed > 0
                     ? $"Moved {Plural(moved, "clip")}, {Plural(failed, "file")} in use stayed in {from}"

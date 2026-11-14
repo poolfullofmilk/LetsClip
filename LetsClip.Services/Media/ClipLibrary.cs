@@ -905,9 +905,16 @@ public sealed class ClipLibrary : IDisposable
     {
         try
         {
-            // Clips, Exports And Kept Originals All Count
+            // Clips, Exports And Originals, A Root's System Folders Skipped
             var used = new DirectoryInfo(folder)
-                .EnumerateFiles("*.mp4", SearchOption.AllDirectories)
+                .EnumerateFiles(
+                    "*.mp4",
+                    new EnumerationOptions
+                    {
+                        RecurseSubdirectories = true,
+                        AttributesToSkip = FileAttributes.System,
+                    }
+                )
                 .Sum(file => file.Length);
             return (used, new DriveInfo(Path.GetFullPath(folder)).AvailableFreeSpace);
         }

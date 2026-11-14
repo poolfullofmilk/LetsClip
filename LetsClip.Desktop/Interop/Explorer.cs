@@ -38,22 +38,27 @@ public static class Explorer
     public static bool Recycle(string path)
     {
         // To The Recycle Bin, So A Mistake Comes Back
+        var original = ClipLibrary.OwnedOriginalOf(path);
+        if (!TryRecycle(path))
+        {
+            return false;
+        }
+
+        // Its Hidden Original Follows, The Clip Is Gone Either Way
+        if (original is not null)
+        {
+            _ = TryRecycle(original);
+        }
+
+        return true;
+    }
+
+    private static bool TryRecycle(string file)
+    {
         try
         {
-            var original = ClipLibrary.OwnedOriginalOf(path);
-            FileSystem.DeleteFile(path, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
-
-            // A Cut Clip's Hidden Original Goes With It
-            if (original is not null)
-            {
-                FileSystem.DeleteFile(
-                    original,
-                    UIOption.OnlyErrorDialogs,
-                    RecycleOption.SendToRecycleBin
-                );
-            }
-
-            s_logger.Info($"Moved {Path.GetFileName(path)} To The Recycle Bin");
+            FileSystem.DeleteFile(file, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
+            s_logger.Info($"Moved {Path.GetFileName(file)} To The Recycle Bin");
             return true;
         }
         catch (Exception exception)
@@ -63,7 +68,7 @@ public static class Explorer
                         or OperationCanceledException
             )
         {
-            s_logger.Warn($"Failed To Delete Clip {exception.GetType().Name}");
+            s_logger.Warn($"Failed To Recycle {Path.GetFileName(file)} {exception.GetType().Name}");
             return false;
         }
     }

@@ -231,14 +231,8 @@ public sealed class CaptureController : IDisposable
             _installedGames = found;
         }
         catch (Exception exception)
-            when (exception
-                    is IOException
-                        or UnauthorizedAccessException
-                        or ArgumentException
-                        or InvalidOperationException
-            )
         {
-            // A Failed Scan Keeps The Last List
+            // A Failed Scan Keeps The Last List, Recording Still Starts
             s_logger.Warn($"Failed To Scan For Games {exception.GetType().Name}");
             _installedGames ??= new Dictionary<string, AddedGame>();
         }

@@ -133,6 +133,14 @@ public sealed class Tray
         _window.Hide();
         await _controller.HoldAsync(CaptureHolds.Exiting, "Stopped because LetsClip is closing");
         await _controller.Recorder.WaitForSavesAsync(TimeSpan.FromSeconds(15));
+
+        // A Running Export Ends Cleanly, Its Unfinished File Deleted
+        _controller.Exports.Cancel();
+        for (var waited = 0; _controller.Exports.Running is not null && waited < 50; waited++)
+        {
+            await Task.Delay(100);
+        }
+
         ExitNow();
     }
 

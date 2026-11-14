@@ -42,6 +42,15 @@ public sealed class ExportRunner
         return path is not null && Running?.SourcePath == path;
     }
 
+    public void Renamed(string from, string to)
+    {
+        // A Renamed Clip Keeps Showing Its Last Export
+        if (Last is { } last && last.Request.SourcePath == from)
+        {
+            Last = last with { Request = last.Request with { SourcePath = to } };
+        }
+    }
+
     public async Task RunAsync(ExportRequest request, bool saveCut, bool keepOriginal)
     {
         // One At A Time, Other Clips Wait

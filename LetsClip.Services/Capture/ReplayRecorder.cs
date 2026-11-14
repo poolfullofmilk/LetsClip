@@ -908,6 +908,12 @@ public sealed class ReplayRecorder : IDisposable
         (int Width, int Height) source
     )
     {
+        // The Box Turns With The Window, Whatever Its Monitor
+        if (box.Width > box.Height != source.Width > source.Height)
+        {
+            box = (box.Height, box.Width);
+        }
+
         // Never Upscaled, Even Sizes For The Encoder
         var scale = Math.Min(
             1,

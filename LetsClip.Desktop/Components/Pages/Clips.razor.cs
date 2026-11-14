@@ -402,7 +402,8 @@ public partial class Clips : IDisposable
 
         try
         {
-            await Task.Run(() => ClipLibrary.RenameAsync(clip.Path, title));
+            var renamed = await Task.Run(() => ClipLibrary.RenameAsync(clip.Path, title));
+            Controller.Exports.Renamed(clip.Path, renamed);
         }
         catch (Exception exception)
             when (exception is IOException or UnauthorizedAccessException or InvalidDataException)

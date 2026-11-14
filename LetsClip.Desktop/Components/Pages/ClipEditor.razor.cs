@@ -145,6 +145,12 @@ public partial class ClipEditor : IAsyncDisposable
 
         await DetachAsync(seamless);
 
+        // Another Clip Opening Here Leaves This One Named
+        if (opening)
+        {
+            RenameLeftClip();
+        }
+
         // Only A Plain File Name In The Clips Folder
         if (
             _loadedName is not { } fileName
@@ -534,7 +540,7 @@ public partial class ClipEditor : IAsyncDisposable
     #region Title
     private void TypeTitle(string text)
     {
-        // Shown At Once, The File Is Renamed When Typing Ends
+        // Shown At Once, The File Takes It When Used
         _titleText = text;
         if (_clip is { } clip)
         {
@@ -542,15 +548,39 @@ public partial class ClipEditor : IAsyncDisposable
         }
     }
 
-    private async Task SettleTitleAsync()
+    private void LeaveTitle()
     {
-        // Leaving The Field Renames The File, Trimmed Like Before
-        if (_clip is { } clip && _path is { } path && clip.CustomTitle != _savedTitle)
+        // Trimmed Like It Will Be Kept, Nothing Locks Meanwhile
+        _titleText = _clip?.CustomTitle ?? "";
+    }
+
+    private bool IsRenaming => _clip is { } clip && clip.CustomTitle != _savedTitle;
+
+    private async Task<string?> SettledPathAsync()
+    {
+        // A Typed Name Reaches The File Before Anything Uses It
+        if (IsRenaming && _clip is { } clip && _path is { } path)
         {
             await ReplaceFileAsync(() => ClipLibrary.RenameAsync(path, clip.CustomTitle));
+
+            // The Renamed Clip Shows In Its View Transition, Then Acts
+            for (var waited = 0; _swapping && waited < 50; waited++)
+            {
+                await Task.Delay(100);
+            }
         }
 
-        _titleText = _clip?.CustomTitle ?? "";
+        return _swapping ? null : _path;
+    }
+
+    private void RenameLeftClip()
+    {
+        // A Name Typed Here Lands Once The Clip Is Left
+        if (IsRenaming && _clip is { } clip && _path is { } path)
+        {
+            var exports = Controller.Exports;
+            _ = Task.Run(() => RenameAfterLeavingAsync(exports, path, clip.CustomTitle));
+        }
     }
 
     private async Task TitleKeyAsync(KeyboardEventArgs key)
@@ -609,7 +639,7 @@ public partial class ClipEditor : IAsyncDisposable
 
     private async Task RestoreOriginalAsync()
     {
-        if (_path is not { } path)
+        if (await SettledPathAsync() is not { } path)
         {
             return;
         }
@@ -648,6 +678,11 @@ public partial class ClipEditor : IAsyncDisposable
             // A Rename Opens The Clip Under Its New Name
             if (Path.GetFileName(replacedPath) is var name && name != _loadedName)
             {
+                if (_path is { } renamed)
+                {
+                    Controller.Exports.Renamed(renamed, replacedPath);
+                }
+
                 _loadedName = name;
                 NavigationManager.NavigateTo(Clips.EditorOf(replacedPath), replace: true);
             }
@@ -676,9 +711,13 @@ public partial class ClipEditor : IAsyncDisposable
             return;
         }
 
-        // The Preview Lets Go Of The File First
+        // The Preview Lets Go First, A Typed Name Goes Too
         await DetachAsync();
-        if (!Explorer.Recycle(path))
+        if (Explorer.Recycle(path))
+        {
+            _path = null;
+        }
+        else
         {
             Snackbar.Add("The clip could not be deleted, it may be in use", Severity.Warning);
         }
@@ -686,20 +725,20 @@ public partial class ClipEditor : IAsyncDisposable
         Back();
     }
 
-    private void ShowInFolder()
+    private async Task ShowInFolderAsync()
     {
-        if (_path is not null)
+        if (await SettledPathAsync() is { } path)
         {
-            Explorer.ShowFile(_path);
+            Explorer.ShowFile(path);
         }
     }
 
-    private void CopyFile()
+    private async Task CopyFileAsync()
     {
-        // The Whole File, Selection Or Not
-        if (_path is not null)
+        // The Whole File, Selection Or Not, Under Its Typed Name
+        if (await SettledPathAsync() is { } path)
         {
-            DesktopShell.CopyFile(_path, Snackbar);
+            DesktopShell.CopyFile(path, Snackbar);
         }
     }
 
@@ -717,11 +756,15 @@ public partial class ClipEditor : IAsyncDisposable
         NavigationManager.NavigateTo(Clips.Route);
     }
 
-    private static async Task RenameAfterLeavingAsync(string path, string? title)
+    private static async Task RenameAfterLeavingAsync(
+        ExportRunner exports,
+        string path,
+        string? title
+    )
     {
         try
         {
-            await ClipLibrary.RenameAsync(path, title);
+            exports.Renamed(path, await ClipLibrary.RenameAsync(path, title));
         }
         catch (Exception exception)
             when (exception is IOException or UnauthorizedAccessException or InvalidDataException)
@@ -739,13 +782,7 @@ public partial class ClipEditor : IAsyncDisposable
         _saveTimer?.Dispose();
         EndClip();
         await DetachAsync();
-
-        // A Name Typed Without Leaving The Field Still Lands
-        if (_clip is { } clip && _path is { } path && clip.CustomTitle != _savedTitle)
-        {
-            _ = Task.Run(() => RenameAfterLeavingAsync(path, clip.CustomTitle));
-        }
-
+        RenameLeftClip();
         _page?.Dispose();
         GC.SuppressFinalize(this);
     }

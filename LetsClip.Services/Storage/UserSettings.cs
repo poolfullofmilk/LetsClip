@@ -24,7 +24,7 @@ public sealed record UserSettings(
     double SaveSoundVolume = 1,
     bool SystemAudio = true,
     string SystemAudioDeviceId = "",
-    bool OnlyGameAndDiscord = false,
+    bool OnlyGameAndDiscord = true,
     bool Microphone = true,
     string MicrophoneDeviceId = "",
     double MicrophoneVolume = 0.8,
@@ -124,7 +124,7 @@ public sealed record UserSettings(
                 };
             }
 
-            // Version 4 Restores A Minute, Save Sound And All Audio
+            // Version 4 Corrects The Length, Save Sound And Game Audio
             var updated = (
                 settings with
                 {

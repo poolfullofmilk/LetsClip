@@ -391,11 +391,15 @@ window.letsClip = (() => {
         // Length, And A Copy's Size, Struck Live Once They Differ
         showValue(document.querySelector("[data-length]"), formatTime(end - start));
         const size = document.querySelector("[data-copy-audio]");
-        if (size) showValue(size, formatSize(copyBytes(start, end, Number(size.dataset.copyAudio))));
+        if (size) showValue(size, formatSize(copyBytes(start, end, size.dataset)));
     };
 
     // Weighed Like SizeBudget.CopyBytes: From The Keyframe Before The Seek
-    const copyBytes = (start, end, soundPerSecond) => {
+    const copyBytes = (start, end, { copyAudio, copyFile, copyWhole }) => {
+        // The Whole Clip With Every Track Is The File Itself
+        const file = Number(copyFile);
+        if (copyWhole !== undefined && end - start >= duration() - step / 2) return file;
+        const soundPerSecond = Number(copyAudio);
         const { times, totals, keys } = state.packets;
         const seek = Math.max(0, start - 0.001);
         const stop = seek + (end - start);
@@ -415,8 +419,8 @@ window.letsClip = (() => {
         // The Sound Is Copied From That Keyframe On Too
         const lead = times.length ? Math.max(0, seek - times[first]) : 0;
         const sound = Math.round((end - start + lead) * soundPerSecond);
-        // The MP4 Index Takes 12 Bytes A Packet
-        return totals[low] - totals[first] + 12 * (low - first) + sound + 1000;
+        // 12 Index Bytes A Packet, Never More Than The Clip
+        return Math.min(file, totals[low] - totals[first] + 12 * (low - first) + sound + 1000);
     };
 
     // Its Own Text Node, Which Blazor Keeps Writing To
@@ -542,22 +546,23 @@ window.letsClip = (() => {
             context.drawImage(image, cell * cellWidth, 0, cellWidth, image.naturalHeight, left, 0, right - left, canvas.height);
         }
 
-        // The Sound Over The Strip's Foot, Timed Between The Handles
+        // The Sound Across The Strip's Middle, Timed Between The Handles
         const wave = canvas.waveImage;
         if (!wave?.naturalWidth) return;
-        const foot = Math.round(canvas.height * 0.45);
-        const top = canvas.height - foot;
+        const band = Math.round(canvas.height * 0.55);
+        const top = Math.round((canvas.height - band) / 2);
         const side = Math.round(pad * devicePixelRatio);
-        const shade = context.createLinearGradient(0, top, 0, canvas.height);
+        const shade = context.createLinearGradient(0, top, 0, top + band);
         shade.addColorStop(0, "transparent");
-        shade.addColorStop(1, getComputedStyle(canvas).getPropertyValue("--shade"));
+        shade.addColorStop(0.5, getComputedStyle(canvas).getPropertyValue("--shade"));
+        shade.addColorStop(1, "transparent");
         context.fillStyle = shade;
-        context.fillRect(0, top, canvas.width, foot);
+        context.fillRect(0, top, canvas.width, band);
 
         // White Lightens, The Picture's Black Leaves The Frames Alone
         context.globalCompositeOperation = "screen";
-        context.globalAlpha = 0.85;
-        context.drawImage(wave, side, top, canvas.width - 2 * side, foot);
+        context.globalAlpha = 0.7;
+        context.drawImage(wave, side, top, canvas.width - 2 * side, band);
         context.globalAlpha = 1;
         context.globalCompositeOperation = "source-over";
     };

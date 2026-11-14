@@ -262,3 +262,21 @@ The work laptop's round came in on a `temp` branch with a handoff file and was f
 - The replay cache's writes: a 1024 MB file written and closed reached the disk as 1001 MB without the temporary attribute and 1100 MB with it, so memory backed files save nothing once FFmpeg closes a segment. A game session writes about 9 GB an hour at 1080p60 Normal; the Samsung 990 EVO Plus 2 TB is rated for 1200 TB, three hours a day is 0.8% of it a year.
 - The video FFmpeg's memory, peak private bytes over 20 s: capture into AMF 607 MB (608 with `-async_depth 4`, filter threads 4 or 1), AMF encoding a test pattern without capture 562 MB, `ddagrab` into nothing 159 MB, x264 from `ddagrab` 423 MB. AMF's runtime is the 600 MB.
 - The install on the real profile from a v2.0.10 test build: a fresh start from a download folder installed `LetsClip.exe`, wrote the Run value, both shortcuts and the Uninstall entry; a newer build started while it ran took over in place; `--uninstall` removed everything but the clips, their details and the settings (WebView2's folder needed the after exit delete, added then).
+
+## Sweep With The Owner's Settings, 14 November 2026, Evening
+
+7800X3D, RX 9070 XT, Debug sandbox. Details in `Docs/Capture.md` (One Recorder Per Process, Sweep With The Owner's Settings) and `Docs/Export.md` (The Whole Clip Is The File).
+
+- A game started by a voice app, 440 Hz: -65.7 dB recorded twice, -43.0 dB after the fix and -43.1 dB started on its own. A voice app's tree: its child's 660 Hz at -43.1 dB, its grandchild's 880 Hz at -71.3 dB.
+- 2560 x 1440 window at 1080p60 Normal, a minute, game and voice chat sound, cleaned microphone: video FFmpeg 67.9% of a core and 629 MB, audio FFmpeg 4.8%, LetsClip 1.6%; 3571 of 3600 frames, 60.013 s, 1.4 s from press to file.
+- The Jumpscare clip: 25,749,743 bytes on disk, weighed 25,751,315.
+- Not done, the owner's word mid round: the Ponytail audit, and anything beyond the sweep. Open for his pick: Steam's own voice chat in clips of Steam games, the 2 s retry wait after a display change, the one AMF crash on monitor capture seen in his log.
+
+## Edge Cases, Audit And Sweep, 14 November 2026, Night
+
+Details in `Docs/Layout.md` (Edge Cases And A Ponytail Ultra Audit) and `Docs/Recovery.md`.
+
+- Name then Export in one press: before, renamed and nothing exported; after, renamed, exported as `Race Test.mp4` (486 KB muted, as Details said) with the Exported panel up. Copy File in the header after a second name: renamed, Exported panel kept. Leaving mid name: renamed after leaving. Delete right after typing: recycled under its own name, the typed name dropped, no warning in the log.
+- An added app that is itself a voice app, 440 Hz: -43.04 dB with its own pid left out of the voice apps; a game started by a voice app after the audit's shrink: -43.05 dB.
+- Exit mid export: one unfinished file in Exports before, none after, the app gone 0.2 s after the exit signal.
+- Not run: a clips folder move failing outright, a folder at a real drive's root, a game scan throwing, a kept original refusing the Recycle Bin. Each was read and built, the paths are a few lines.

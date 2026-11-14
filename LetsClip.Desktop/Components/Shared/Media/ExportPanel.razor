@@ -67,7 +67,9 @@
         <ChangedValue Was="@ClipSizeText"
                       Value="@ExportSizeText"
                       Prefix="About"
-                      data-copy-audio="@CopyAudioText" />
+                      data-copy-audio="@CopyAudioText"
+                      data-copy-file="@Clip.SizeBytes"
+                      data-copy-whole="@CopiesFile(CopiedTracks)" />
     </SettingRow>
     <SettingRow Title="Resolution">
         <ChangedValue Was="@ClipResolutionText"

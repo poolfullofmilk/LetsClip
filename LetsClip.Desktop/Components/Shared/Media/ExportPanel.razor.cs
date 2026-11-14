@@ -35,6 +35,10 @@ public partial class ExportPanel : IDisposable
     [Parameter]
     public required Func<string, TrimRange, Task<bool>> SaveCut { get; set; }
 
+    // The Clip's File Once A Typed Name Reached It
+    [Parameter]
+    public required Func<Task<string?>> SettledPath { get; set; }
+
     // The Clip Is Being Replaced, Nothing May Read It
     [Parameter]
     public bool Busy { get; set; }
@@ -113,8 +117,20 @@ public partial class ExportPanel : IDisposable
     // One Picked Track, What A Plan Weighs Against Its Limit
     private long CopyBytes => CopyBytesOf(WithAudio ? 1 : 0);
 
+    private bool CopiesFile(int tracks)
+    {
+        // The Whole Clip With Every Track Is The File Itself
+        return tracks == Media.AudioTrackCount;
+    }
+
     private long CopyBytesOf(int tracks)
     {
+        // Never Weighed, The File's Own Size Reads Exactly
+        if (!IsCut && CopiesFile(tracks))
+        {
+            return Clip.SizeBytes;
+        }
+
         // Weighed From The Packets Once Per Range And Track Count
         if (_copiedRange != Range)
         {
@@ -124,9 +140,13 @@ public partial class ExportPanel : IDisposable
 
         if (!_copies.TryGetValue(tracks, out var bytes))
         {
-            bytes = Media.Packets is { } packets
-                ? SizeBudget.CopyBytes(packets, Range, tracks)
-                : (long)(Clip.SizeBytes * Range.Length / Media.Duration);
+            // Part Of A Clip Never Weighs More Than It
+            bytes = Math.Min(
+                Clip.SizeBytes,
+                Media.Packets is { } packets
+                    ? SizeBudget.CopyBytes(packets, Range, tracks)
+                    : (long)(Clip.SizeBytes * Range.Length / Media.Duration)
+            );
             _copies[tracks] = bytes;
         }
 
@@ -277,8 +297,8 @@ public partial class ExportPanel : IDisposable
 
     private async Task SaveCutAsync()
     {
-        var (path, range) = (Clip.Path, Range);
-        if (await ConfirmCutAsync("Save Cut"))
+        var range = Range;
+        if (await SettledPath() is { } path && await ConfirmCutAsync("Save Cut"))
         {
             await SaveCut(path, range);
         }
@@ -315,8 +335,13 @@ public partial class ExportPanel : IDisposable
     private async Task CopyAsync()
     {
         // A Cut Is Saved First, Then The Clip Is Copied
-        var (path, range, title) = (Clip.Path, Range, ExportText);
-        if (!IsCut || (await ConfirmCutAsync(title) && await SaveCut(path, range)))
+        var (range, title, cut) = (Range, ExportText, IsCut);
+        if (await SettledPath() is not { } path)
+        {
+            return;
+        }
+
+        if (!cut || (await ConfirmCutAsync(title) && await SaveCut(path, range)))
         {
             DesktopShell.CopyFile(path, Snackbar);
         }
@@ -330,23 +355,18 @@ public partial class ExportPanel : IDisposable
             return;
         }
 
-        var cut = IsCut;
-        if (cut && !await ConfirmCutAsync(ExportText))
+        // Read Before A Rename Replaces This Panel
+        var (cut, title, keepOriginal) = (IsCut, ExportText, !Controller.Settings.DeleteOriginals);
+        var (range, plan, frameRate, track) = (Range, Plan, FrameRate, Track);
+        var folder = Controller.Settings.ExportsDirectory;
+        if (await SettledPath() is not { } path || (cut && !await ConfirmCutAsync(title)))
         {
             return;
         }
 
-        var request = new ExportRequest(
-            Clip.Path,
-            Range,
-            Plan,
-            FrameRate,
-            Track,
-            Controller.Settings.ExportsDirectory
-        );
-
         // Runs On Past Leaving, The App Bar Shows It
-        _ = Exports.RunAsync(request, cut, !Controller.Settings.DeleteOriginals);
+        var request = new ExportRequest(path, range, plan, frameRate, track, folder);
+        _ = Exports.RunAsync(request, cut, keepOriginal);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

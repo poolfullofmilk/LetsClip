@@ -2,11 +2,14 @@ using LetsClip.Desktop.Components.Shared.Common;
 using LetsClip.Services.Media;
 using Microsoft.AspNetCore.Components;
 using MudBlazor;
+using NLog;
 
 namespace LetsClip.Desktop.Components.Shared.Dialogs;
 
 public partial class MoveDialog
 {
+    private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
+
     [CascadingParameter]
     public required IMudDialogInstance MudDialog { get; set; }
 
@@ -18,7 +21,7 @@ public partial class MoveDialog
 
     private TransferProgress? _progress;
 
-    public static async Task<(int Moved, int Failed)> MoveAsync(
+    public static async Task<(int Moved, int Failed)?> MoveAsync(
         IDialogService dialogService,
         string from,
         string to
@@ -40,7 +43,9 @@ public partial class MoveDialog
                 CloseOnEscapeKey = false,
             }
         );
-        return await dialog.Result is { Data: ValueTuple<int, int> result } ? result : (0, 0);
+        return await dialog.Result is { Canceled: false, Data: ValueTuple<int, int> result }
+            ? result
+            : null;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -52,7 +57,16 @@ public partial class MoveDialog
 
         // Off The Page Thread, The Bar Follows Each Piece
         var progress = new Progress<(long Moved, long Total)>(moved => _progress?.Report(moved));
-        var result = await Task.Run(() => ClipLibrary.MoveAllAsync(From, To, progress));
-        MudDialog.Close(DialogResult.Ok(result));
+        try
+        {
+            var result = await Task.Run(() => ClipLibrary.MoveAllAsync(From, To, progress));
+            MudDialog.Close(DialogResult.Ok(result));
+        }
+        catch (Exception exception)
+        {
+            // An Unforeseen Failure Never Leaves The Dialog Open
+            s_logger.Warn($"Failed To Move The Clips {exception.GetType().Name}");
+            MudDialog.Cancel();
+        }
     }
 }

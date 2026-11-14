@@ -58,11 +58,11 @@ else
             <IconButton Icon="@Icons.Material.Rounded.ContentCopy"
                         Text="Copy File"
                         Disabled="_swapping"
-                        OnClick="CopyFile" />
+                        OnClick="CopyFileAsync" />
             @* Show In Folder Button *@
             <IconButton Icon="@Icons.Material.Rounded.FolderOpen"
                         Text="Show in Folder"
-                        OnClick="ShowInFolder" />
+                        OnClick="ShowInFolderAsync" />
             @* Delete Button *@
             <IconButton Icon="@Icons.Material.Rounded.Delete"
                         Text="Delete Clip"
@@ -242,6 +242,7 @@ else
                     <ExportPanel @key="clip.Path"
                                  Clip="clip"
                                  SaveCut="SaveCutAsync"
+                                 SettledPath="SettledPathAsync"
                                  CanSaveCut="@CanSaveCut()"
                                  Cutting="_cutting"
                                  Busy="_swapping"
@@ -259,7 +260,7 @@ else
                                           Variant="Variant.Outlined"
                                           Margin="Margin.Dense"
                                           Disabled="@(_swapping || Exporting)"
-                                          OnBlur="SettleTitleAsync"
+                                          OnBlur="LeaveTitle"
                                           OnKeyDown="TitleKeyAsync"
                                           aria-label="Clip Name"
                                           Class="content-field my-0" />

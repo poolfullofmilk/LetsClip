@@ -39,6 +39,12 @@ The owner's rule: consistent on every kind of system, and anything that can fix 
 | An update cannot replace `LetsClip.exe` (held by a scanner) | The download starts under its versioned name and logs `Failed To Swap The Installed Exe`; the Run value and shortcuts follow it and the next update tries again | Nothing |
 | What an update changed cannot be read (offline, GitHub's rate limit) | Nothing is shown and the next start asks again (`Updater.ChangesAsync` returns null) | Nothing |
 | WebView2 is not installed | LetsClip says so before anything starts, OK opens Microsoft's download, and exits | The message |
+| A clips folder move breaks off with an unforeseen error | The dialog closes and the old folder stays (`MoveDialog`); clips already moved stay in the new one | `The clips could not be moved, they stay in <folder>` |
+| The game library scan throws something unlisted | Logged, the last list kept (an empty one at launch), so Games and Apps Only still starts; it only caught four kinds before, and any other left it waiting for good | Nothing |
+| Exit while an export runs | The export is cancelled and its unfinished file deleted, 5 s at most (`Tray.ExitAsync`) | Nothing |
+| A cut clip's kept original cannot be recycled with it | The clip still goes, its original waits for Delete Kept Originals | The clip leaves the list |
+| The clips folder sits at a drive's root | Disk Space skips the system folders it cannot read | Disk Space shows |
+| Removing the Run value, Uninstall entry or shortcuts throws | Logged, the uninstall goes on (`StartupRegistration.Remove` catches everything, like `Apply`) | The uninstall's message |
 
 ## Reliability Research And Tests
 

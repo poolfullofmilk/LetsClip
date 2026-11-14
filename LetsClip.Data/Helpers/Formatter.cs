@@ -25,7 +25,9 @@ public static partial class Formatter
         {
             >= 1_000_000_000 => (bytes / 1e9).ToString("0.##", Shown) + " GB",
             >= 1_000_000 => (bytes / 1e6).ToString("0.#", Shown) + " MB",
-            _ => Math.Max(1, (long)Math.Round(bytes / 1e3)).ToString(Shown) + " KB",
+            // Empty Reads 0 KB, Anything Else At Least 1
+            _ => (bytes > 0 ? Math.Max(1, (long)Math.Round(bytes / 1e3)) : 0).ToString(Shown)
+                + " KB",
         };
     }
 
@@ -127,6 +129,8 @@ public static partial class Formatter
             && FormatSize(20_540_000) == $"20{Point}5 MB"
             && FormatSize(2_000_000_000) == "2 GB"
             && FormatSize(999_499) == "999 KB"
+            && FormatSize(0) == "0 KB"
+            && FormatSize(200) == "1 KB"
             && FormatSize(1_250_000_000) == $"1{Point}25 GB"
             && FormatBitrate(11_570_000) == $"11{Point}6 Mbps"
             && FormatBitrate(30_010_000) == "30 Mbps"

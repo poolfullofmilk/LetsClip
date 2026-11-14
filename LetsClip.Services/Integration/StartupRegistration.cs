@@ -99,9 +99,9 @@ public static partial class StartupRegistration
             File.Delete(s_shortcutPath);
             File.Delete(s_desktopShortcutPath);
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        catch (Exception exception)
         {
-            // Whatever Stays Is Harmless Without The Exe
+            // Whatever Stays Is Harmless Without The Exe, Uninstall Goes On
             s_logger.Warn($"Failed To Unregister From Windows {exception.GetType().Name}");
         }
     }

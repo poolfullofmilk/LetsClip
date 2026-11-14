@@ -102,6 +102,61 @@ public sealed partial class GameWatcher : IDisposable
         }
     }
 
+    public static int StarterOf(int processId)
+    {
+        // Zero When Unknown, Or Its Number Was Reused
+        var parent = ParentOf(processId);
+        if (parent == 0)
+        {
+            return 0;
+        }
+
+        try
+        {
+            using var started = Process.GetProcessById(processId);
+            using var starter = Process.GetProcessById(parent);
+            return StartTimeOf(starter) <= StartTimeOf(started) ? parent : 0;
+        }
+        catch (Exception exception)
+            when (exception is ArgumentException or InvalidOperationException)
+        {
+            // Either One Exited Meanwhile
+            return 0;
+        }
+    }
+
+    private static int ParentOf(int processId)
+    {
+        // From A Snapshot, Protected Games Refuse Their Handle
+        var snapshot = CreateToolhelp32Snapshot(SnapshotProcesses, 0);
+        if (snapshot == -1)
+        {
+            return 0;
+        }
+
+        try
+        {
+            var entry = new ProcessEntry { Size = ProcessEntrySize };
+            for (
+                var more = Process32FirstW(snapshot, ref entry);
+                more;
+                more = Process32NextW(snapshot, ref entry)
+            )
+            {
+                if (entry.ProcessId == processId)
+                {
+                    return (int)entry.ParentProcessId;
+                }
+            }
+
+            return 0;
+        }
+        finally
+        {
+            _ = CloseHandle(snapshot);
+        }
+    }
+
     private static DateTime StartTimeOf(Process process)
     {
         try
@@ -458,6 +513,38 @@ public sealed partial class GameWatcher : IDisposable
         ForgetGame();
         GC.SuppressFinalize(this);
     }
+
+    // PROCESSENTRY32W On 64 Bit, Only The Fields Read
+    private const uint SnapshotProcesses = 0x2;
+    private const int ProcessEntrySize = 568;
+
+    [StructLayout(LayoutKind.Explicit, Size = ProcessEntrySize)]
+    private struct ProcessEntry
+    {
+        [FieldOffset(0)]
+        public int Size;
+
+        [FieldOffset(8)]
+        public uint ProcessId;
+
+        [FieldOffset(32)]
+        public uint ParentProcessId;
+    }
+
+    [LibraryImport("kernel32.dll")]
+    private static partial nint CreateToolhelp32Snapshot(uint flags, uint processId);
+
+    [LibraryImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool Process32FirstW(nint snapshot, ref ProcessEntry entry);
+
+    [LibraryImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool Process32NextW(nint snapshot, ref ProcessEntry entry);
+
+    [LibraryImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool CloseHandle(nint handle);
 
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
