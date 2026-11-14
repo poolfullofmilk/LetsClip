@@ -11,32 +11,14 @@
                      Class="text-relaxed">
                 @($"You have {AppInfo.VersionText}. Updating restarts LetsClip, recording starts again by itself")
             </MudText>
-
+            @if (_changes is [_, ..])
+            {
+                <ChangeList Changes="_changes" />
+            }
             @if (_isInstalling)
             {
-                @* Download Progress *@
-                <MudStack Spacing="1"
-                          Class="mt-2">
-                    <MudProgressLinear Color="Color.Info"
-                                       Value="@_percent"
-                                       Indeterminate="@(_total == 0)"
-                                       Rounded
-                                       Size="Size.Medium" />
-                    <MudStack Row
-                              Justify="Justify.SpaceBetween">
-                        <MudText Typo="Typo.caption"
-                                 Class="mud-text-secondary">
-                            @ProgressText
-                        </MudText>
-                        @if (_total > 0)
-                        {
-                            <MudText Typo="Typo.caption"
-                                     Class="mud-text-secondary">
-                                @($"{_percent}%")
-                            </MudText>
-                        }
-                    </MudStack>
-                </MudStack>
+                <TransferProgress @ref="_progress"
+                                  DoneText="Starting the New Version" />
             }
         </MudStack>
     </DialogContent>

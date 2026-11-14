@@ -8,10 +8,6 @@ public partial class Tooltip
     [Parameter]
     public string? Text { get; set; }
 
-    // Richer Than Text, Like The Clip Facts
-    [Parameter]
-    public RenderFragment? Content { get; set; }
-
     [Parameter]
     public required RenderFragment ChildContent { get; set; }
 
@@ -20,13 +16,6 @@ public partial class Tooltip
 
     [Parameter]
     public bool Disabled { get; set; }
-
-    // Off For Buttons, Clicks Would Leave It Showing
-    [Parameter]
-    public bool ShowOnFocus { get; set; }
-
-    [Parameter]
-    public string? PopoverClass { get; set; }
 
     // Most Tooltips Wrap One Button In A Row
     [Parameter]

@@ -20,12 +20,18 @@ public sealed record ClipInfo(
     bool IsEdited
 )
 {
-    // The Game, Else The Monitor By Its Place
-    public string Source => Game ?? (Monitor is { } number ? $"Monitor {number}" : "Monitor");
+    public string Source => ClipNames.SourceOf(Game, Monitor);
 
     // Without A Given Name, A Copied File Keeps Its Own
     public string DefaultTitle =>
         Game is null && ClipNames.DateOf(Name) is null ? Name : "Untitled";
 
     public string Title => CustomTitle ?? DefaultTitle;
+
+    public string? CustomTitleFrom(string text)
+    {
+        // Empty Or The Shown Default Stores No Name
+        var typed = text.Trim();
+        return typed.Length == 0 || typed == DefaultTitle ? null : typed;
+    }
 }

@@ -13,7 +13,7 @@ public sealed record ExportRequest(
     TrimRange Range,
     DiscordPlan Plan,
     double FrameRate,
-    bool WithAudio,
+    int? AudioTrack,
     string ExportsFolder
 );
 
@@ -107,7 +107,14 @@ public static class ClipExporter
         }
 
         var duration = request.Range.Length;
-        var withAudio = request.WithAudio && source.HasAudio;
+        // The Picked Track, The First Where Only One Exists
+        int? track =
+            source.HasAudio && request.AudioTrack is { } picked
+                ? picked < source.AudioTrackCount
+                    ? picked
+                    : 0
+                : null;
+        var withAudio = track is not null;
         var sourceRate = new FileInfo(request.SourcePath).Length / source.Duration;
         Directory.CreateDirectory(request.ExportsFolder);
         var started = Stopwatch.StartNew();
@@ -115,7 +122,7 @@ public static class ClipExporter
         // Off, Or Already Small Enough, Is An Exact Copy
         if (
             SizeBudget.KeepsClip(request.Plan, duration, sourceRate)
-            && await CopyAsync(request, withAudio, progress, token) is { } copied
+            && await CopyAsync(request, track, progress, token) is { } copied
         )
         {
             s_logger.Info(
@@ -160,15 +167,7 @@ public static class ClipExporter
         encoders.Add(VideoEncoders.Software);
         var workFolder = CacheFolders.NewFolder();
         var temporary = ClipLibrary.PartialPathIn(request.ExportsFolder);
-        var job = new EncodeJob(
-            request,
-            temporary,
-            workFolder,
-            width,
-            height,
-            frameRate,
-            withAudio
-        );
+        var job = new EncodeJob(request, temporary, workFolder, width, height, frameRate, track);
         try
         {
             var attempts = 0;
@@ -248,7 +247,7 @@ public static class ClipExporter
 
     private static async Task<string?> CopyAsync(
         ExportRequest request,
-        bool withAudio,
+        int? track,
         IProgress<ExportProgress> progress,
         CancellationToken token
     )
@@ -262,14 +261,22 @@ public static class ClipExporter
             var output = await ClipLibrary.CopyRangeAsync(
                 request.SourcePath,
                 range,
-                withAudio ? ["-map", "0:v:0", "-map", "0:a:0"] : ["-map", "0:v:0"],
+                track is { } index
+                    ?
+                    [
+                        "-map",
+                        "0:v:0",
+                        "-map",
+                        string.Create(CultureInfo.InvariantCulture, $"0:a:{index}"),
+                    ]
+                    : ["-map", "0:v:0"],
                 temporary,
                 token
             );
             if (
                 output is not { HasVideo: true }
                 || Math.Abs(output.Duration - range.Length) > DurationTolerance
-                || output.HasAudio != withAudio
+                || output.HasAudio != (track is not null)
             )
             {
                 throw new ExportException(RejectedMessage);
@@ -290,16 +297,11 @@ public static class ClipExporter
 
     private static string Keep(ExportRequest request, string temporary)
     {
-        // Named By The Clip's Name Or Date, Never Its Limit
-        var stem = Path.GetFileNameWithoutExtension(request.SourcePath);
-        var title =
-            ClipNames.FileSafe(ClipLibrary.MetadataOf(request.SourcePath)?.Title)
-            ?? (
-                ClipNames.DateOf(stem) is { } date
-                    ? $"{AppInfo.DisplayName} {Formatter.FormatFileDate(date)}"
-                    : stem
-            );
-        var finalPath = ClipSaver.UniquePath(request.ExportsFolder, title);
+        // Named Like Its Clip, Never By Its Limit
+        var finalPath = ClipSaver.UniquePath(
+            request.ExportsFolder,
+            Path.GetFileNameWithoutExtension(request.SourcePath)
+        );
         File.Move(temporary, finalPath);
         return finalPath;
     }
@@ -311,7 +313,7 @@ public static class ClipExporter
         int Width,
         int Height,
         double FrameRate,
-        bool WithAudio
+        int? AudioTrack
     );
 
     private static async Task EncodeAsync(
@@ -367,11 +369,11 @@ public static class ClipExporter
             "tv",
         ];
         List<string> output = [];
-        if (job.WithAudio)
+        if (job.AudioTrack is { } track)
         {
             output.AddRange([
                 "-map",
-                "0:a:0",
+                string.Create(CultureInfo.InvariantCulture, $"0:a:{track}"),
                 "-c:a",
                 "aac",
                 "-b:a",

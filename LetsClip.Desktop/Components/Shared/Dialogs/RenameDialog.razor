@@ -1,0 +1,30 @@
+<MudDialog>
+
+    <DialogContent>
+        @* Clip Name Field *@
+        <MudTextField @ref="_field"
+                      T="string"
+                      @bind-Value="_name"
+                      Immediate
+                      Placeholder="@Clip.DefaultTitle"
+                      Variant="Variant.Outlined"
+                      Margin="Margin.Dense"
+                      OnKeyDown="KeyAsync"
+                      aria-label="Clip Name"
+                      Class="my-0" />
+    </DialogContent>
+    <DialogActions>
+        @* Cancel Button *@
+        <MudButton Variant="Variant.Text"
+                   OnClick="() => MudDialog.Cancel()">
+            Cancel
+        </MudButton>
+        @* Save Button *@
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Info"
+                   OnClick="Save">
+            Save
+        </MudButton>
+    </DialogActions>
+
+</MudDialog>

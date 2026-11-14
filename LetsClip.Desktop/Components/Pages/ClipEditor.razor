@@ -38,7 +38,11 @@ else
             </MudText>
             @if (_clip is { } titled)
             {
-                <SourceChip Clip="titled" />
+                @* Source Chip *@
+                <Tooltip Text="@($"Show {titled.Source} Clips")">
+                    <SourceChip Clip="titled"
+                                OnClick="ShowSourceClips" />
+                </Tooltip>
             }
             <MudSpacer />
             @if (_clip?.HasOriginal == true)
@@ -254,8 +258,8 @@ else
                                           Placeholder="@clip.DefaultTitle"
                                           Variant="Variant.Outlined"
                                           Margin="Margin.Dense"
-                                          Disabled="_swapping"
-                                          OnBlur="SettleTitle"
+                                          Disabled="@(_swapping || Exporting)"
+                                          OnBlur="SettleTitleAsync"
                                           OnKeyDown="TitleKeyAsync"
                                           aria-label="Clip Name"
                                           Class="content-field my-0" />

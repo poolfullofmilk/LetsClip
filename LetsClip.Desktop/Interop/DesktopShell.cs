@@ -34,7 +34,7 @@ public sealed class DesktopShell
 
     public event Action? HotkeyChanged;
 
-    public event Action? UpdateFound;
+    public event Action? UpdatesChanged;
 
     public string? HotkeyProblem { get; private set; }
 
@@ -42,6 +42,9 @@ public sealed class DesktopShell
 
     // Newest Release Found, Its Red Dot Stays Until Restart
     public ReleaseInfo? AvailableUpdate { get; private set; }
+
+    // What The Last Update Brought, Shown Once The Window Opens
+    private IReadOnlyList<string>? _changes;
 
     public void Attach(WindowMessages messages)
     {
@@ -58,7 +61,19 @@ public sealed class DesktopShell
         }
 
         _updateOffered |= offered;
-        UpdateFound?.Invoke();
+        UpdatesChanged?.Invoke();
+    }
+
+    public void ReportChanges(IReadOnlyList<string> changes)
+    {
+        _changes = changes;
+        UpdatesChanged?.Invoke();
+    }
+
+    public IReadOnlyList<string>? TakeChanges()
+    {
+        // Once, However Often The Page Rebuilds
+        return Interlocked.Exchange(ref _changes, null);
     }
 
     public ReleaseInfo? TakeUnofferedUpdate()

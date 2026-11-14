@@ -71,6 +71,7 @@ public static class MediaProbe
             stream.CodecType == "video" && stream.Disposition?.AttachedPic != 1
         );
         var audio = streams.FirstOrDefault(stream => stream.CodecType == "audio");
+        var tracks = streams.Where(stream => stream.CodecType == "audio").ToList();
 
         // Average Rate First, Variable Rate Streams Report Their Real Pace
         var frameRate = RateOf(video?.AvgFrameRate) is > 0 and var average
@@ -92,7 +93,10 @@ public static class MediaProbe
             audio?.CodecName,
             probe.Packets is { } packets
                 ? MapOf(packets, video?.Index, audio?.Index, format.Duration)
-                : null
+                : null,
+            tracks.Count,
+            // LetsClip's Own Mix, Game And Microphone, Named In That Order
+            tracks.Select(track => track.Tags?.HandlerName).SequenceEqual(AudioTracks.Separate)
         );
     }
 
@@ -169,8 +173,11 @@ public static class MediaProbe
         double? Duration,
         string? AvgFrameRate,
         string? RFrameRate,
-        ProbeDisposition? Disposition
+        ProbeDisposition? Disposition,
+        ProbeTags? Tags
     );
+
+    private sealed record ProbeTags(string? HandlerName);
 
     private sealed record ProbeDisposition(int AttachedPic);
 }

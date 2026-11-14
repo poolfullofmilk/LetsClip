@@ -16,6 +16,10 @@ public sealed class ClipLibrary : IDisposable
 
     // A Cut Clip's Full Original Waits Here, Hidden Beside It
     private const string OriginalsFolder = ".Originals";
+    public const string ExportsFolder = "Exports";
+
+    // Copies To Another Drive Move In Pieces This Big
+    private const int CopyBuffer = 4 * 1024 * 1024;
     private const string ThumbnailSuffix = ".jpg";
 
     // Frames In A Strip, Each Twice The Timeline's Height
@@ -27,6 +31,10 @@ public sealed class ClipLibrary : IDisposable
 
     private static readonly TimeSpan s_replaceRetry = TimeSpan.FromSeconds(1);
     private static readonly string s_stripSuffix = $".strip{StripCells}.jpg";
+
+    // The Sound's Outline, Drawn Under The Strip Once Per File
+    private const string WaveSuffix = ".wave.jpg";
+    private const string WaveSize = "1600x64";
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
     private static readonly string s_metadataDirectory = Path.Combine(
         AppInfo.DataDirectory,
@@ -217,6 +225,334 @@ public sealed class ClipLibrary : IDisposable
             metadata.IsEdited
         );
     }
+
+    #region Names And Moves
+    public static async Task<string> RenameAsync(string path, string? title)
+    {
+        // The File Carries The Name, So Shared Copies Do Too
+        var metadata =
+            MetadataOf(path) ?? throw new InvalidDataException("The clip could not be read");
+        var folder = Path.GetDirectoryName(path)!;
+        var stem =
+            ClipNames.FileSafe(title)
+            ?? ClipNames.For(
+                ClipNames.SourceOf(metadata.Game, metadata.Monitor),
+                metadata.RecordedAt
+            );
+
+        // Only Its Own Name Changing Case Keeps The Same Path
+        var target = string.Equals(
+            stem,
+            Path.GetFileNameWithoutExtension(path),
+            StringComparison.OrdinalIgnoreCase
+        )
+            ? Path.Combine(folder, stem + Path.GetExtension(path))
+            : ClipSaver.UniquePath(folder, stem);
+        if (target != path)
+        {
+            var original = OwnedOriginalOf(path);
+            await ReplaceWhileBusyAsync(() => File.Move(path, target));
+            MoveDetails(path, target);
+            if (original is not null)
+            {
+                MoveOriginal(original, target);
+            }
+
+            s_logger.Info($"Renamed {Path.GetFileName(path)} To {Path.GetFileName(target)}");
+        }
+
+        UpdateMetadata(target, stored => stored with { Title = title });
+        return target;
+    }
+
+    public async Task NameFilesAsync()
+    {
+        // Clips Named Before Names Moved Into Files Get Theirs Once
+        foreach (var path in ClipsIn(Folder))
+        {
+            var title = MetadataOf(path)?.Title;
+            if (
+                ClipNames.FileSafe(title) is { } stem
+                && !Path.GetFileNameWithoutExtension(path)
+                    .StartsWith(stem, StringComparison.OrdinalIgnoreCase)
+            )
+            {
+                try
+                {
+                    await RenameAsync(path, title);
+                }
+                catch (Exception exception)
+                    when (exception
+                            is IOException
+                                or UnauthorizedAccessException
+                                or InvalidDataException
+                    )
+                {
+                    // In Use Now, The Next Start Names It
+                    s_logger.Warn($"Failed To Name A Clip File {exception.GetType().Name}");
+                }
+            }
+        }
+    }
+
+    public static async Task<(int Moved, int Failed)> MoveAllAsync(
+        string from,
+        string to,
+        IProgress<(long Moved, long Total)> progress
+    )
+    {
+        // Clips With Their Originals And Details, Then Exports, Never Overwriting
+        var exportsFrom = Path.Combine(from, ExportsFolder);
+        var exportsTo = Path.Combine(to, ExportsFolder);
+        var total = BytesToMove(from);
+        var done = 0L;
+        void Moved(long bytes)
+        {
+            done += bytes;
+            progress.Report((done, Math.Max(done, total)));
+        }
+
+        // Clips Saved Meanwhile Land In The Old Folder, Passes Repeat
+        var moved = 0;
+        HashSet<string> stuck = [with(StringComparer.OrdinalIgnoreCase)];
+        for (var pass = 0; pass < 3; pass++)
+        {
+            var waiting = ClipsIn(from).Where(clip => !stuck.Contains(clip)).ToList();
+            foreach (var clip in waiting)
+            {
+                try
+                {
+                    var target = ClipSaver.UniquePath(to, Path.GetFileNameWithoutExtension(clip));
+                    var original = OwnedOriginalOf(clip);
+                    await MoveFileAsync(clip, target, Moved);
+                    MoveDetails(clip, target);
+                    if (original is not null)
+                    {
+                        await MoveFileAsync(original, OriginalPathOf(target), Moved);
+                    }
+
+                    moved++;
+                }
+                catch (Exception exception)
+                    when (exception is IOException or UnauthorizedAccessException)
+                {
+                    // In Use Or Unreadable, It Stays Where It Was
+                    stuck.Add(clip);
+                    s_logger.Warn($"Failed To Move A Clip {exception.GetType().Name}");
+                }
+            }
+        }
+
+        foreach (var export in ClipsIn(exportsFrom))
+        {
+            try
+            {
+                await MoveFileAsync(
+                    export,
+                    ClipSaver.UniquePath(exportsTo, Path.GetFileNameWithoutExtension(export)),
+                    Moved
+                );
+            }
+            catch (Exception exception)
+                when (exception is IOException or UnauthorizedAccessException)
+            {
+                stuck.Add(export);
+                s_logger.Warn($"Failed To Move An Export {exception.GetType().Name}");
+            }
+        }
+
+        // Only Emptied Folders Go, Anything Else Stays
+        RemoveEmptyFolder(Path.Combine(from, OriginalsFolder));
+        RemoveEmptyFolder(exportsFrom);
+        RemoveEmptyFolder(from);
+        s_logger.Info(
+            $"Moved {moved} Clips And {Formatter.FormatSize(done)} To {to}, {stuck.Count} Stayed"
+        );
+        return (moved, stuck.Count);
+    }
+
+    public static long BytesToMove(string from)
+    {
+        // Clips, Their Kept Originals And The Exports
+        return ClipsIn(from)
+                .Sum(clip =>
+                    new FileInfo(clip).Length
+                    + (OwnedOriginalOf(clip) is { } kept ? new FileInfo(kept).Length : 0)
+                )
+            + ClipsIn(Path.Combine(from, ExportsFolder)).Sum(export => new FileInfo(export).Length);
+    }
+
+    public static bool HasRoomFor(string to, string from, long bytes)
+    {
+        // The Same Drive Only Renames, Another Needs The Space
+        try
+        {
+            var target = new DriveInfo(Path.GetFullPath(to));
+            return string.Equals(
+                    target.Name,
+                    Path.GetPathRoot(Path.GetFullPath(from)),
+                    StringComparison.OrdinalIgnoreCase
+                )
+                || target.AvailableFreeSpace > bytes + 100_000_000;
+        }
+        catch (Exception exception)
+            when (exception is IOException or ArgumentException or UnauthorizedAccessException)
+        {
+            // Unknown Space Is Tried, A Failed File Then Stays
+            return true;
+        }
+    }
+
+    private static List<string> ClipsIn(string folder)
+    {
+        // Finished Files Only, A Partial Save Never Moves
+        try
+        {
+            return Directory.Exists(folder)
+                ?
+                [
+                    .. Directory
+                        .EnumerateFiles(folder, "*.mp4")
+                        .Where(path =>
+                            !Path.GetFileName(path)
+                                .StartsWith(PartialPrefix, StringComparison.Ordinal)
+                        ),
+                ]
+                : [];
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // An Unreadable Folder Holds Nothing To Move
+            return [];
+        }
+    }
+
+    private static async Task MoveFileAsync(string source, string target, Action<long> moved)
+    {
+        // The Same Drive Renames At Once, Another Copies With Progress
+        var length = new FileInfo(source).Length;
+        var folder = Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        if (folder.Name == OriginalsFolder)
+        {
+            folder.Attributes |= FileAttributes.Hidden;
+        }
+
+        if (
+            string.Equals(
+                Path.GetPathRoot(Path.GetFullPath(source)),
+                Path.GetPathRoot(Path.GetFullPath(target)),
+                StringComparison.OrdinalIgnoreCase
+            )
+        )
+        {
+            await ReplaceWhileBusyAsync(() => File.Move(source, target));
+            moved(length);
+            return;
+        }
+
+        var temporary = PartialPathIn(folder.FullName);
+        try
+        {
+            var times = new FileInfo(source);
+            await using (
+                var input = new FileStream(
+                    source,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.Read,
+                    CopyBuffer,
+                    FileOptions.Asynchronous | FileOptions.SequentialScan
+                )
+            )
+            await using (
+                var output = new FileStream(
+                    temporary,
+                    FileMode.CreateNew,
+                    FileAccess.Write,
+                    FileShare.None,
+                    CopyBuffer,
+                    FileOptions.Asynchronous
+                )
+            )
+            {
+                var buffer = new byte[CopyBuffer];
+                int read;
+                while ((read = await input.ReadAsync(buffer)) > 0)
+                {
+                    await output.WriteAsync(buffer.AsMemory(0, read));
+                    moved(read);
+                }
+            }
+
+            // The Same Times As Before, So Its Details Still Match
+            File.SetCreationTimeUtc(temporary, times.CreationTimeUtc);
+            File.SetLastWriteTimeUtc(temporary, times.LastWriteTimeUtc);
+            File.Move(temporary, target);
+            await ReplaceWhileBusyAsync(() => File.Delete(source));
+        }
+        finally
+        {
+            TryDelete(temporary);
+        }
+    }
+
+    private static void MoveDetails(string from, string to)
+    {
+        // Its Details And Pictures Follow The File
+        lock (s_metadataGate)
+        {
+            if (ReadStored(from) is { } stored)
+            {
+                WriteMetadata(to, stored);
+                TryDelete(MetadataPathOf(from));
+            }
+        }
+
+        if (!Directory.Exists(AppInfo.ThumbnailsDirectory))
+        {
+            return;
+        }
+
+        var key = FilePaths.KeyOf(to);
+        foreach (var picture in PicturesOf(FilePaths.KeyOf(from)).ToList())
+        {
+            try
+            {
+                File.Move(
+                    picture,
+                    Path.Combine(
+                        AppInfo.ThumbnailsDirectory,
+                        key + Path.GetFileName(picture)[FilePaths.KeyLength..]
+                    ),
+                    overwrite: true
+                );
+            }
+            catch (Exception exception)
+                when (exception is IOException or UnauthorizedAccessException)
+            {
+                // A Missing Picture Is Made Again
+            }
+        }
+    }
+
+    private static void MoveOriginal(string original, string clip)
+    {
+        // Beside Its Clip's New Name, A Stale One Set Aside
+        var target = OriginalPathOf(clip);
+        if (File.Exists(target))
+        {
+            File.Move(
+                target,
+                ClipSaver.UniquePath(
+                    Path.GetDirectoryName(target)!,
+                    Path.GetFileNameWithoutExtension(target)
+                )
+            );
+        }
+
+        File.Move(original, target);
+    }
+    #endregion
 
     public static ClipMetadata? MetadataOf(string path)
     {
@@ -666,17 +1002,48 @@ public sealed class ClipLibrary : IDisposable
         }
     }
 
+    public static Task<string?> EnsureWaveAsync(
+        string path,
+        double duration,
+        CancellationToken token
+    )
+    {
+        // White On Black, The Page Lays It Over The Strip
+        return RenderAsync(
+            PicturePathOf(path, WaveSuffix),
+            [
+                "-i",
+                path,
+                "-filter_complex",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"[0:a:0]atrim=0:{FFmpeg.Seconds(duration)},showwavespic=s={WaveSize}:colors=white:scale=sqrt:draw=full:filter=peak"
+                ),
+                "-frames:v",
+                "1",
+                "-q:v",
+                "3",
+            ],
+            TimeSpan.FromSeconds(60),
+            token
+        );
+    }
+
+    private static string KindOf(string picture)
+    {
+        return picture.EndsWith(s_stripSuffix, StringComparison.Ordinal) ? s_stripSuffix
+            : picture.EndsWith(WaveSuffix, StringComparison.Ordinal) ? WaveSuffix
+            : ThumbnailSuffix;
+    }
+
     private static void DeleteOlderPictures(string target)
     {
         // Other Generations Of This Clip's Same Kind Of Picture
-        var isStrip = target.EndsWith(s_stripSuffix, StringComparison.Ordinal);
+        var kind = KindOf(target);
         var name = Path.GetFileName(target);
         foreach (var older in PicturesOf(name[..FilePaths.KeyLength]))
         {
-            if (
-                older != target
-                && older.EndsWith(s_stripSuffix, StringComparison.Ordinal) == isStrip
-            )
+            if (older != target && KindOf(older) == kind)
             {
                 TryDelete(older);
             }

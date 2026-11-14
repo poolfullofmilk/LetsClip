@@ -27,13 +27,19 @@ public sealed partial class GameWatcher : IDisposable
         "msedgewebview2",
     ];
 
-    // Discord's Own Builds, Any Of Them May Run
-    private static readonly string[] s_discordNames =
+    // Voice Chat Apps, Discord's Own Builds And Others Gamers Use
+    private static readonly string[] s_voiceNames =
     [
         "Discord",
         "DiscordPTB",
         "DiscordCanary",
         "DiscordDevelopment",
+        "Vesktop",
+        "Legcord",
+        "TeamSpeak",
+        "ts3client_win64",
+        "mumble",
+        "steam",
     ];
 
     private readonly Timer _timer;
@@ -71,9 +77,9 @@ public sealed partial class GameWatcher : IDisposable
         }
     }
 
-    public static IReadOnlyList<int> DiscordProcesses()
+    public static IReadOnlyList<int> VoiceProcesses()
     {
-        // Each Build's Oldest Process, Its Tree Plays Every Voice
+        // Each App's Oldest Process, Its Tree Plays Every Voice
         var processes = Process.GetProcesses();
         try
         {
@@ -81,13 +87,10 @@ public sealed partial class GameWatcher : IDisposable
             [
                 .. processes
                     .Where(process =>
-                        s_discordNames.Contains(
-                            process.ProcessName,
-                            StringComparer.OrdinalIgnoreCase
-                        )
+                        s_voiceNames.Contains(process.ProcessName, StringComparer.OrdinalIgnoreCase)
                     )
                     .GroupBy(process => process.ProcessName, StringComparer.OrdinalIgnoreCase)
-                    .Select(build => build.MinBy(StartTimeOf)!.Id),
+                    .Select(app => app.MinBy(StartTimeOf)!.Id),
             ];
         }
         finally
@@ -205,6 +208,11 @@ public sealed partial class GameWatcher : IDisposable
                 process.Dispose();
             }
         }
+    }
+
+    public static nint ForegroundWindow()
+    {
+        return GetForegroundWindow();
     }
 
     public static AddedGame? ForegroundApp()

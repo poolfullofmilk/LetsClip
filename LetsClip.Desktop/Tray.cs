@@ -108,6 +108,7 @@ public sealed class Tray
         };
         _controller.Exports.Finished += NotifyExported;
         _ = KeepUpdatedAsync();
+        _ = FindChangesAsync();
 
         // A Tray Start Shows No Panel, So Say It Here
         if (
@@ -206,6 +207,29 @@ public sealed class Tray
         }
     }
 
+    private async Task FindChangesAsync()
+    {
+        // A New Build Shows What It Brought, Once
+        var seen = _controller.Settings.SeenCommit;
+        if (!Updater.CanInstall || AppInfo.Commit is not { } commit || seen == commit)
+        {
+            return;
+        }
+
+        // Unreadable Now, The Next Start Asks Again
+        var changes = seen is null ? [] : await Updater.ChangesAsync(seen, commit);
+        if (changes is null)
+        {
+            return;
+        }
+
+        _controller.UpdateSettings(settings => settings with { SeenCommit = commit });
+        if (changes is [_, ..])
+        {
+            _shell.ReportChanges(changes);
+        }
+    }
+
     private async Task<ReleaseInfo?> FindUpdateAsync()
     {
         // A Newer Release Gets Its Dialog And The Red Dot
@@ -301,7 +325,10 @@ public sealed class Tray
                 return;
             }
 
-            ShowBalloon("Clip Not Saved", error);
+            if (!ToastInGame("Clip Not Saved", error, isWarning: true))
+            {
+                ShowBalloon("Clip Not Saved", error);
+            }
         });
     }
 
@@ -358,8 +385,28 @@ public sealed class Tray
         );
     }
 
+    private bool ToastInGame(string text, string? detail, bool isWarning = false)
+    {
+        // A Full Screen Game Can Hide Balloons, A Toast Shows
+        if (
+            MonitorCatalog.FilledBy(_controller.Monitors, GameWatcher.ForegroundWindow())
+            is not { } monitor
+        )
+        {
+            return false;
+        }
+
+        MonitorOverlay.Toast(monitor, text, detail, isWarning);
+        return true;
+    }
+
     private void NotifySaved(ClipInfo clip)
     {
+        if (ToastInGame("Clip Saved", Formatter.FormatDuration(clip.Duration)))
+        {
+            return;
+        }
+
         _balloonClick = () => _window.OpenClip(clip.Path);
         TrayBalloon.ShowQuiet(
             _icon,

@@ -43,13 +43,14 @@ public partial class ClipEditor : IAsyncDisposable
     private CancellationTokenSource? _lifetime;
     private DotNetObjectReference<ClipEditor>? _reference;
     private Action? _pendingTrim;
-    private Action? _pendingTitle;
     private PlayerClock? _clock;
     private ElementReference _video;
     private ElementReference _playhead;
     private ElementReference _timeline;
     private ElementReference _strip;
     private string? _drawnStrip;
+    private string? _waveUrl;
+    private string? _drawnWave;
 
     private static int StripCells => ClipLibrary.StripCells;
     private string? _path;
@@ -79,6 +80,9 @@ public partial class ClipEditor : IAsyncDisposable
     private Timer? _saveTimer;
     private MudTextField<string>? _titleField;
     private string _titleText = "";
+
+    // The File's Name, Typing Changes Only The Shown One
+    private string? _savedTitle;
 
     // No Disk Read, The Loaded Clip Knows Its Write Time
     private string VideoUrl => _clip is null ? "" : DesktopShell.ClipUrl(_clip);
@@ -143,15 +147,16 @@ public partial class ClipEditor : IAsyncDisposable
 
         // Only A Plain File Name In The Clips Folder
         if (
-            Path.GetFileName(FileName) != FileName
-            || !FileName.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase)
+            _loadedName is not { } fileName
+            || Path.GetFileName(fileName) != fileName
+            || !fileName.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase)
         )
         {
             ShowMissing();
             return;
         }
 
-        var path = Path.Combine(Controller.Settings.ClipsDirectory, FileName);
+        var path = Path.Combine(Controller.Settings.ClipsDirectory, fileName);
         // One Probe Reads The Streams And Every Packet
         var clip = await Task.Run(() => Controller.Library.GetAsync(path, token), token);
         var media = clip is null
@@ -224,6 +229,12 @@ public partial class ClipEditor : IAsyncDisposable
         (_clip, _media, _path) = (loaded.Clip, loaded.Media, loaded.Path);
         Controller.Exports.Editor = (loaded.Path, CutHereAsync);
         (_stripUrl, _duration, _range) = (loaded.StripUrl, loaded.Media.Duration, loaded.Range);
+        _waveUrl = null;
+        if (loaded.Media.HasAudio)
+        {
+            _ = LoadWaveAsync(loaded.Path, loaded.Media.Duration, loaded.Token);
+        }
+        _savedTitle = loaded.Clip.CustomTitle;
         (_titleText, _swapping, _playError, _paused) = (
             loaded.Clip.CustomTitle ?? "",
             false,
@@ -239,7 +250,7 @@ public partial class ClipEditor : IAsyncDisposable
         }
 
         s_logger.Info(
-            $"Opened {FileName} In The Editor, {Formatter.FormatDuration(_duration)} At {loaded.Media.Width} × {loaded.Media.Height}, {loaded.Media.FrameRate:0} FPS, Kept {Formatter.FormatDuration(_range.Start)} To {Formatter.FormatDuration(_range.End)}"
+            $"Opened {_loadedName} In The Editor, {Formatter.FormatDuration(_duration)} At {loaded.Media.Width} × {loaded.Media.Height}, {loaded.Media.FrameRate:0} FPS, Kept {Formatter.FormatDuration(_range.Start)} To {Formatter.FormatDuration(_range.End)}"
         );
     }
 
@@ -264,8 +275,15 @@ public partial class ClipEditor : IAsyncDisposable
         // A New Strip Is Drawn To Fit, Whole Frames Only
         if (_stripUrl != _drawnStrip && !string.IsNullOrEmpty(_strip.Id))
         {
-            _drawnStrip = _stripUrl;
+            (_drawnStrip, _drawnWave) = (_stripUrl, null);
             await JavaScript.CallAsync("letsClip.showStrip", _strip);
+        }
+
+        // The Sound's Outline Joins The Strip Whenever It Is Ready
+        if (_waveUrl != _drawnWave && _drawnStrip is not null && !string.IsNullOrEmpty(_strip.Id))
+        {
+            _drawnWave = _waveUrl;
+            await JavaScript.CallAsync("letsClip.showWave", _strip, _waveUrl);
         }
 
         // Element References Arrive One Render After The Markup
@@ -325,6 +343,17 @@ public partial class ClipEditor : IAsyncDisposable
         _lifetime?.Dispose();
         _lifetime = null;
         SaveNow();
+    }
+
+    private async Task LoadWaveAsync(string path, double duration, CancellationToken token)
+    {
+        // A Missing Outline Leaves The Plain Strip
+        var wave = await Task.Run(() => ClipLibrary.EnsureWaveAsync(path, duration, token), token);
+        if (!token.IsCancellationRequested)
+        {
+            _waveUrl = wave is null ? null : DesktopShell.ThumbnailUrl(wave);
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task LoadStripAsync(string path, double duration, CancellationToken token)
@@ -443,7 +472,6 @@ public partial class ClipEditor : IAsyncDisposable
     {
         // Taken Once, So Nothing Is Written Twice
         Interlocked.Exchange(ref _pendingTrim, null)?.Invoke();
-        Interlocked.Exchange(ref _pendingTitle, null)?.Invoke();
     }
 
     private string Percent(double seconds)
@@ -506,37 +534,22 @@ public partial class ClipEditor : IAsyncDisposable
     #region Title
     private void TypeTitle(string text)
     {
+        // Shown At Once, The File Is Renamed When Typing Ends
         _titleText = text;
-        if (_clip is not { } clip || _path is not { } path)
+        if (_clip is { } clip)
         {
-            return;
+            _clip = clip with { CustomTitle = clip.CustomTitleFrom(text) };
         }
-
-        // Empty Or The Shown Default Stores No Name
-        var typed = text.Trim();
-        var title = typed.Length == 0 || typed == clip.DefaultTitle ? null : typed;
-        if (title == clip.CustomTitle)
-        {
-            return;
-        }
-
-        _clip = clip with { CustomTitle = title };
-        var fileName = FileName;
-        Volatile.Write(
-            ref _pendingTitle,
-            () =>
-            {
-                ClipLibrary.UpdateMetadata(path, metadata => metadata with { Title = title });
-                s_logger.Info($"Renamed {fileName} To {title ?? "Its Default Name"}");
-            }
-        );
-        SaveSoon();
     }
 
-    private void SettleTitle()
+    private async Task SettleTitleAsync()
     {
-        // Leaving Writes At Once, Trimmed Like The Saved Name
-        SaveNow();
+        // Leaving The Field Renames The File, Trimmed Like Before
+        if (_clip is { } clip && _path is { } path && clip.CustomTitle != _savedTitle)
+        {
+            await ReplaceFileAsync(() => ClipLibrary.RenameAsync(path, clip.CustomTitle));
+        }
+
         _titleText = _clip?.CustomTitle ?? "";
     }
 
@@ -568,9 +581,11 @@ public partial class ClipEditor : IAsyncDisposable
         var keepOriginal = !Controller.Settings.DeleteOriginals;
         _cutting = true;
         StateHasChanged();
-        var cut = await ReplaceFileAsync(() =>
-            ClipLibrary.CutAsync(path, range, keepOriginal, CancellationToken.None)
-        );
+        var cut = await ReplaceFileAsync(async () =>
+        {
+            await ClipLibrary.CutAsync(path, range, keepOriginal, CancellationToken.None);
+            return path;
+        });
         _cutting = false;
         StateHasChanged();
         if (cut)
@@ -600,7 +615,11 @@ public partial class ClipEditor : IAsyncDisposable
         }
 
         _restoring = true;
-        var restored = await ReplaceFileAsync(() => ClipLibrary.RestoreAsync(path));
+        var restored = await ReplaceFileAsync(async () =>
+        {
+            await ClipLibrary.RestoreAsync(path);
+            return path;
+        });
         _restoring = false;
         if (restored)
         {
@@ -608,7 +627,7 @@ public partial class ClipEditor : IAsyncDisposable
         }
     }
 
-    private async Task<bool> ReplaceFileAsync(Func<Task> replace)
+    private async Task<bool> ReplaceFileAsync(Func<Task<string>> replace)
     {
         // One At A Time, Nothing May Reattach Meanwhile
         if (_swapping)
@@ -623,8 +642,15 @@ public partial class ClipEditor : IAsyncDisposable
         var replaced = false;
         try
         {
-            await Task.Run(replace);
+            var replacedPath = await Task.Run(replace);
             replaced = true;
+
+            // A Rename Opens The Clip Under Its New Name
+            if (Path.GetFileName(replacedPath) is var name && name != _loadedName)
+            {
+                _loadedName = name;
+                NavigationManager.NavigateTo(Clips.EditorOf(replacedPath), replace: true);
+            }
         }
         catch (Exception exception)
             when (exception
@@ -634,7 +660,7 @@ public partial class ClipEditor : IAsyncDisposable
                         or TimeoutException
             )
         {
-            s_logger.Warn($"Failed To Replace {FileName} {exception.GetType().Name}");
+            s_logger.Warn($"Failed To Replace {_loadedName} {exception.GetType().Name}");
             Snackbar.Add("The clip could not be changed, it may be in use", Severity.Warning);
         }
 
@@ -677,9 +703,32 @@ public partial class ClipEditor : IAsyncDisposable
         }
     }
 
+    private void ShowSourceClips()
+    {
+        if (_clip is { } clip)
+        {
+            Clips.ShowOnly(clip.Source);
+            Back();
+        }
+    }
+
     private void Back()
     {
         NavigationManager.NavigateTo(Clips.Route);
+    }
+
+    private static async Task RenameAfterLeavingAsync(string path, string? title)
+    {
+        try
+        {
+            await ClipLibrary.RenameAsync(path, title);
+        }
+        catch (Exception exception)
+            when (exception is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            // Kept Under Its Old Name, Nothing Is Lost
+            s_logger.Warn($"Failed To Rename A Left Clip {exception.GetType().Name}");
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -690,6 +739,13 @@ public partial class ClipEditor : IAsyncDisposable
         _saveTimer?.Dispose();
         EndClip();
         await DetachAsync();
+
+        // A Name Typed Without Leaving The Field Still Lands
+        if (_clip is { } clip && _path is { } path && clip.CustomTitle != _savedTitle)
+        {
+            _ = Task.Run(() => RenameAfterLeavingAsync(path, clip.CustomTitle));
+        }
+
         _page?.Dispose();
         GC.SuppressFinalize(this);
     }

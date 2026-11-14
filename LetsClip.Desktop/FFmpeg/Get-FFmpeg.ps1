@@ -1,9 +1,9 @@
-# Fetches the pinned FFmpeg build into this folder and checks it before use
+# Fetches And Checks LetsClip's Pinned FFmpeg Build
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
-$url = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-11-03-12-50/ffmpeg-n9.0.2-45-g1e65c6cd5d-win64-gpl-shared-9.0.zip'
-$expected = '0D95666AD79DDBBD920860AA06057DB39570F7A1EFD5BFA9E7606AD4AF278E97'
+$url = 'https://github.com/poolfullofmilk/LetsClip/releases/download/ffmpeg-9.0.2-letsclip-1/ffmpeg-9.0.2-letsclip-1.zip'
+$expected = '533D95F9C15255E36758B06F96C126724F6B885B7762222B8D6A3B51F57D3778'
 $target = $PSScriptRoot
 $work = Join-Path ([System.IO.Path]::GetTempPath()) ("LetsClip-FFmpeg-" + [guid]::NewGuid().ToString('N'))
 
@@ -18,9 +18,9 @@ try {
 
     Expand-Archive $zip -DestinationPath $work
     $root = Get-ChildItem $work -Directory | Select-Object -First 1
-    Get-ChildItem (Join-Path $root.FullName 'bin') | Where-Object Name -ne 'ffplay.exe' | Copy-Item -Destination $target -Force
+    Get-ChildItem (Join-Path $root.FullName 'bin') | Copy-Item -Destination $target -Force
     Copy-Item (Join-Path $root.FullName 'LICENSE.txt') (Join-Path $target 'LICENSE.txt') -Force
-    Write-Output "FFmpeg 9.0.2 ready in $target"
+    Write-Output "FFmpeg 9.0.2 for LetsClip ready in $target"
 }
 finally {
     Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue

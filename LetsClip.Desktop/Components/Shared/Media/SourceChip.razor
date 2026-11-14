@@ -4,6 +4,7 @@
          Size="Size.Small"
          Variant="@(OnPicture ? Variant.Filled : Variant.Text)"
          Color="@(OnPicture ? Color.Dark : Color.Default)"
-         Class="source-chip ma-0">
+         Class="@(OnClick.HasDelegate ? "source-chip action-chip ma-0" : "source-chip ma-0")"
+         OnClick="OnClick">
     @Clip.Source
 </MudChip>

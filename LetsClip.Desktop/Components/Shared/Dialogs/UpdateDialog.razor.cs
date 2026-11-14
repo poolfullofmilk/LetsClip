@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Windows;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
+using LetsClip.Desktop.Components.Shared.Common;
 using LetsClip.Desktop.Interop;
 using LetsClip.Services.Integration;
 using Microsoft.AspNetCore.Components;
@@ -25,18 +26,16 @@ public partial class UpdateDialog
     public required ReleaseInfo Release { get; set; }
 
     private bool _isInstalling;
-
-    // Bytes So Far, Zero Total While No Length Is Sent
-    private long _received;
-    private long _total;
-    private int _percent;
+    private IReadOnlyList<string>? _changes;
+    private TransferProgress? _progress;
 
     private string Title => $"LetsClip {Release.Tag} is Out";
 
-    private string ProgressText =>
-        _total > 0 && _received >= _total ? "Starting the New Version"
-        : _total > 0 ? $"{Formatter.FormatSize(_received)} of {Formatter.FormatSize(_total)}"
-        : Formatter.FormatSize(_received);
+    protected override async Task OnInitializedAsync()
+    {
+        // Every Commit Since This Build, Read While The Dialog Shows
+        _changes = await Updater.ChangesAsync(AppInfo.Commit, Release.Tag);
+    }
 
     private async Task InstallAsync()
     {
@@ -56,7 +55,9 @@ public partial class UpdateDialog
             {
                 await tray.InstallUpdateAsync(
                     Release,
-                    new Progress<(long Received, long Total)>(ShowProgress)
+                    new Progress<(long Received, long Total)>(progress =>
+                        _progress?.Report(progress)
+                    )
                 );
             }
         }
@@ -87,24 +88,6 @@ public partial class UpdateDialog
             _isInstalling = false;
             await SetClosableAsync(true);
         }
-    }
-
-    private void ShowProgress((long Received, long Total) progress)
-    {
-        // Redraws Once Per Percent, Not Per Chunk
-        var (received, total) = progress;
-        var percent = total > 0 ? (int)(received * 100 / total) : 0;
-        var moved =
-            total != _total || (total > 0 ? percent != _percent : received - _received >= 1048576);
-        if (!moved)
-        {
-            return;
-        }
-
-        _received = received;
-        _total = total;
-        _percent = percent;
-        _ = InvokeAsync(StateHasChanged);
     }
 
     private Task SetClosableAsync(bool closable)

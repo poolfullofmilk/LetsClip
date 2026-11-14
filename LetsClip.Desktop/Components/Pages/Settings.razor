@@ -6,18 +6,22 @@
             Class="page-fill fill-column">
     <Header Title="Settings"
             Scrolls>
-        <MudElement HtmlTag="div"
-                    Class="settings-grid">
-            @* Recording Settings *@
-            <Panel Title="Recording">
-                <Actions>
-                    @* Recommended Button *@
-                    <IconButton Icon="@Icons.Material.Rounded.AutoFixHigh"
-                                Text="Use Recommended Settings"
-                                Disabled="Controller.IsRecommended"
-                                OnClick="Controller.UseRecommended" />
-                </Actions>
-                <ChildContent>
+        <TitleContent>
+            <MudSpacer />
+            @* Reset Button *@
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Error"
+                       Size="Size.Small"
+                       Disabled="IsDefault"
+                       OnClick="ResetAsync">
+                Reset to Default
+            </MudButton>
+        </TitleContent>
+        <ChildContent>
+            <MudElement HtmlTag="div"
+                        Class="settings-grid">
+                @* Recording Settings *@
+                <Panel Title="Recording">
                     <SettingRow Title="Games and Apps Only"
                                 Switch="Controller.Settings.GamesOnly"
                                 SwitchChanged="SetGamesOnly">
@@ -36,224 +40,224 @@
                     <SettingRow Title="Start with Windows"
                                 Switch="Controller.Settings.StartWithWindows"
                                 SwitchChanged="SetStartWithWindows" />
-                </ChildContent>
-            </Panel>
+                </Panel>
 
-            @* Saving Settings *@
-            <Panel Title="Saving">
-                <SettingRow Title="Save Hotkey">
-                    @if (HotkeyChipText is { } hotkeyChip)
-                    {
-                        @* Hotkey Problem Chip *@
-                        <Tooltip Text="@HotkeyChipTooltip">
-                            <MudChip T="string"
-                                     Icon="@Icons.Material.Rounded.Warning"
-                                     Color="Color.Warning"
-                                     Size="Size.Small"
-                                     Variant="Variant.Text"
-                                     Class="@(_capturingKey ? "ma-0" : "ma-0 action-chip")"
-                                     OnClick="StartKeysAsync">
-                                @hotkeyChip
-                            </MudChip>
-                        </Tooltip>
-                    }
-                    @if (_capturingKey)
-                    {
-                        @* Cancel Keys Button *@
-                        <MudButton Variant="Variant.Text"
-                                   Color="Color.Error"
-                                   Size="Size.Small"
-                                   OnClick="CancelKeysAsync">
-                            Cancel
-                        </MudButton>
-                        @* Keep Keys Button *@
-                        <MudButton Variant="Variant.Filled"
-                                   Color="Color.Info"
-                                   Size="Size.Small"
-                                   Disabled="@(_pendingKey is not { IsUsable: true })"
-                                   OnClick="ConfirmKeysAsync">
-                            OK
-                        </MudButton>
-                    }
-                    @* Hotkey Button *@
-                    <Tooltip Text="Change Hotkey"
-                             Disabled="_capturingKey">
-                        <MudButton Variant="Variant.Filled"
-                                   Color="Color.Info"
-                                   Size="Size.Small"
-                                   Class="@(_capturingKey ? "waiting" : null)"
-                                   OnClick="StartKeysAsync">
-                            @HotkeyButtonText
-                        </MudButton>
-                    </Tooltip>
-                </SettingRow>
-                <MudDivider />
-                <SettingRow Title="Save Sound">
-                    @* Save Sound Volume *@
-                    <VolumeButton Text="@(Controller.Settings.SaveSound ? "Mute Save Sound" : "Unmute Save Sound")"
-                                  Filled
-                                  OnClick="ToggleSaveSound"
-                                  Value="@(Controller.Settings.SaveSound ? Controller.Settings.SaveSoundVolume : 0)"
-                                  ValueChanged="SetSaveSoundVolume" />
-                </SettingRow>
-            </Panel>
-
-            @* Audio Settings *@
-            <Panel Title="Audio">
-                <SettingRow Title="System Audio"
-                            Switch="Controller.Settings.SystemAudio"
-                            SwitchChanged="SetSystemAudio"
-                            SwitchDisabled="@(!Controller.Settings.SystemAudio && _playback is [])">
-                    @* Playback Device Select *@
-                    <DeviceSelect Devices="_playback"
-                                  SavedId="@Controller.Settings.SystemAudioDeviceId"
-                                  ValueChanged="SetPlaybackDevice"
-                                  Missing="No Output Device Detected"
-                                  Disabled="@PlaybackDeviceDisabled" />
-                </SettingRow>
-                <MudDivider />
-                <SettingRow Title="Only Record Game and Discord"
-                            Switch="Controller.Settings.OnlyGameAndDiscord"
-                            SwitchChanged="SetOnlyGameAndDiscord"
-                            SwitchDisabled="@(!CanRecordOnlyGameAndDiscord)" />
-                <MudDivider />
-                <SettingRow Title="Microphone"
-                            Switch="Controller.Settings.Microphone"
-                            SwitchChanged="SetMicrophone"
-                            SwitchDisabled="@(!Controller.Settings.Microphone && _microphones is [])">
-                    @* Test Microphone Button *@
-                    <IconButton Icon="@(_meter is null ? Icons.Material.Rounded.Mic : Icons.Material.Rounded.Stop)"
-                                Text="@(_meter is null ? "Test Microphone" : "Stop Test")"
-                                Color="@(_meter is null ? Color.Default : Color.Info)"
-                                Filled
-                                Disabled="@(!Controller.Settings.Microphone || _microphones is [])"
-                                OnClick="ToggleMicrophoneTestAsync" />
-                    @* Microphone Select *@
-                    <DeviceSelect Devices="_microphones"
-                                  SavedId="@Controller.Settings.MicrophoneDeviceId"
-                                  ValueChanged="SetMicrophoneDevice"
-                                  Missing="No Microphone Detected"
-                                  Disabled="@(!Controller.Settings.Microphone)">
-                        @if (_meter is { } meter)
+                @* Saving Settings *@
+                <Panel Title="Saving">
+                    <SettingRow Title="Save Hotkey">
+                        @if (HotkeyChipText is { } hotkeyChip)
                         {
-                            <LevelMeter Read="meter.ReadLevel" />
+                            @* Hotkey Problem Chip *@
+                            <ProblemChip Text="@hotkeyChip"
+                                         Tip="@HotkeyChipTooltip"
+                                         Clickable="!_capturingKey"
+                                         OnClick="StartKeysAsync" />
                         }
-                    </DeviceSelect>
-                </SettingRow>
-                <MudDivider />
-                <SettingRow Title="Microphone Volume">
-                    <MudText Typo="Typo.body2"
-                             Class="mud-text-secondary">
-                        @MicrophoneVolumeText
-                    </MudText>
-                    @* Microphone Volume Slider *@
-                    <MudElement HtmlTag="div"
-                                Class="fixed-width d-flex">
-                        <MudSlider T="double"
-                                   Value="MicrophoneVolume"
-                                   ValueChanged="SetMicrophoneVolume"
-                                   Min="VolumeButton.Step"
-                                   Max="UserSettings.MaximumMicrophoneVolume"
-                                   Step="VolumeButton.Step"
-                                   Color="Color.Info"
-                                   Size="Size.Medium"
-                                   Variant="Variant.Filled"
-                                   Immediate
-                                   Disabled="@(!Controller.Settings.Microphone)"
-                                   aria-label="Microphone Volume" />
-                    </MudElement>
-                </SettingRow>
-                <MudDivider />
-                <SettingRow Title="Noise Cancellation"
-                            Switch="Controller.Settings.NoiseCancellation"
-                            SwitchChanged="SetNoiseCancellationAsync"
-                            SwitchDisabled="@(!Controller.Settings.Microphone)" />
-            </Panel>
-
-            @* Storage Settings *@
-            <Panel Title="Storage"
-                   Id="storage">
-                <SettingRow Title="Clips Folder">
-                    @if (Controller.Settings.ClipsFolder is not null)
-                    {
-                        @* Default Folder Button *@
-                        <IconButton Icon="@Icons.Material.Rounded.Refresh"
-                                    Text="Use Default Folder"
-                                    Filled
-                                    OnClick="UseDefaultFolderAsync" />
-                    }
-                    @* Open Folder Button *@
-                    <Tooltip Text="Open Clips Folder"
-                             RootClass="d-flex path-button">
-                        <MudButton Variant="Variant.Filled"
-                                   Size="Size.Small"
-                                   StartIcon="@Icons.Material.Rounded.FolderOpen"
-                                   OnClick="OpenFolder">
-                            <MudElement HtmlTag="span"
-                                        Class="ellipsis">
-                                @ClipsFolderText
-                            </MudElement>
-                        </MudButton>
-                    </Tooltip>
-                    @* Change Folder Button *@
-                    <MudButton Variant="Variant.Filled"
-                               Color="Color.Info"
-                               Size="Size.Small"
-                               OnClick="PickFolderAsync">
-                        Change
-                    </MudButton>
-                </SettingRow>
-                @* Disk Space Row *@
-                @if (_originalsBytes is null || SpaceText is not null)
-                {
+                        @if (_capturingKey)
+                        {
+                            @* Cancel Keys Button *@
+                            <MudButton Variant="Variant.Text"
+                                       Color="Color.Error"
+                                       Size="Size.Small"
+                                       OnClick="CancelKeysAsync">
+                                Cancel
+                            </MudButton>
+                            @* Keep Keys Button *@
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Info"
+                                       Size="Size.Small"
+                                       Disabled="@(_pendingKey is not { IsUsable: true })"
+                                       OnClick="ConfirmKeysAsync">
+                                OK
+                            </MudButton>
+                        }
+                        @* Hotkey Button *@
+                        <Tooltip Text="Change Hotkey"
+                                 Disabled="_capturingKey">
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Info"
+                                       Size="Size.Small"
+                                       Class="@(_capturingKey ? "waiting" : null)"
+                                       OnClick="StartKeysAsync">
+                                @HotkeyButtonText
+                            </MudButton>
+                        </Tooltip>
+                    </SettingRow>
                     <MudDivider />
-                    <SettingRow Title="Disk Space">
-                        @if (SpaceText is { } spaceText)
+                    <SettingRow Title="Save Sound">
+                        @* Save Sound Volume *@
+                        <VolumeButton Text="@(Controller.Settings.SaveSound ? "Mute Save Sound" : "Unmute Save Sound")"
+                                      Filled
+                                      OnClick="ToggleSaveSound"
+                                      Value="@(Controller.Settings.SaveSound ? Controller.Settings.SaveSoundVolume : 0)"
+                                      ValueChanged="SetSaveSoundVolume" />
+                    </SettingRow>
+                </Panel>
+
+                @* Audio Settings *@
+                <Panel Title="Audio">
+                    <SettingRow Title="System Audio"
+                                Switch="Controller.Settings.SystemAudio"
+                                SwitchChanged="SetSystemAudio"
+                                SwitchDisabled="@(!Controller.Settings.SystemAudio && _playback is [])">
+                        @* Playback Device Select *@
+                        <DeviceSelect Devices="_playback"
+                                      SavedId="@Controller.Settings.SystemAudioDeviceId"
+                                      ValueChanged="SetPlaybackDevice"
+                                      Missing="No Output Device Detected"
+                                      Disabled="@PlaybackDeviceDisabled" />
+                    </SettingRow>
+                    <MudDivider />
+                    <SettingRow Title="Only Record Game and Voice Chat"
+                                Switch="Controller.Settings.OnlyGameAndDiscord"
+                                SwitchChanged="SetOnlyGameAndDiscord"
+                                SwitchDisabled="@(!CanRecordOnlyGameAndDiscord)" />
+                    <MudDivider />
+                    <SettingRow Title="Microphone"
+                                Switch="Controller.Settings.Microphone"
+                                SwitchChanged="SetMicrophone"
+                                SwitchDisabled="@(!Controller.Settings.Microphone && _microphones is [])">
+                        @* Test Microphone Button *@
+                        <IconButton Icon="@(_meter is null ? Icons.Material.Rounded.Mic : Icons.Material.Rounded.Stop)"
+                                    Text="@(_meter is null ? "Test Microphone" : "Stop Test")"
+                                    Color="@(_meter is null ? Color.Default : Color.Info)"
+                                    Filled
+                                    Disabled="@(!Controller.Settings.Microphone || _microphones is [])"
+                                    OnClick="ToggleMicrophoneTestAsync" />
+                        @* Microphone Select *@
+                        <DeviceSelect Devices="_microphones"
+                                      SavedId="@Controller.Settings.MicrophoneDeviceId"
+                                      ValueChanged="SetMicrophoneDevice"
+                                      Missing="No Microphone Detected"
+                                      Disabled="@(!Controller.Settings.Microphone)">
+                            @if (_meter is { } meter)
+                            {
+                                <LevelMeter Read="meter.ReadLevel" />
+                            }
+                        </DeviceSelect>
+                    </SettingRow>
+                    <MudDivider />
+                    <SettingRow Title="Microphone Volume">
+                        <MudText Typo="Typo.body2"
+                                 Class="mud-text-secondary">
+                            @MicrophoneVolumeText
+                        </MudText>
+                        @* Microphone Volume Slider *@
+                        <MudElement HtmlTag="div"
+                                    Class="fixed-width d-flex">
+                            <MudSlider T="double"
+                                       Value="MicrophoneVolume"
+                                       ValueChanged="SetMicrophoneVolume"
+                                       Min="VolumeButton.Step"
+                                       Max="UserSettings.MaximumMicrophoneVolume"
+                                       Step="VolumeButton.Step"
+                                       Color="Color.Info"
+                                       Size="Size.Medium"
+                                       Variant="Variant.Filled"
+                                       Immediate
+                                       Disabled="@(!Controller.Settings.Microphone)"
+                                       aria-label="Microphone Volume" />
+                        </MudElement>
+                    </SettingRow>
+                    <MudDivider />
+                    <SettingRow Title="Noise Cancellation"
+                                Switch="Controller.Settings.NoiseCancellation"
+                                SwitchChanged="SetNoiseCancellationAsync"
+                                SwitchDisabled="@(!Controller.Settings.Microphone)" />
+                </Panel>
+
+                @* Storage Settings *@
+                <Panel Title="Storage"
+                       Id="storage">
+                    <SettingRow Title="Clips Folder">
+                        @if (Controller.Settings.ClipsFolder is not null)
+                        {
+                            @* Default Folder Button *@
+                            <IconButton Icon="@Icons.Material.Rounded.Refresh"
+                                        Text="Use Default Folder"
+                                        Filled
+                                        OnClick="UseDefaultFolderAsync" />
+                        }
+                        @* Open Folder Button *@
+                        <Tooltip Text="Open Clips Folder"
+                                 RootClass="d-flex path-button">
+                            <MudButton Variant="Variant.Filled"
+                                       Size="Size.Small"
+                                       StartIcon="@Icons.Material.Rounded.FolderOpen"
+                                       OnClick="OpenFolder">
+                                <MudElement HtmlTag="span"
+                                            Class="ellipsis">
+                                    @ClipsFolderText
+                                </MudElement>
+                            </MudButton>
+                        </Tooltip>
+                        @* Change Folder Button *@
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Info"
+                                   Size="Size.Small"
+                                   OnClick="PickFolderAsync">
+                            Change
+                        </MudButton>
+                    </SettingRow>
+                    @* Disk Space Row *@
+                    @if (_originalsBytes is null || SpaceText is not null)
+                    {
+                        <MudDivider />
+                        <SettingRow Title="Disk Space">
+                            @if (IsAlmostFull)
+                            {
+                                @* Disk Problem Chip *@
+                                <ProblemChip Text="Almost Full"
+                                             Tip="Open Storage Settings"
+                                             OnClick="OpenStorageSettings" />
+                            }
+                            @if (SpaceText is { } spaceText)
+                            {
+                                <MudText Typo="Typo.body2"
+                                         Class="mud-text-secondary">
+                                    @spaceText
+                                </MudText>
+                            }
+                            else
+                            {
+                                @* Space Spinner *@
+                                <MudProgressCircular Color="Color.Info"
+                                                     Size="Size.Small"
+                                                     Indeterminate />
+                            }
+                        </SettingRow>
+                    }
+                    <MudDivider />
+                    <SettingRow Title="Delete Originals When Cutting"
+                                Switch="Controller.Settings.DeleteOriginals"
+                                SwitchChanged="SetDeleteOriginals" />
+                    <MudDivider />
+                    <SettingRow Title="Kept Originals">
+                        @if (_originalsBytes is { } originals)
                         {
                             <MudText Typo="Typo.body2"
                                      Class="mud-text-secondary">
-                                @spaceText
+                                @(originals > 0 ? Formatter.FormatSize(originals) : "None")
                             </MudText>
                         }
                         else
                         {
-                            @* Space Spinner *@
+                            @* Originals Spinner *@
                             <MudProgressCircular Color="Color.Info"
                                                  Size="Size.Small"
                                                  Indeterminate />
                         }
+                        @* Delete Originals Button *@
+                        <IconButton Icon="@Icons.Material.Rounded.Delete"
+                                    Text="Delete Kept Originals"
+                                    Color="Color.Error"
+                                    Filled
+                                    Disabled="@(_originalsBytes is not > 0)"
+                                    Busy="_listingOriginals"
+                                    OnClick="DeleteOriginalsAsync" />
                     </SettingRow>
-                }
-                <MudDivider />
-                <SettingRow Title="Delete Originals When Cutting"
-                            Switch="Controller.Settings.DeleteOriginals"
-                            SwitchChanged="SetDeleteOriginals" />
-                <MudDivider />
-                <SettingRow Title="Kept Originals">
-                    @if (_originalsBytes is { } originals)
-                    {
-                        <MudText Typo="Typo.body2"
-                                 Class="mud-text-secondary">
-                            @(originals > 0 ? Formatter.FormatSize(originals) : "None")
-                        </MudText>
-                    }
-                    else
-                    {
-                        @* Originals Spinner *@
-                        <MudProgressCircular Color="Color.Info"
-                                             Size="Size.Small"
-                                             Indeterminate />
-                    }
-                    @* Delete Originals Button *@
-                    <IconButton Icon="@Icons.Material.Rounded.Delete"
-                                Text="Delete Kept Originals"
-                                Color="Color.Error"
-                                Filled
-                                Disabled="@(_originalsBytes is not > 0)"
-                                Busy="_listingOriginals"
-                                OnClick="DeleteOriginalsAsync" />
-                </SettingRow>
-            </Panel>
-        </MudElement>
+                </Panel>
+            </MudElement>
+        </ChildContent>
     </Header>
 </MudElement>

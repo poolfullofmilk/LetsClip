@@ -262,7 +262,17 @@ public sealed class CaptureSession(
         var scaledWidth = rotated ? height : width;
         var scaledHeight = rotated ? width : height;
         var chain = new List<string> { source, $"setpts='{clock}'" };
-        if (Encoder.GpuFrames)
+        if (Encoder.GpuFrames && !Encoder.IsQuickSync)
+        {
+            // AMF And NVENC Convert The Monitor's Frames On The GPU
+            chain.Add(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"scale_d3d11=width={width}:height={height}:format=nv12"
+                )
+            );
+        }
+        else if (Encoder.GpuFrames)
         {
             // Quick Sync Turns, Sizes And Converts On The GPU
             var turn = rotation switch
@@ -380,13 +390,19 @@ public sealed class CaptureSession(
         IReadOnlyList<string> layout = separate
             ? ["-ac", "4", "-ch_layout", "4.0"]
             : ["-ac", "2", "-ch_layout", "stereo"];
+
+        // The Mix Plays Everywhere, Game And Voice Ride Beside It
         IReadOnlyList<string> cleaning = separate
             ?
             [
                 "-filter_complex",
-                $"[0:a]asplit[a][b];[a]pan=stereo|c0=c0|c1=c1[system];[b]pan=stereo|c0=c2|c1=c3,{voice}[voice];[system][voice]amix=inputs=2:normalize=0[audio]",
+                $"[0:a]asplit[a][b];[a]pan=stereo|c0=c0|c1=c1,asplit[system][game];[b]pan=stereo|c0=c2|c1=c3,{voice},asplit[voice][microphone];[system][voice]amix=inputs=2:normalize=0[mix]",
                 "-map",
-                "[audio]",
+                "[mix]",
+                "-map",
+                "[game]",
+                "-map",
+                "[microphone]",
             ]
             : [];
         return

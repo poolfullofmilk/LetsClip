@@ -25,7 +25,28 @@
             </ChoiceSelect>
         </MudElement>
     </SettingRow>
-    @if (Media.HasAudio)
+    @if (Media.HasSeparateTracks)
+    {
+        <SettingRow Title="Game Audio">
+            @* Game Audio Button *@
+            <IconButton Icon="@(KeepsGame ? Icons.Material.Rounded.VolumeUp : Icons.Material.Rounded.VolumeOff)"
+                        Text="@(KeepsGame ? "Mute Game Audio" : "Unmute Game Audio")"
+                        Color="@(KeepsGame ? Color.Default : Color.Error)"
+                        Filled
+                        Disabled="@(IsExporting || Busy)"
+                        OnClick="ToggleAudio" />
+        </SettingRow>
+        <SettingRow Title="Microphone">
+            @* Microphone Button *@
+            <IconButton Icon="@(KeepsMicrophone ? Icons.Material.Rounded.Mic : Icons.Material.Rounded.MicOff)"
+                        Text="@(KeepsMicrophone ? "Mute Microphone" : "Unmute Microphone")"
+                        Color="@(KeepsMicrophone ? Color.Default : Color.Error)"
+                        Filled
+                        Disabled="@(IsExporting || Busy)"
+                        OnClick="ToggleMicrophone" />
+        </SettingRow>
+    }
+    else if (Media.HasAudio)
     {
         <SettingRow Title="Audio">
             @* Audio Button *@
@@ -68,7 +89,7 @@
         {
             <Notice Text="@TooLongText" />
         }
-        else if (OtherExporting)
+        else if (OtherExporting && !OnlyCopies)
         {
             <MudText Typo="Typo.caption"
                      Align="Align.Center"
@@ -119,7 +140,7 @@
                 @* Export Button *@
                 <MudButton Variant="Variant.Filled"
                            Color="Color.Info"
-                           StartIcon="@Icons.Material.Rounded.Movie"
+                           StartIcon="@(OnlyCopies ? Icons.Material.Rounded.ContentCopy : Icons.Material.Rounded.Movie)"
                            Disabled="@(!CanExport)"
                            Class="flex-grow-1"
                            OnClick="ExportAsync">

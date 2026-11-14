@@ -1,0 +1,12 @@
+@* Problem Chip *@
+<Tooltip Text="@Tip">
+    <MudChip T="string"
+             Icon="@Icons.Material.Rounded.Warning"
+             Color="Color.Warning"
+             Size="Size.Small"
+             Variant="Variant.Text"
+             Class="@(Clickable ? "ma-0 action-chip" : "ma-0")"
+             OnClick="OnClick">
+        @Text
+    </MudChip>
+</Tooltip>

@@ -30,7 +30,7 @@ public partial class MainLayout : IDisposable
     protected override void OnInitialized()
     {
         Shell.OpenClipRequested += OnOpenClipRequested;
-        Shell.UpdateFound += OnUpdateFound;
+        Shell.UpdatesChanged += OnUpdatesChanged;
         if (Shell.TakePendingClip() is { } pending)
         {
             OnOpenClipRequested(pending);
@@ -40,22 +40,37 @@ public partial class MainLayout : IDisposable
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         // Found While Hidden, Offered Once The Page Is Up
-        if (firstRender && Shell.TakeUnofferedUpdate() is { } release)
+        if (firstRender)
         {
-            await ShowUpdateAsync(release);
+            await OfferUpdatesAsync();
         }
     }
 
-    private void OnUpdateFound()
+    private void OnUpdatesChanged()
     {
         _ = InvokeAsync(async () =>
         {
             StateHasChanged();
-            if (Shell.TakeUnofferedUpdate() is { } release)
-            {
-                await ShowUpdateAsync(release);
-            }
+            await OfferUpdatesAsync();
         });
+    }
+
+    private async Task OfferUpdatesAsync()
+    {
+        // What The Last Update Brought, Then Any Newer One
+        if (Shell.TakeChanges() is { } changes)
+        {
+            await DialogService.ShowAsync<ChangesDialog>(
+                null,
+                new DialogParameters<ChangesDialog> { { dialog => dialog.Changes, changes } },
+                new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true }
+            );
+        }
+
+        if (Shell.TakeUnofferedUpdate() is { } release)
+        {
+            await ShowUpdateAsync(release);
+        }
     }
 
     private Task OpenMoreAsync()
@@ -130,7 +145,7 @@ public partial class MainLayout : IDisposable
     public void Dispose()
     {
         Shell.OpenClipRequested -= OnOpenClipRequested;
-        Shell.UpdateFound -= OnUpdateFound;
+        Shell.UpdatesChanged -= OnUpdatesChanged;
         GC.SuppressFinalize(this);
     }
 }

@@ -1,0 +1,23 @@
+@* Transfer Progress *@
+<MudStack Spacing="1"
+          Class="mt-2">
+    <MudProgressLinear Color="Color.Info"
+                       Value="@_percent"
+                       Indeterminate="@(_total == 0)"
+                       Rounded
+                       Size="Size.Medium" />
+    <MudStack Row
+              Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.caption"
+                 Class="mud-text-secondary">
+            @Text
+        </MudText>
+        @if (_total > 0)
+        {
+            <MudText Typo="Typo.caption"
+                     Class="mud-text-secondary">
+                @($"{_percent}%")
+            </MudText>
+        }
+    </MudStack>
+</MudStack>

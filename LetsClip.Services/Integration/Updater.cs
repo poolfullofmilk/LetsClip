@@ -11,9 +11,18 @@ namespace LetsClip.Services.Integration;
 
 public static class Updater
 {
-    // Releases Always Carry One Exe Named After Their Tag
+    // Releases Carry One Tagged Exe, Installed As LetsClip.exe
     private const string ExecutablePrefix = "LetsClip_v";
     private const string AfterUpdateArgument = "--after-update";
+    private const string InstalledFromArgument = "--installed-from";
+    public const string UninstallArgument = "--uninstall";
+
+    // The Running LetsClip Waits On These
+    public const string ShowSignal = "Show";
+    public const string ExitSignal = "Exit";
+
+    // The Downloaded Copy Needs A Moment To Exit
+    private const int DownloadDeleteAttempts = 10;
 
     // The Owner's Public Key, The Private Half Stays Off GitHub
     private const string SigningKey =
@@ -74,11 +83,78 @@ public static class Updater
         }
     }
 
-    // A Sandboxed Or Renamed Run Never Replaces An Exe
+    public static async Task<IReadOnlyList<string>?> ChangesAsync(string? from, string? to)
+    {
+        // Commit Titles Between Two Builds, Newest First, Null When Unreadable
+        if (from is null || to is null || from == to)
+        {
+            return [];
+        }
+
+        try
+        {
+            // Ponytail: GitHub Compares 250 Commits At Most, Page Beyond That
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get,
+                $"{AppInfo.CompareApiUrl}{from}...{to}"
+            );
+            request.Headers.UserAgent.ParseAdd(AppInfo.DisplayName);
+            using var response = await s_checkClient.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+            using var comparison = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            return
+            [
+                .. comparison
+                    .RootElement.GetProperty("commits")
+                    .EnumerateArray()
+                    .Reverse()
+                    .Select(entry =>
+                        entry
+                            .GetProperty("commit")
+                            .GetProperty("message")
+                            .GetString()
+                            ?.Split('\n')[0]
+                            .Trim()
+                    )
+                    .OfType<string>()
+                    .Where(title => title.Length > 0)
+                    .Distinct(),
+            ];
+        }
+        catch (Exception exception)
+            when (exception
+                    is HttpRequestException
+                        or TaskCanceledException
+                        or JsonException
+                        or KeyNotFoundException
+                        or InvalidOperationException
+            )
+        {
+            // The Changes Are Extra, Asked Again Next Time
+            s_logger.Info($"Failed To Read What Changed {exception.GetType().Name}");
+            return null;
+        }
+    }
+
+    // A Sandboxed, Debug Or Renamed Run Never Replaces An Exe
     public static bool CanInstall =>
         AppInfo.SandboxRoot == null
-        && Path.GetFileName(Environment.ProcessPath)
-            ?.StartsWith(ExecutablePrefix, StringComparison.OrdinalIgnoreCase) == true;
+        && (
+            IsVersioned(Environment.ProcessPath)
+            || string.Equals(
+                Path.GetFileName(Environment.ProcessPath),
+                Path.GetFileName(AppInfo.InstallPath),
+                StringComparison.OrdinalIgnoreCase
+            )
+        );
+
+    private static bool IsVersioned(string? path)
+    {
+        // A Download Or A Version Set Aside, Never LetsClip.exe Itself
+        var name = Path.GetFileName(path) ?? "";
+        return name.StartsWith(ExecutablePrefix, StringComparison.OrdinalIgnoreCase)
+            && name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
+    }
 
     public static async Task<string> DownloadAsync(
         ReleaseInfo release,
@@ -188,7 +264,10 @@ public static class Updater
         return IsSigned(new MemoryStream("LetsClip"u8.ToArray()), signed)
             && !IsSigned(new MemoryStream("LetsClap"u8.ToArray()), signed)
             && !IsSigned(new MemoryStream("LetsClip"u8.ToArray()), null)
-            && !IsSigned(new MemoryStream("LetsClip"u8.ToArray()), "not a signature");
+            && !IsSigned(new MemoryStream("LetsClip"u8.ToArray()), "not a signature")
+            && IsVersioned(@"C:\Downloads\LetsClip_v2.1.exe")
+            && !IsVersioned(@"C:\Programs\LetsClip\LetsClip.exe")
+            && !IsVersioned(@"C:\Programs\LetsClip\LetsClip_v2.1.exe.download");
     }
 
     private static async Task<(string Digest, string? Signature)> ExpectedDetailsAsync(
@@ -235,41 +314,35 @@ public static class Updater
             : throw new InvalidDataException($"Release {tag} Lists No Checksum");
     }
 
+    #region Install
     // A Restart Waits For The Crashed Copy, Like An Update
     public static string RestartArguments =>
         $"{AfterUpdateArgument} {Environment.ProcessId} \"{Environment.ProcessPath}\" --tray";
 
     public static bool MoveToInstallFolder(string[] arguments)
     {
-        // Run From Downloads Once, It Lives In One Place After
+        // Every Release Runs As Programs\LetsClip\LetsClip.exe
         var running = Environment.ProcessPath!;
-        if (
-            !CanInstall
-            || FilePaths.AreSame(Path.GetDirectoryName(running), AppInfo.InstallDirectory)
-        )
+        if (!CanInstall || FilePaths.AreSame(running, AppInfo.InstallPath))
         {
             return false;
         }
 
         try
         {
-            var installed = Path.Combine(AppInfo.InstallDirectory, Path.GetFileName(running));
             Directory.CreateDirectory(AppInfo.InstallDirectory);
-            if (
-                !File.Exists(installed)
-                || new FileInfo(installed).Length != new FileInfo(running).Length
-            )
+
+            // A Newer Download Takes Over From A Running Install
+            if (RunningInstall() is { } occupant)
             {
-                File.Copy(running, installed, overwrite: true);
+                using (occupant)
+                {
+                    return TakeOver(occupant, running, arguments);
+                }
             }
 
-            var startInfo = new ProcessStartInfo(installed) { UseShellExecute = false };
-            foreach (var argument in arguments)
-            {
-                startInfo.ArgumentList.Add(argument);
-            }
-
-            Process.Start(startInfo);
+            File.Copy(running, AppInfo.InstallPath, overwrite: true);
+            Start(AppInfo.InstallPath, [.. arguments, InstalledFromArgument, running]);
             return true;
         }
         catch (Exception exception)
@@ -280,26 +353,197 @@ public static class Updater
         }
     }
 
-    public static void Launch(string executablePath, bool inTray)
+    private static bool TakeOver(Process occupant, string running, string[] arguments)
     {
-        // An Update While Hidden Stays In The Tray
-        s_logger.Info($"Started Update {executablePath}{(inTray ? " In The Tray" : "")}");
-        var startInfo = new ProcessStartInfo(executablePath)
+        // The Same Or A Newer Install Just Shows Its Window
+        var installed = VersionOf(AppInfo.InstallPath);
+        if (installed >= AppInfo.Version)
         {
-            UseShellExecute = false,
-            ArgumentList =
-            {
-                AfterUpdateArgument,
-                Environment.ProcessId.ToString(CultureInfo.InvariantCulture),
-                Environment.ProcessPath!,
-            },
-        };
-        if (inTray)
-        {
-            startInfo.ArgumentList.Add("--tray");
+            return false;
         }
 
-        Process.Start(startInfo);
+        // Set Aside Until The New One Starts, Asked To Exit
+        var aside = AsidePath(installed);
+        File.Move(AppInfo.InstallPath, aside, overwrite: true);
+        try
+        {
+            File.Copy(running, AppInfo.InstallPath);
+        }
+        catch
+        {
+            File.Move(aside, AppInfo.InstallPath);
+            throw;
+        }
+
+        Signal(ExitSignal);
+        Start(
+            AppInfo.InstallPath,
+            [
+                .. arguments,
+                AfterUpdateArgument,
+                occupant.Id.ToString(CultureInfo.InvariantCulture),
+                aside,
+                InstalledFromArgument,
+                running,
+            ]
+        );
+        return true;
+    }
+
+    private static Process? RunningInstall()
+    {
+        // Another LetsClip Running From The Install Path
+        var name = Path.GetFileNameWithoutExtension(AppInfo.InstallPath);
+        Process? found = null;
+        foreach (var process in Process.GetProcessesByName(name))
+        {
+            try
+            {
+                if (
+                    found is null
+                    && process.Id != Environment.ProcessId
+                    && FilePaths.AreSame(process.MainModule?.FileName, AppInfo.InstallPath)
+                )
+                {
+                    found = process;
+                    continue;
+                }
+            }
+            catch (Exception exception)
+                when (exception is Win32Exception or InvalidOperationException)
+            {
+                // Gone Or Elevated, Not Ours To Replace
+            }
+
+            process.Dispose();
+        }
+
+        return found;
+    }
+
+    private static Version VersionOf(string path)
+    {
+        return Version.TryParse(FileVersionInfo.GetVersionInfo(path).FileVersion, out var version)
+            ? version
+            : new Version(0, 0);
+    }
+
+    private static string AsidePath(Version version)
+    {
+        // Named Like Its Release, So Every Cleanup Knows It
+        return Path.Combine(
+            AppInfo.InstallDirectory,
+            $"{ExecutablePrefix}{version.ToString(version.Build > 0 ? 3 : 2)}.exe"
+        );
+    }
+
+    private static void Signal(string signal)
+    {
+        // The Running LetsClip Listens, Nothing Happens If None Runs
+        if (EventWaitHandle.TryOpenExisting(AppInfo.SignalName(signal), out var handle))
+        {
+            using (handle)
+            {
+                handle.Set();
+            }
+        }
+    }
+
+    private static void Start(string executablePath, IEnumerable<string> arguments)
+    {
+        var startInfo = new ProcessStartInfo(executablePath) { UseShellExecute = false };
+        foreach (var argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        Process.Start(startInfo)?.Dispose();
+    }
+
+    public static string? DownloadOf(string[] arguments)
+    {
+        // Set Only By The Copy That Just Installed This One
+        var index = Array.IndexOf(arguments, InstalledFromArgument);
+        return AppInfo.SandboxRoot is null && index >= 0 && index + 1 < arguments.Length
+            ? arguments[index + 1]
+            : null;
+    }
+
+    public static void DeleteDownload(string download)
+    {
+        // Only A Versioned LetsClip Exe, Never The One Running
+        if (!IsVersioned(download) || FilePaths.AreSame(download, Environment.ProcessPath))
+        {
+            return;
+        }
+
+        for (var attempt = 1; File.Exists(download); attempt++)
+        {
+            try
+            {
+                File.Delete(download);
+                s_logger.Info($"Deleted The Download {download}");
+            }
+            catch (Exception exception)
+                when (exception is IOException or UnauthorizedAccessException)
+            {
+                // Still Running Or Locked, In The End It Stays
+                if (attempt == DownloadDeleteAttempts)
+                {
+                    s_logger.Info($"Kept The Download {exception.GetType().Name}");
+                    return;
+                }
+
+                Thread.Sleep(TimeSpan.FromSeconds(1));
+            }
+        }
+    }
+
+    public static void Launch(string executablePath, bool inTray)
+    {
+        // The Installed Exe Steps Aside Until The New One Starts
+        var previous = Environment.ProcessPath!;
+        var target = executablePath;
+        if (
+            FilePaths.AreSame(previous, AppInfo.InstallPath)
+            && !FilePaths.AreSame(executablePath, AppInfo.InstallPath)
+        )
+        {
+            var aside = AsidePath(AppInfo.Version);
+            try
+            {
+                File.Move(previous, aside, overwrite: true);
+                try
+                {
+                    File.Move(executablePath, AppInfo.InstallPath);
+                }
+                catch
+                {
+                    File.Move(aside, previous);
+                    throw;
+                }
+
+                (previous, target) = (aside, AppInfo.InstallPath);
+            }
+            catch (Exception exception)
+                when (exception is IOException or UnauthorizedAccessException)
+            {
+                // The New Exe Takes The Name Once This One Exits
+                s_logger.Warn($"Failed To Swap The Installed Exe {exception.GetType().Name}");
+            }
+        }
+
+        // An Update While Hidden Stays In The Tray
+        s_logger.Info($"Started Update {target}{(inTray ? " In The Tray" : "")}");
+        Start(
+            target,
+            [
+                AfterUpdateArgument,
+                Environment.ProcessId.ToString(CultureInfo.InvariantCulture),
+                previous,
+                .. inTray ? ["--tray"] : Array.Empty<string>(),
+            ]
+        );
     }
 
     public static string? WaitForPreviousVersion(string[] arguments)
@@ -337,51 +581,56 @@ public static class Updater
         return previousPath;
     }
 
-    public static void DeletePreviousVersion(string? previousPath)
+    public static void DeleteOtherVersions()
     {
-        // Only After This Version Started, Only The Exe It Replaced
+        // Started Well As The Installed Exe, Older Ones Go
         if (
-            previousPath is null
-            || FilePaths.AreSame(previousPath, Environment.ProcessPath)
-            || !FilePaths.AreSame(
-                Path.GetDirectoryName(previousPath),
-                Path.GetDirectoryName(Environment.ProcessPath)
-            )
-            || !Path.GetFileName(previousPath)
-                .StartsWith(ExecutablePrefix, StringComparison.OrdinalIgnoreCase)
+            AppInfo.SandboxRoot is not null
+            || !FilePaths.AreSame(Environment.ProcessPath, AppInfo.InstallPath)
         )
         {
             return;
         }
 
-        try
+        foreach (
+            var older in Directory.EnumerateFiles(
+                AppInfo.InstallDirectory,
+                ExecutablePrefix + "*.exe"
+            )
+        )
         {
-            File.Delete(previousPath);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            // A Locked Old Exe Harms Nothing
-            s_logger.Warn($"Failed To Delete The Previous Version {exception.GetType().Name}");
+            try
+            {
+                File.Delete(older);
+                s_logger.Info($"Deleted The Older Version {Path.GetFileName(older)}");
+            }
+            catch (Exception exception)
+                when (exception is IOException or UnauthorizedAccessException)
+            {
+                // A Running Or Locked Old Exe Goes Next Time
+                s_logger.Warn($"Failed To Delete An Older Version {exception.GetType().Name}");
+            }
         }
     }
 
     public static void DeleteOldUnpackedVersions()
     {
-        // Each Version Unpacks 430 MB Into %Temp%\.net, Never Removed
+        // Each Version Unpacks Into %Temp%\.net, Never Removed By Windows
         var current = new DirectoryInfo(
             Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory)
         );
         if (
             AppInfo.SandboxRoot is not null
             || current.Parent is not { } version
-            || !version.Name.StartsWith(ExecutablePrefix, StringComparison.OrdinalIgnoreCase)
+            || !IsUnpackedName(version.Name)
             || version.Parent is not { Name: ".net" } root
         )
         {
             return;
         }
 
-        var unpackedFolders = root.EnumerateDirectories(ExecutablePrefix + "*")
+        var unpackedFolders = root.EnumerateDirectories()
+            .Where(folder => IsUnpackedName(folder.Name))
             .SelectMany(folder => folder.EnumerateDirectories())
             .Where(unpacked => !FilePaths.AreSame(unpacked.FullName, current.FullName))
             .ToList();
@@ -389,6 +638,13 @@ public static class Updater
         {
             DeleteUnpacked(unpacked);
         }
+    }
+
+    private static bool IsUnpackedName(string name)
+    {
+        // Named After The Exe, LetsClip Or An Older LetsClip_v Name
+        return name.Equals(AppInfo.DisplayName, StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith(ExecutablePrefix, StringComparison.OrdinalIgnoreCase);
     }
 
     private static void DeleteUnpacked(DirectoryInfo unpacked)
@@ -416,4 +672,98 @@ public static class Updater
             s_logger.Debug($"Kept The Unpacked {version.Name}, {exception.GetType().Name}");
         }
     }
+    #endregion
+
+    #region Uninstall
+    public static void Uninstall()
+    {
+        // The Running LetsClip Exits First, So Its Files Let Go
+        Signal(ExitSignal);
+        WaitForOtherCopies();
+        StartupRegistration.Remove();
+
+        // Rebuilt By Any Start, Never Clips, Details Or Settings
+        DeleteFolder(AppInfo.LocalDirectory);
+        DeleteFolder(AppInfo.LogsDirectory);
+        DeleteFolder(Path.GetDirectoryName(AppInfo.LogsDirectory)!, onlyEmpty: true);
+        DeleteOldUnpackedVersions();
+    }
+
+    public static void DeleteInstallAfterExit()
+    {
+        // A Running Exe Cannot Delete Itself, Cmd Does It After
+        if (AppInfo.SandboxRoot is not null)
+        {
+            return;
+        }
+
+        // The Install Folder, Browser Profile And Unpacked Files
+        List<string> folders =
+        [
+            AppInfo.InstallDirectory,
+            Path.Combine(AppInfo.DataDirectory, "WebView2"),
+        ];
+        var unpacked = new DirectoryInfo(
+            Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory)
+        ).Parent;
+        if (unpacked is { Parent.Name: ".net" } && IsUnpackedName(unpacked.Name))
+        {
+            folders.Add(unpacked.FullName);
+        }
+
+        var removals = string.Join(" & ", folders.Select(folder => $"rmdir /s /q \"{folder}\""));
+        // Cmd Reads Its Line Raw, Quoted Paths Only
+        Process
+            .Start(
+                new ProcessStartInfo("cmd.exe", $"/c ping -n 4 127.0.0.1 > nul & {removals}")
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WorkingDirectory = Path.GetTempPath(),
+                }
+            )
+            ?.Dispose();
+    }
+
+    private static void WaitForOtherCopies()
+    {
+        // Every Other LetsClip, Any Version, Gets Its Minute
+        foreach (var process in Process.GetProcesses())
+        {
+            using (process)
+            {
+                if (process.Id != Environment.ProcessId && IsUnpackedName(process.ProcessName))
+                {
+                    try
+                    {
+                        process.WaitForExit(s_previousExitWait);
+                    }
+                    catch (Exception exception)
+                        when (exception is Win32Exception or InvalidOperationException)
+                    {
+                        // Gone Meanwhile
+                    }
+                }
+            }
+        }
+    }
+
+    private static void DeleteFolder(string folder, bool onlyEmpty = false)
+    {
+        try
+        {
+            if (
+                Directory.Exists(folder)
+                && (!onlyEmpty || !Directory.EnumerateFileSystemEntries(folder).Any())
+            )
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // A Locked Leftover Harms Nothing, The Clips Are Untouched
+        }
+    }
+    #endregion
 }

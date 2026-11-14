@@ -20,6 +20,7 @@ public partial class App : Application
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
 
     private EventWaitHandle? _showSignal;
+    private EventWaitHandle? _exitSignal;
     private MainWindow? _window;
 
     public Tray? Tray { get; private set; }
@@ -27,13 +28,20 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs eventArgs)
     {
         base.OnStartup(eventArgs);
+        if (eventArgs.Args.Contains(Updater.UninstallArgument))
+        {
+            Uninstall();
+            return;
+        }
+
+        // The Version Being Replaced Exits Before Its Exe Is Touched
+        var previousVersion = Updater.WaitForPreviousVersion(eventArgs.Args);
         if (Updater.MoveToInstallFolder(eventArgs.Args))
         {
             Shutdown();
             return;
         }
 
-        var previousVersion = Updater.WaitForPreviousVersion(eventArgs.Args);
         LogManager
             .Setup()
             .LoadConfiguration(configuration =>
@@ -58,9 +66,7 @@ public partial class App : Application
         _showSignal = new EventWaitHandle(
             false,
             EventResetMode.AutoReset,
-            AppInfo.SandboxRoot is { } sandbox
-                ? $"{AppInfo.FolderName}.{FilePaths.KeyOf(sandbox)}.Show"
-                : $"{AppInfo.FolderName}.Show",
+            AppInfo.SignalName(Updater.ShowSignal),
             out var isFirstInstance
         );
         if (!isFirstInstance)
@@ -72,7 +78,11 @@ public partial class App : Application
 
         try
         {
-            Start(eventArgs.Args.Contains("--tray"), previousVersion);
+            Start(
+                eventArgs.Args.Contains("--tray"),
+                previousVersion,
+                Updater.DownloadOf(eventArgs.Args)
+            );
         }
         catch (Exception exception)
         {
@@ -100,16 +110,23 @@ public partial class App : Application
         }
     }
 
-    private void Start(bool startsInTray, string? previousVersion)
+    private void Start(bool startsInTray, string? previousVersion, string? download)
     {
+        // Part Of Windows 11, Only A Stripped Windows Lacks It
         if (!HasWebView())
         {
-            MessageBox.Show(
-                "LetsClip needs the Microsoft Edge WebView2 Runtime. Install it from Microsoft, then start LetsClip again",
-                AppInfo.DisplayName,
-                MessageBoxButton.OK,
-                MessageBoxImage.Error
-            );
+            if (
+                MessageBox.Show(
+                    "LetsClip needs the Microsoft Edge WebView2 Runtime. OK opens Microsoft's download, install it and start LetsClip again",
+                    AppInfo.DisplayName,
+                    MessageBoxButton.OKCancel,
+                    MessageBoxImage.Error
+                ) == MessageBoxResult.OK
+            )
+            {
+                Explorer.Open("https://go.microsoft.com/fwlink/p/?LinkId=2124703");
+            }
+
             Shutdown(1);
             return;
         }
@@ -149,8 +166,12 @@ public partial class App : Application
         var controller = new CaptureController();
         s_logger.Info($"Settings {System.Text.Json.JsonSerializer.Serialize(controller.Settings)}");
 
-        // Its Shortcut Write Took Up To 0.8 s, Off Thread
-        _ = Task.Run(() => StartupRegistration.Apply(controller.Settings.StartWithWindows));
+        controller.RegisterWithWindows(isInstall: download is not null);
+        if (download is not null)
+        {
+            _ = Task.Run(() => Updater.DeleteDownload(download));
+        }
+
         var shell = new DesktopShell();
         var services = new ServiceCollection();
         services.AddWpfBlazorWebView();
@@ -194,6 +215,20 @@ public partial class App : Application
             executeOnlyOnce: false
         );
 
+        // A Newer Install Or The Uninstall Asks It To Exit
+        _exitSignal = new EventWaitHandle(
+            false,
+            EventResetMode.AutoReset,
+            AppInfo.SignalName(Updater.ExitSignal)
+        );
+        ThreadPool.RegisterWaitForSingleObject(
+            _exitSignal,
+            (_, _) => Dispatcher.InvokeAsync(() => Tray.ExitAsync()),
+            null,
+            Timeout.Infinite,
+            executeOnlyOnce: true
+        );
+
         // Signing In Starts LetsClip In The Tray, Already Recording
         if (!startsInTray)
         {
@@ -203,7 +238,7 @@ public partial class App : Application
         }
 
         _ = controller.StartAutomaticallyAsync();
-        Updater.DeletePreviousVersion(previousVersion);
+        Updater.DeleteOtherVersions();
 
         // Started Well, The Update That Brought It Is Forgotten
         if (
@@ -221,6 +256,21 @@ public partial class App : Application
         s_logger.Info(
             $"Ready {(DateTime.Now - self.StartTime).TotalMilliseconds:0} ms After The Process Started"
         );
+    }
+
+    private void Uninstall()
+    {
+        // Windows Asked Already, So It Just Goes, Clips Stay
+        var clips = Services.Storage.UserSettings.Load().ClipsDirectory;
+        Updater.Uninstall();
+        MessageBox.Show(
+            $"{AppInfo.DisplayName} is uninstalled, your clips stay in {clips}",
+            AppInfo.DisplayName,
+            MessageBoxButton.OK,
+            MessageBoxImage.Information
+        );
+        Updater.DeleteInstallAfterExit();
+        Shutdown();
     }
 
     private static bool HasWebView()

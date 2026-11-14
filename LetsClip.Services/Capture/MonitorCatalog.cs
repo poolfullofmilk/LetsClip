@@ -100,6 +100,19 @@ public static unsafe partial class MonitorCatalog
         );
     }
 
+    public static MonitorInfo? FilledBy(IEnumerable<MonitorInfo> monitors, nint window)
+    {
+        // A Window Covering A Whole Monitor, The Way Games Run
+        return GetWindowRect(window, out var bounds)
+            ? monitors.FirstOrDefault(monitor =>
+                bounds.Left <= monitor.Left
+                && bounds.Top <= monitor.Top
+                && bounds.Right >= monitor.Left + monitor.Width
+                && bounds.Bottom >= monitor.Top + monitor.Height
+            )
+            : null;
+    }
+
     public static (int Width, int Height)? ClientSizeOf(nint window)
     {
         // The Area The Window Draws, Without Its Frame

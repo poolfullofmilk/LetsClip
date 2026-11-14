@@ -96,12 +96,6 @@ public static partial class Formatter
         return $"{FormatDay(time, today)} at {FormatTime(time)}";
     }
 
-    public static string FormatFileDate(DateTimeOffset time)
-    {
-        // Full Date, 8h42 Since A Name Holds No Colon
-        return time.ToLocalTime().ToString("d-M-yyyy 'at' H'h'mm", s_invariant);
-    }
-
     public static string FormatResolution(int width, int height)
     {
         return $"{width} × {height}";
@@ -129,8 +123,6 @@ public static partial class Formatter
             && FormatDateTime(morning.AddHours(-9), today) == "Yesterday at 23:05"
             && FormatDateTime(evening, today) == "4-11-2026 at 22:43"
             && FormatDateTime(morning.AddDays(1), today) == "7-11-2026 at 8:05"
-            && FormatFileDate(morning) == "6-11-2026 at 8h05"
-            && FormatFileDate(evening) == "4-11-2026 at 22h43"
             && FormatSize(20_000_000) == "20 MB"
             && FormatSize(20_540_000) == $"20{Point}5 MB"
             && FormatSize(2_000_000_000) == "2 GB"

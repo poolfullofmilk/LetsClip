@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
 using Microsoft.Win32;
 
@@ -36,6 +37,8 @@ internal static partial class GameScanner
         ["rocketleague"] = "Rocket League",
         ["robloxplayerbeta"] = "Roblox",
         ["repo"] = "R.E.P.O.",
+        ["cod"] = "Call of Duty",
+        ["ridewin64shipping"] = "RV There Yet",
     };
 
     // Subdirectories Games Commonly Hide Their Executable In
@@ -68,6 +71,40 @@ internal static partial class GameScanner
 
     private static readonly string[] s_commonGameRoots = [@"C:\Games", @"D:\Games", @"E:\Games"];
 
+    // Runtimes That Run Many Programs Under One Name
+    private static readonly HashSet<string> s_runtimeNames =
+    [
+        with(StringComparer.OrdinalIgnoreCase),
+        "java",
+        "javaw",
+        "python",
+        "pythonw",
+        "node",
+        "electron",
+    ];
+
+    // Folders Some Programs Wrongly Give As Their Own
+    private static readonly string[] s_sharedFolders =
+    [
+        .. new[]
+        {
+            Environment.SpecialFolder.ProgramFiles,
+            Environment.SpecialFolder.ProgramFilesX86,
+            Environment.SpecialFolder.CommonApplicationData,
+            Environment.SpecialFolder.LocalApplicationData,
+            Environment.SpecialFolder.ApplicationData,
+            Environment.SpecialFolder.UserProfile,
+            Environment.SpecialFolder.Windows,
+        }
+            .Select(Environment.GetFolderPath)
+            .Where(folder => folder.Length > 0)
+            .Select(Path.TrimEndingDirectorySeparator),
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Programs"
+        ),
+    ];
+
     static GameScanner()
     {
         Debug.Assert(SelfTestPasses(), "GameScanner SelfTest Failed");
@@ -78,6 +115,7 @@ internal static partial class GameScanner
     public static IReadOnlyDictionary<string, AddedGame> Scan()
     {
         Dictionary<string, AddedGame> installedGames = [with(StringComparer.OrdinalIgnoreCase)];
+        var played = PlayedGames();
 
         var gameRoots = DiscoverSteamGameRoots()
             .Concat(DiscoverEpicGameRoots())
@@ -90,7 +128,15 @@ internal static partial class GameScanner
         foreach (var rootDirectory in gameRoots)
         {
             var folderName = new DirectoryInfo(rootDirectory).Name;
-            var executablePath = ResolveMainExecutable(rootDirectory, folderName);
+
+            // The Exe Windows Saw Run Beats A Guess From Names
+            var executablePath =
+                played
+                    .Where(path => FilePaths.IsInside(path, rootDirectory))
+                    .MaxBy(path =>
+                        ScoreExecutable(Path.GetFileNameWithoutExtension(path), folderName)
+                    )
+                ?? ResolveMainExecutable(rootDirectory, folderName);
             if (executablePath is null)
             {
                 continue;
@@ -110,6 +156,12 @@ internal static partial class GameScanner
                     )
                 );
             }
+        }
+
+        // Played Games From Launchers Without A Library Here
+        foreach (var game in GamesOfPrograms(played))
+        {
+            installedGames.TryAdd(game.Key, game);
         }
 
         return installedGames;
@@ -454,6 +506,146 @@ internal static partial class GameScanner
             .Where(directory =>
                 !directory.EndsWith("Launcher", StringComparison.OrdinalIgnoreCase)
             );
+    #endregion
+
+    #region Windows Games
+    private static List<string> PlayedGames()
+    {
+        // Exes Game Bar Saw Run As Games, Still On Disk
+        List<string> played = [];
+        try
+        {
+            var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+            using var children = Registry.CurrentUser.OpenSubKey(
+                @"System\GameConfigStore\Children"
+            );
+            foreach (var child in children?.GetSubKeyNames() ?? [])
+            {
+                using var entry = children!.OpenSubKey(child);
+                if (
+                    entry?.GetValue("MatchedExeFullPath") is string path
+                    && File.Exists(path)
+                    && !path.StartsWith(windows, StringComparison.OrdinalIgnoreCase)
+                    && !IsRejectedExecutable(Path.GetFileNameWithoutExtension(path))
+                    && !s_runtimeNames.Contains(Path.GetFileNameWithoutExtension(path))
+                )
+                {
+                    played.Add(path);
+                }
+            }
+        }
+        catch (Exception exception)
+            when (exception
+                    is IOException
+                        or UnauthorizedAccessException
+                        or System.Security.SecurityException
+            )
+        {
+            // An Unreadable Registry Only Means Fewer Known Games
+        }
+
+        return played;
+    }
+
+    private static List<AddedGame> GamesOfPrograms(List<string> played)
+    {
+        // A Leftover Exe Nothing Installed Is Never A Game
+        var installs = InstalledPrograms();
+        List<AddedGame> games = [];
+        foreach (var path in played)
+        {
+            var owner = installs
+                .Where(install => FilePaths.IsInside(path, install.Folder))
+                .OrderByDescending(install => install.Folder.Length)
+                .Select(install => install.Name)
+                .FirstOrDefault();
+            if (owner is { Length: > 0 } name)
+            {
+                games.Add(
+                    new AddedGame(
+                        NormalizeProcessKey(Path.GetFileNameWithoutExtension(path)),
+                        name,
+                        path
+                    )
+                );
+            }
+        }
+
+        return games;
+    }
+
+    private static List<(string Name, string Folder)> InstalledPrograms()
+    {
+        // Settings, Apps: Each Program's Name And Its Folder
+        List<(string Name, string Folder)> programs = [];
+        var hives = new[]
+        {
+            RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64),
+            RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32),
+            RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Default),
+        };
+        foreach (var hive in hives)
+        {
+            using (hive)
+            {
+                try
+                {
+                    using var uninstall = hive.OpenSubKey(
+                        @"Software\Microsoft\Windows\CurrentVersion\Uninstall"
+                    );
+                    foreach (var program in uninstall?.GetSubKeyNames() ?? [])
+                    {
+                        using var entry = uninstall!.OpenSubKey(program);
+                        if (
+                            entry?.GetValue("DisplayName") is string name
+                            && ProgramFolderOf(entry.GetValue("InstallLocation") as string)
+                                is { } folder
+                        )
+                        {
+                            programs.Add((name.Trim(), folder));
+                        }
+                    }
+                }
+                catch (Exception exception)
+                    when (exception
+                            is IOException
+                                or UnauthorizedAccessException
+                                or System.Security.SecurityException
+                    )
+                {
+                    // An Unreadable List Only Means Fewer Known Games
+                }
+            }
+        }
+
+        return programs;
+    }
+
+    private static string? ProgramFolderOf(string? folder)
+    {
+        // A Drive Or Shared Folder Would Claim Every Exe
+        try
+        {
+            var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder ?? ""));
+            return
+                Path.GetPathRoot(full) is { } root
+                && !string.Equals(
+                    full,
+                    Path.TrimEndingDirectorySeparator(root),
+                    StringComparison.OrdinalIgnoreCase
+                )
+                && !s_sharedFolders.Any(shared =>
+                    string.Equals(full, shared, StringComparison.OrdinalIgnoreCase)
+                )
+                ? full
+                : null;
+        }
+        catch (Exception exception)
+            when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return null;
+        }
+    }
     #endregion
 
     #region File System

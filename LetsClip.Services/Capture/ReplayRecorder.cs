@@ -103,6 +103,9 @@ public sealed class ReplayRecorder : IDisposable
 
     public CaptureStatus Status { get; private set; }
 
+    // The Encoder Recording Now, Or Last, For About
+    public VideoEncoder? Encoder { get; private set; }
+
     public CaptureOptions? Options
     {
         get
@@ -130,6 +133,7 @@ public sealed class ReplayRecorder : IDisposable
             lock (_gate)
             {
                 _session = session;
+                Encoder = session.Encoder;
             }
 
             _ = WatchEndAsync(session);
@@ -279,7 +283,7 @@ public sealed class ReplayRecorder : IDisposable
 
         // AMF Can Hang After A Killed Session, Two Starts
         var encoders = VideoEncoders
-            .Candidates()
+            .CaptureCandidates(ConvertsOnGpu(options with { Monitor = monitor }, width, height))
             .SelectMany(encoder =>
                 Enumerable.Repeat(encoder, encoder.IsHardware && !encoder.GpuFrames ? 2 : 1)
             );
@@ -409,11 +413,23 @@ public sealed class ReplayRecorder : IDisposable
     #endregion
 
     #region Encoder Recovery
+    private static bool ConvertsOnGpu(CaptureOptions options, int width, int height)
+    {
+        // A Monitor At Its Own Size Only Converts, Lanczos Scales
+        var monitor = options.Monitor;
+        return options.GameWindow == 0
+            && monitor.Rotation == 0
+            && width == monitor.Width
+            && height == monitor.Height;
+    }
+
     private async Task UpgradeAsync(CaptureSession current)
     {
         // A Fallback Keeps Trying Better Encoders, Out Of Sight
         var better = VideoEncoders
-            .Candidates()
+            .CaptureCandidates(
+                ConvertsOnGpu(current.Options, current.Size.Width, current.Size.Height)
+            )
             .TakeWhile(encoder => encoder != current.Encoder)
             .ToList();
         for (var attempt = 0; better.Count > 0; attempt++)
@@ -508,6 +524,7 @@ public sealed class ReplayRecorder : IDisposable
                 // A Length Changed Meanwhile Carries Over
                 standby.SetSeconds(current.Options.Seconds);
                 _session = standby;
+                Encoder = standby.Encoder;
             }
 
             _ = WatchEndAsync(standby);
@@ -714,6 +731,7 @@ public sealed class ReplayRecorder : IDisposable
                 session.Options.FrameRate,
                 session.Options.GameName,
                 monitor,
+                session.Options.SeparatesMicrophone && audio.Count > 0,
                 _library
             );
         }
@@ -722,7 +740,7 @@ public sealed class ReplayRecorder : IDisposable
         {
             return await SaveClipAsync();
         }
-        catch (IOException exception)
+        catch (IOException exception) when (exception.HResult != ClipSaver.DiskFullCode)
         {
             // A Scanner Holding The File Lets Go In A Moment
             s_logger.Info($"Saving Again After {exception.GetType().Name}");
@@ -731,6 +749,9 @@ public sealed class ReplayRecorder : IDisposable
         }
     }
 
+    // Windows Says A Write Hit A Full Disk Either Way
+    private const int DiskHandleFullCode = unchecked((int)0x80070027);
+
     private static string SaveErrorOf(Exception exception)
     {
         // Plain Words, Never A Path Or An Error Code
@@ -738,6 +759,8 @@ public sealed class ReplayRecorder : IDisposable
         {
             UnauthorizedAccessException => "Cannot write to the clips folder",
             DirectoryNotFoundException => "The clips folder is not available",
+            IOException { HResult: ClipSaver.DiskFullCode or DiskHandleFullCode } =>
+                "The clips drive is full, free some space",
             IOException => "The clip could not be written",
             TimeoutException => "Saving took too long, try again",
             Win32Exception => "The recorder could not start, reinstall LetsClip",

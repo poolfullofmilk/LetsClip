@@ -1,0 +1,44 @@
+--- a/libavfilter/vf_scale_d3d11.c
++++ b/libavfilter/vf_scale_d3d11.c
+@@ -266,6 +266,17 @@
+         goto fail;
+     }
+ 
++    ///< Full range RGB in, BT.709 studio range YUV out, like swscale with tv range
++    {
++        D3D11_VIDEO_PROCESSOR_COLOR_SPACE input_space = { 0 };
++        D3D11_VIDEO_PROCESSOR_COLOR_SPACE output_space = {
++            .YCbCr_Matrix  = 1,
++            .Nominal_Range = D3D11_VIDEO_PROCESSOR_NOMINAL_RANGE_16_235,
++        };
++        videoContext->lpVtbl->VideoProcessorSetStreamColorSpace(videoContext, s->processor, 0, &input_space);
++        videoContext->lpVtbl->VideoProcessorSetOutputColorSpace(videoContext, s->processor, &output_space);
++    }
++
+     ///< Process the frame
+     hr = videoContext->lpVtbl->VideoProcessorBlt(videoContext, s->processor, s->outputView, 0, 1, &stream);
+     if (FAILED(hr)) {
+@@ -286,6 +297,10 @@
+     out->width = s->width;
+     out->height = s->height;
+     out->format = AV_PIX_FMT_D3D11;
++    out->color_range     = AVCOL_RANGE_MPEG;
++    out->colorspace      = AVCOL_SPC_BT709;
++    out->color_primaries = AVCOL_PRI_BT709;
++    out->color_trc       = AVCOL_TRC_BT709;
+ 
+     ///< Clean up resources
+     inputView->lpVtbl->Release(inputView);
+@@ -373,10 +388,8 @@
+     frames_ctx->sw_format = s->format;
+     frames_ctx->width = s->width;
+     frames_ctx->height = s->height;
+-    frames_ctx->initial_pool_size = 10;
+-
+-    if (ctx->extra_hw_frames > 0)
+-        frames_ctx->initial_pool_size += ctx->extra_hw_frames;
++    /* Single textures, AMD and Intel refuse an encoder bound array of them */
++    frames_ctx->initial_pool_size = 0;
+ 
+     AVD3D11VAFramesContext *frames_hwctx = frames_ctx->hwctx;
+     frames_hwctx->MiscFlags = 0;

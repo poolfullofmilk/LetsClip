@@ -72,6 +72,15 @@ public partial class Settings : IDisposable
             ? $"{Formatter.FormatSize(used)} Used · {Formatter.FormatSize(free)} Free"
             : null;
 
+    // Room For Fewer Than Three Replays, At Least A Gigabyte
+    private bool IsAlmostFull =>
+        _space is var (_, free)
+        && free
+            < Math.Max(
+                1_000_000_000,
+                3 * Controller.ReplayBytes(Controller.Settings.ReplaySeconds)
+            );
+
     // A Folder Under The Profile Reads From There, Like Videos\LetsClip
     private string ClipsFolderText
     {
@@ -109,6 +118,8 @@ public partial class Settings : IDisposable
         : "Taken by Another App";
 
     private string HotkeyChipTooltip => _capturingKey ? _keysHint ?? "" : "Change Hotkey";
+
+    private bool IsDefault => Controller.Settings.WithDefaults() == Controller.Settings;
 
     protected override async Task OnInitializedAsync()
     {
@@ -502,6 +513,48 @@ public partial class Settings : IDisposable
     #endregion
 
     #region Recording And Storage
+    private async Task ResetAsync()
+    {
+        // Picking Keys Ends First, The Question Takes Keys Too
+        if (_capturingKey)
+        {
+            await CancelKeysAsync();
+        }
+
+        if (
+            !await YesNoDialog.ConfirmAsync(
+                DialogService,
+                "Reset to Default",
+                "Every setting goes back to its default, the clips folder and games stay"
+            )
+        )
+        {
+            return;
+        }
+
+        // A Running Test Or Slid Volume Would Undo It
+        StopMicrophoneTest();
+        _slidVolume = null;
+        var saved = Controller.Settings.Hotkey;
+        var taken = Hotkey.Default.ToString() != saved && !Shell.ApplyHotkey(Hotkey.Default);
+        if (taken)
+        {
+            // Taken Keys Leave The Saved Ones In Place
+            RestoreHotkey();
+            Snackbar.Add(
+                $"{Hotkey.Default} is taken by another app, kept {saved}",
+                Severity.Warning
+            );
+        }
+
+        Controller.UpdateSettings(settings =>
+            settings.WithDefaults() with
+            {
+                Hotkey = taken ? saved : Hotkey.Default.ToString(),
+            }
+        );
+    }
+
     private void SetGamesOnly(bool enabled)
     {
         Controller.UpdateSettings(settings => settings with { GamesOnly = enabled });
@@ -533,19 +586,66 @@ public partial class Settings : IDisposable
             return;
         }
 
-        Controller.UpdateSettings(settings => settings with { ClipsFolder = full });
-        await MeasureSpaceAsync();
+        await ChangeFolderAsync(full);
     }
 
     private async Task UseDefaultFolderAsync()
     {
-        Controller.UpdateSettings(settings => settings with { ClipsFolder = null });
+        await ChangeFolderAsync(null);
+    }
+
+    private static string Plural(int count, string noun)
+    {
+        return $"{count} {noun}{(count == 1 ? "" : "s")}";
+    }
+
+    private async Task ChangeFolderAsync(string? folder)
+    {
+        // Every Clip Moves Along, The Folder Changes Once There
+        var from = Controller.Settings.ClipsDirectory;
+        var to = folder ?? AppInfo.DefaultClipsDirectory;
+        var bytes = await Task.Run(() => ClipLibrary.BytesToMove(from));
+        if (!FilePaths.AreSame(from, to) && bytes > 0)
+        {
+            if (Controller.Exports.Running is not null)
+            {
+                Snackbar.Add(
+                    "Wait for the export to finish, then change the folder",
+                    Severity.Warning
+                );
+                return;
+            }
+
+            if (!ClipLibrary.HasRoomFor(to, from, bytes))
+            {
+                Snackbar.Add(
+                    $"There is no room there for {Formatter.FormatSize(bytes)} of clips",
+                    Severity.Warning
+                );
+                return;
+            }
+
+            var (moved, failed) = await MoveDialog.MoveAsync(DialogService, from, to);
+            Snackbar.Add(
+                failed > 0
+                    ? $"Moved {Plural(moved, "clip")}, {Plural(failed, "file")} in use stayed in {from}"
+                    : $"Moved {Plural(moved, "clip")} to {to}",
+                failed > 0 ? Severity.Warning : Severity.Success
+            );
+        }
+
+        Controller.UpdateSettings(settings => settings with { ClipsFolder = folder });
         await MeasureSpaceAsync();
     }
 
     private void OpenFolder()
     {
         Explorer.OpenFolder(Controller.Settings.ClipsDirectory);
+    }
+
+    private static void OpenStorageSettings()
+    {
+        Explorer.Open("ms-settings:storagesense");
     }
     #endregion
 

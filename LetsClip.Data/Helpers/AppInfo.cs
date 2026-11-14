@@ -10,11 +10,23 @@ public static class AppInfo
     // The Update Check Reads Public GitHub Releases
     public const string RepositoryUrl = "https://github.com/poolfullofmilk/LetsClip";
     public const string LatestReleaseUrl = RepositoryUrl + "/releases/latest";
-    public const string ReleaseApiUrl =
-        "https://api.github.com/repos/poolfullofmilk/LetsClip/releases/tags/";
+    private const string RepositoryApiUrl = "https://api.github.com/repos/poolfullofmilk/LetsClip/";
+    public const string ReleaseApiUrl = RepositoryApiUrl + "releases/tags/";
+    public const string CompareApiUrl = RepositoryApiUrl + "compare/";
 
     public static Version Version { get; } =
         Assembly.GetEntryAssembly()?.GetName().Version ?? new Version(0, 0);
+
+    // Built From This Commit, GitHub Lists What Changed Since
+    public static string? Commit { get; } =
+        Assembly
+            .GetEntryAssembly()
+            ?.GetCustomAttributes<AssemblyMetadataAttribute>()
+            .FirstOrDefault(attribute => attribute.Key == "Commit")
+            ?.Value
+            is { Length: > 0 } commit
+            ? commit
+            : null;
 
     // Shown Like The Release Tags, v1.8
     public static string VersionText { get; } = "v" + Version.ToString(Version.Build > 0 ? 3 : 2);
@@ -51,6 +63,12 @@ public static class AppInfo
         DisplayName
     );
 
+    // One Name For Every Version, So Windows Keeps Its Settings
+    public static readonly string InstallPath = Path.Combine(
+        InstallDirectory,
+        DisplayName + ".exe"
+    );
+
     public static readonly string CacheDirectory = Path.Combine(LocalDirectory, "Cache");
 
     public static readonly string ThumbnailsDirectory = Path.Combine(LocalDirectory, "Thumbnails");
@@ -66,6 +84,14 @@ public static class AppInfo
         BaseOf(Environment.SpecialFolder.MyVideos, "Videos"),
         FolderName
     );
+
+    public static string SignalName(string signal)
+    {
+        // A Sandbox Gets Its Own, Tests Never Reach The App
+        return SandboxRoot is { } sandbox
+            ? $"{FolderName}.{FilePaths.KeyOf(sandbox)}.{signal}"
+            : $"{FolderName}.{signal}";
+    }
 
     private static string BaseOf(Environment.SpecialFolder folder, string sandboxName)
     {

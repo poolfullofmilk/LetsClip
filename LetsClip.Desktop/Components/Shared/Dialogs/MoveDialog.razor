@@ -1,0 +1,18 @@
+<MudDialog>
+
+    <TitleContent>
+        <DialogTitle Text="Moving Clips"
+                     Dialog="MudDialog"
+                     Closable="false" />
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.body2"
+                     Class="text-relaxed">
+                @($"Every clip, kept original and export moves to {To}, recording keeps going")
+            </MudText>
+            <TransferProgress @ref="_progress" />
+        </MudStack>
+    </DialogContent>
+
+</MudDialog>

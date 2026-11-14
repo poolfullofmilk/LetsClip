@@ -11,4 +11,8 @@ public partial class SourceChip
     // Filled Dark Over A Thumbnail, Plain Beside A Title
     [Parameter]
     public bool OnPicture { get; set; }
+
+    // Set, It Reads As A Link, Underlined
+    [Parameter]
+    public EventCallback OnClick { get; set; }
 }

@@ -1,0 +1,16 @@
+<MudStack Spacing="2">
+    <MudText Typo="Typo.subtitle2">What Changed</MudText>
+    <MudStack Spacing="1">
+        @foreach (var change in Changes)
+        {
+            <MudStack Row
+                      AlignItems="AlignItems.Start"
+                      Spacing="2">
+                <MudIcon Icon="@Icons.Material.Rounded.CheckCircle"
+                         Color="Color.Info"
+                         Size="Size.Small" />
+                <MudText Typo="Typo.body2">@change</MudText>
+            </MudStack>
+        }
+    </MudStack>
+</MudStack>

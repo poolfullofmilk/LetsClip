@@ -28,6 +28,7 @@ public sealed class CaptureController : IDisposable
     private static readonly TimeSpan s_failuresForgotten = TimeSpan.FromMinutes(5);
 
     private readonly Lock _gate = new();
+    private readonly Lock _registering = new();
 
     // Starts And Stops Run One At A Time, Whoever Asks
     private readonly SemaphoreSlim _steps = new(1, 1);
@@ -50,6 +51,9 @@ public sealed class CaptureController : IDisposable
     {
         Settings = UserSettings.Load();
         Library = new ClipLibrary(Settings.ClipsDirectory);
+
+        // Named Clips From Before Get Their Name On The File
+        _ = Task.Run(Library.NameFilesAsync);
         Recorder = new ReplayRecorder(Library);
         Recorder.Failed += failure => _ = RetryAsync(failure);
         Games.GameChanged += name => _ = OnGameChangedAsync(name);
@@ -115,25 +119,6 @@ public sealed class CaptureController : IDisposable
 
     public int RecommendedFrameRate =>
         FrameRateChoices.Where(rate => rate <= (HasHardwareEncoder ? 60 : 30)).Max();
-
-    public bool IsRecommended =>
-        Resolution == RecommendedResolution
-        && FrameRate == RecommendedFrameRate
-        && Settings.Quality == RecommendedQuality;
-
-    public void UseRecommended()
-    {
-        // One Change, So Capture Restarts Once
-        var (resolution, rate) = (RecommendedResolution, RecommendedFrameRate);
-        UpdateSettings(settings =>
-            settings with
-            {
-                Resolution = resolution,
-                FrameRate = rate,
-                Quality = RecommendedQuality,
-            }
-        );
-    }
 
     // Only What Lasts Or Needs The Person Is Ever Shown
     public bool ShowsError => Recorder.Status.State == CaptureState.Error && !_quietRetry;
@@ -202,11 +187,24 @@ public sealed class CaptureController : IDisposable
         Library.SetFolder(updated.ClipsDirectory);
         if (before.StartWithWindows != updated.StartWithWindows)
         {
-            StartupRegistration.Apply(updated.StartWithWindows);
+            RegisterWithWindows();
         }
 
         Changed?.Invoke();
         _ = StepAsync(null);
+    }
+
+    public void RegisterWithWindows(bool isInstall = false)
+    {
+        // A Shortcut Write Took 0.8 s, Off The Window's Thread
+        _ = Task.Run(() =>
+        {
+            // In Turn, Each Reads The Setting As It Is Now
+            lock (_registering)
+            {
+                StartupRegistration.Apply(Settings.StartWithWindows, isInstall);
+            }
+        });
     }
 
     #region Games
@@ -572,7 +570,7 @@ public sealed class CaptureController : IDisposable
         // One Line A Log Reader Can Compare Between Steps
         return options is null
             ? "Nothing"
-            : $"{(options.GameWindow != 0 ? "A Game Window On " : "")}{options.Monitor.Label}, {options.Seconds} s, {options.Resolution}p, {options.FrameRate} FPS, {options.Quality}, System Audio {(options.GameProcess != 0 ? "Of The Game And Discord" : options.SystemAudioId switch { null => "Off", "" => "Automatic", _ => "Picked" })}, Microphone {options.MicrophoneId switch { null => "Off", "" => "Automatic", _ => "Picked" }}{(options.CleanMicrophone ? " Cleaned" : "")}{(options.MicrophoneId is null ? "" : $" At {options.MicrophoneVolume * 100:0}%")}";
+            : $"{(options.GameWindow != 0 ? "A Game Window On " : "")}{options.Monitor.Label}, {options.Seconds} s, {options.Resolution}p, {options.FrameRate} FPS, {options.Quality}, System Audio {(options.GameProcess != 0 ? "Of The Game And Voice Chat" : options.SystemAudioId switch { null => "Off", "" => "Automatic", _ => "Picked" })}, Microphone {options.MicrophoneId switch { null => "Off", "" => "Automatic", _ => "Picked" }}{(options.CleanMicrophone ? " Cleaned" : "")}{(options.MicrophoneId is null ? "" : $" At {options.MicrophoneVolume * 100:0}%")}";
     }
 
     private CaptureOptions? WantedOptions()

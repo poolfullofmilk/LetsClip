@@ -14,6 +14,8 @@ public sealed record VideoEncoder(
 )
 {
     public bool IsHevc => Codec.StartsWith("hevc_", StringComparison.Ordinal);
+
+    public bool IsQuickSync => Codec.EndsWith("_qsv", StringComparison.Ordinal);
 }
 
 public static class VideoEncoders
@@ -46,6 +48,22 @@ public static class VideoEncoders
 
         candidates.Add(Software);
         return candidates;
+    }
+
+    public static IReadOnlyList<VideoEncoder> CaptureCandidates(bool convertsOnGpu)
+    {
+        // AMF And NVENC Take GPU Frames When Nothing Scales
+        return convertsOnGpu
+            ?
+            [
+                .. Candidates()
+                    .SelectMany(encoder =>
+                        encoder.IsHardware && !encoder.GpuFrames && !encoder.IsQuickSync
+                            ? new[] { encoder with { GpuFrames = true }, encoder }
+                            : [encoder]
+                    ),
+            ]
+            : Candidates();
     }
 
     public static VideoEncoder HevcOf(VideoEncoder encoder)

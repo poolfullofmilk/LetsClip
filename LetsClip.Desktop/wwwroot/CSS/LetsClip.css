@@ -89,6 +89,11 @@
         background-color: var(--row-hover) !important;
     }
 
+    /* The Submenu Arrow Drawn Rounded, Like Every Other Icon */
+    .mud-menu-submenu-icon path:first-child {
+        d: path("M11.71 15.29l2.59-2.59c.39-.39.39-1.02 0-1.41L11.71 8.7c-.63-.62-1.71-.18-1.71.71v5.17c0 .9 1.08 1.34 1.71.71z");
+    }
+
 /* Thin Scrollbars With No Arrows, Like The Rest Of Windows */
 ::-webkit-scrollbar {
     width: var(--scrollbar-width);
@@ -358,11 +363,12 @@
     flex-shrink: 0;
 }
 
-/* Clip Facts Read As Label And Value */
+/* Facts Read As Label And Value, Inset Like Menu Items */
 .info-facts {
     display: grid;
     grid-template-columns: auto auto;
     gap: 2px 16px;
+    padding: 6px 12px;
     text-align: start;
     white-space: nowrap;
 }
@@ -371,11 +377,6 @@
         font-variant-numeric: tabular-nums;
         text-align: end;
     }
-
-/* A Card's Facts Step Aside For Its Buttons' Tooltips */
-body:has(.hover-card button:hover) .mud-tooltip.clip-facts {
-    visibility: hidden;
-}
 
 /* Badges Lift Off Their Surface Like Chips */
 .mud-badge {
@@ -940,6 +941,12 @@ body:has(.hover-card button:hover) .mud-tooltip.clip-facts {
     max-width: 0;
 }
 
+/* The Clip Search Keeps One Width Beside The Header Buttons */
+.clip-search {
+    flex: none !important;
+    width: 240px;
+}
+
 /* The Game Filter Opens Under Its Button, Its List Scrolls */
 .filter-popover {
     width: 280px;
@@ -1017,37 +1024,35 @@ mark {
             transition: visibility 0s 150ms;
         }
 
-    /* The Source Bottom Left, Time And Length Together Bottom Right */
+    /* The Source Top Right, Time And Length Together Bottom Right */
     .clip-thumb .clip-chips {
         position: absolute;
         right: 8px;
         bottom: 8px;
-        left: 8px;
         display: flex;
         gap: 8px;
     }
 
+    .clip-thumb .source-chip {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        max-width: calc(100% - 16px);
+    }
+
         /* Chips On A Picture Take The Icon's Softer Shadow */
-        .clip-chips .mud-chip {
-            flex-shrink: 0;
+        .clip-thumb .mud-chip {
             box-shadow: var(--icon-shadow);
         }
 
-        /* The Source Takes The Room Left, Ending In Dots */
-        .clip-chips .source-chip {
-            flex-shrink: 1;
+        /* A Long Source Ends In Dots, Its Line Centred */
+        .clip-thumb .source-chip .mud-chip-content {
+            display: block;
+            align-content: center;
             min-width: 0;
-            margin-inline-end: auto !important;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
-
-            /* A Block For The Dots, Its Line Centred */
-            .clip-chips .source-chip .mud-chip-content {
-                display: block;
-                align-content: center;
-                min-width: 0;
-                overflow: hidden;
-                text-overflow: ellipsis;
-            }
 
 /* A Hover Preview Plays Over The Picture, Under The Chips */
 .clip-preview {

@@ -13,6 +13,13 @@
                          Class="mud-text-secondary">
                     @($"{AppInfo.VersionText} · {AppInfo.Author}")
                 </MudText>
+                @if (EncoderText is { } encoder)
+                {
+                    <MudText Typo="Typo.body2"
+                             Class="mud-text-secondary">
+                        @encoder
+                    </MudText>
+                }
             </MudStack>
             <MudText Typo="Typo.body1">Keeps the last moments of your game, app or monitor in the background, saves them with a hotkey and exports clips small enough for Discord</MudText>
             @* Notices Button *@

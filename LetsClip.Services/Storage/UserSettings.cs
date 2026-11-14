@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using LetsClip.Data.Enums;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
+using LetsClip.Services.Media;
 using NLog;
 using HotkeyGesture = LetsClip.Data.Helpers.Hotkey;
 
@@ -32,10 +33,12 @@ public sealed record UserSettings(
     string? ClipsFolder = null,
     DiscordPlan ExportDiscordPlan = DiscordPlan.Off,
     bool ExportAudio = true,
+    bool ExportMicrophone = true,
     bool DeleteOriginals = true,
     int DefaultsVersion = 0,
     ClipSort ClipSort = ClipSort.Newest,
     string? AttemptedUpdate = null,
+    string? SeenCommit = null,
     double PlayerVolume = UserSettings.OpeningVolume,
     bool PlayerMuted = false,
     WindowBounds? Window = null
@@ -72,7 +75,7 @@ public sealed record UserSettings(
         string.IsNullOrWhiteSpace(ClipsFolder) ? AppInfo.DefaultClipsDirectory : ClipsFolder;
 
     [JsonIgnore]
-    public string ExportsDirectory => Path.Combine(ClipsDirectory, "Exports");
+    public string ExportsDirectory => Path.Combine(ClipsDirectory, ClipLibrary.ExportsFolder);
 
     public static UserSettings Load()
     {
@@ -140,6 +143,27 @@ public sealed record UserSettings(
             // A Missing Or Damaged File Means Defaults
             return new UserSettings(DefaultsVersion: CurrentDefaults);
         }
+    }
+
+    public UserSettings WithDefaults()
+    {
+        // The Settings Page's Values, Its Clips Folder And Games Stay
+        return new UserSettings() with
+        {
+            ClipsFolder = ClipsFolder,
+            RemovedGames = RemovedGames,
+            AddedGames = AddedGames,
+            ExportDiscordPlan = ExportDiscordPlan,
+            ExportAudio = ExportAudio,
+            ExportMicrophone = ExportMicrophone,
+            DefaultsVersion = DefaultsVersion,
+            ClipSort = ClipSort,
+            AttemptedUpdate = AttemptedUpdate,
+            SeenCommit = SeenCommit,
+            PlayerVolume = PlayerVolume,
+            PlayerMuted = PlayerMuted,
+            Window = Window,
+        };
     }
 
     public IEnumerable<string> ChangesFrom(UserSettings before)

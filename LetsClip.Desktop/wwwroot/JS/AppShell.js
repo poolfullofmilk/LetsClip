@@ -541,16 +541,45 @@ window.letsClip = (() => {
             const right = Math.round(((index + 1) * canvas.width) / count);
             context.drawImage(image, cell * cellWidth, 0, cellWidth, image.naturalHeight, left, 0, right - left, canvas.height);
         }
+
+        // The Sound Over The Strip's Foot, Timed Between The Handles
+        const wave = canvas.waveImage;
+        if (!wave?.naturalWidth) return;
+        const foot = Math.round(canvas.height * 0.45);
+        const top = canvas.height - foot;
+        const side = Math.round(pad * devicePixelRatio);
+        const shade = context.createLinearGradient(0, top, 0, canvas.height);
+        shade.addColorStop(0, "transparent");
+        shade.addColorStop(1, getComputedStyle(canvas).getPropertyValue("--shade"));
+        context.fillStyle = shade;
+        context.fillRect(0, top, canvas.width, foot);
+
+        // White Lightens, The Picture's Black Leaves The Frames Alone
+        context.globalCompositeOperation = "screen";
+        context.globalAlpha = 0.85;
+        context.drawImage(wave, side, top, canvas.width - 2 * side, foot);
+        context.globalAlpha = 1;
+        context.globalCompositeOperation = "source-over";
     };
     const stripSizes = new ResizeObserver((entries) => entries.forEach((entry) => paintStrip(entry.target)));
     addEventListener("resize", () => strips.forEach(paintStrip));
     const showStrip = (canvas) => {
+        canvas.waveImage = null;
         const image = new Image();
         image.onload = () => paintStrip(canvas);
         image.src = canvas.dataset.src;
         canvas.stripImage = image;
         strips.add(canvas);
         stripSizes.observe(canvas);
+    };
+
+    const showWave = (canvas, url) => {
+        canvas.waveImage = null;
+        if (!url) return paintStrip(canvas);
+        const wave = new Image();
+        wave.onload = () => canvas.waveImage === wave && paintStrip(canvas);
+        wave.src = url;
+        canvas.waveImage = wave;
     };
 
     // A Typed Or Marked Point Moves Like A Drag
@@ -635,5 +664,5 @@ window.letsClip = (() => {
     // Scrolled Just Enough To Show The Whole Panel, Never Animated
     const reveal = (id) => document.getElementById(id)?.scrollIntoView({ block: "nearest" });
 
-    return { transition, watchEnd, restoreScroll, attach, detach, play, pause, place, stepEdge, mark, showStrip, setVolume, fullScreen, watchKeys, stopKeys: () => stopKeys(), reveal };
+    return { transition, watchEnd, restoreScroll, attach, detach, play, pause, place, stepEdge, mark, showStrip, showWave, setVolume, fullScreen, watchKeys, stopKeys: () => stopKeys(), reveal };
 })();

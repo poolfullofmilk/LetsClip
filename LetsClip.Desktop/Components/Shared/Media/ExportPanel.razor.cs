@@ -33,7 +33,7 @@ public partial class ExportPanel : IDisposable
 
     // A Shorter Selection Is Also Cut Into The Clip
     [Parameter]
-    public required Func<string, TrimRange, Task> SaveCut { get; set; }
+    public required Func<string, TrimRange, Task<bool>> SaveCut { get; set; }
 
     // The Clip Is Being Replaced, Nothing May Read It
     [Parameter]
@@ -86,27 +86,51 @@ public partial class ExportPanel : IDisposable
         }
     }
 
-    private bool WithAudio => Controller.Settings.ExportAudio && Media.HasAudio;
+    // Separate Tracks Can Leave Out Game Or Voice
+    private bool KeepsGame => Controller.Settings.ExportAudio && Media.HasAudio;
+
+    private bool KeepsMicrophone => Controller.Settings.ExportMicrophone;
+
+    private int? Track =>
+        Media.HasSeparateTracks ? AudioTracks.IndexOf(KeepsGame, KeepsMicrophone)
+        : KeepsGame ? 0
+        : null;
+
+    private bool WithAudio => Track is not null;
+
+    // The Clip Itself Keeps Every Track, An Export One
+    private int CopiedTracks =>
+        OnlyCopies ? Media.AudioTrackCount
+        : WithAudio ? 1
+        : 0;
 
     private double ClipBitsPerSecond => Clip.SizeBytes * 8 / Media.Duration;
 
     // A Copy's Packets, Weighed Once Per Range And Sound
-    private (TrimRange Range, bool WithAudio, long Bytes)? _copy;
+    private readonly Dictionary<int, long> _copies = [];
+    private TrimRange? _copiedRange;
 
-    private long CopyBytes
+    // One Picked Track, What A Plan Weighs Against Its Limit
+    private long CopyBytes => CopyBytesOf(WithAudio ? 1 : 0);
+
+    private long CopyBytesOf(int tracks)
     {
-        get
+        // Weighed From The Packets Once Per Range And Track Count
+        if (_copiedRange != Range)
         {
-            if (_copy is not { } copy || copy.Range != Range || copy.WithAudio != WithAudio)
-            {
-                var bytes = Media.Packets is { } packets
-                    ? SizeBudget.CopyBytes(packets, Range, WithAudio)
-                    : (long)(Clip.SizeBytes * Range.Length / Media.Duration);
-                _copy = copy = (Range, WithAudio, bytes);
-            }
-
-            return copy.Bytes;
+            _copiedRange = Range;
+            _copies.Clear();
         }
+
+        if (!_copies.TryGetValue(tracks, out var bytes))
+        {
+            bytes = Media.Packets is { } packets
+                ? SizeBudget.CopyBytes(packets, Range, tracks)
+                : (long)(Clip.SizeBytes * Range.Length / Media.Duration);
+            _copies[tracks] = bytes;
+        }
+
+        return bytes;
     }
 
     private bool IsExporting => Exports.IsExporting(Clip.Path);
@@ -126,14 +150,21 @@ public partial class ExportPanel : IDisposable
 
     private bool IsCut => Range.CutsShort(Media.Duration);
 
+    // Off With Its Sound Kept, An Export Just Copies
+    private bool OnlyCopies =>
+        KeepsClip && (Media.HasSeparateTracks ? Track == 0 : WithAudio == Media.HasAudio);
+
     // Once Exported, The Same Selection Reads Again
     private string ExportText =>
-        IsCut ? "Export and Save"
+        OnlyCopies ? (IsCut ? "Save and Copy" : "Copy File")
+        : IsCut ? "Export and Save"
         : ExportedFile is null ? "Export"
         : "Export Again";
 
     private bool CanExport =>
-        Exports.Running is null && !Busy && Range.IsValidFor(Media.Duration) && !IsTooLong;
+        OnlyCopies
+            ? !Busy && (!IsCut || CanSaveCut)
+            : Exports.Running is null && !Busy && Range.IsValidFor(Media.Duration) && !IsTooLong;
 
     private (int Width, int Height) OutputSize =>
         Budget is { } budget
@@ -152,7 +183,7 @@ public partial class ExportPanel : IDisposable
         SizeBudget.LimitOf(Plan) is { } limit ? SizeBudget.Plan(limit, Shape) : null;
 
     // A Copy's Weight, Or Where An Encode Lands
-    private long ExportBytes => Budget?.TypicalBytes ?? CopyBytes;
+    private long ExportBytes => Budget?.TypicalBytes ?? CopyBytesOf(CopiedTracks);
 
     // Too Long Exports Nothing, So The Rows Show The Clip
     private string ClipSizeText => Formatter.FormatSize(Clip.SizeBytes);
@@ -177,14 +208,22 @@ public partial class ExportPanel : IDisposable
     private string? CopyAudioText =>
         Budget is not null ? null
         : WithAudio && Media.Packets is { } packets
-            ? SizeBudget
-                .SoundBytesPerSecond(packets)
-                .ToString("0.###", CultureInfo.InvariantCulture)
+            ? (SizeBudget.SoundBytesPerSecond(packets) * CopiedTracks).ToString(
+                "0.###",
+                CultureInfo.InvariantCulture
+            )
         : "0";
 
-    // The Size Over The Length, So Both Rows Always Agree
+    // A Copy Keeps The Clip's Rate, An Encode Its Most
     private string BitrateText =>
-        IsTooLong ? ClipBitrateText : Formatter.FormatBitrate(ExportBytes * 8 / Range.Length);
+        IsTooLong ? ClipBitrateText
+        : Budget is null ? Formatter.FormatBitrate(CopyBitsPerSecond)
+        : Formatter.FormatBitrate(ExportBytes * 8 / Range.Length);
+
+    // The Whole Clip's Rate, Less Each Sound Track Left Out
+    private double CopyBitsPerSecond =>
+        ClipBitsPerSecond
+        - ((Media.AudioTrackCount - CopiedTracks) * (Media.Packets?.AudioBytesPerSecond ?? 0) * 8);
 
     private bool IsTooLong => Budget?.Verdict == BudgetVerdict.TooSmall;
 
@@ -223,7 +262,17 @@ public partial class ExportPanel : IDisposable
 
     private void ToggleAudio()
     {
-        Controller.UpdateSettings(settings => settings with { ExportAudio = !WithAudio });
+        Controller.UpdateSettings(settings => settings with { ExportAudio = !KeepsGame });
+    }
+
+    private void ToggleMicrophone()
+    {
+        Controller.UpdateSettings(settings =>
+            settings with
+            {
+                ExportMicrophone = !KeepsMicrophone,
+            }
+        );
     }
 
     private async Task SaveCutAsync()
@@ -263,8 +312,24 @@ public partial class ExportPanel : IDisposable
         });
     }
 
+    private async Task CopyAsync()
+    {
+        // A Cut Is Saved First, Then The Clip Is Copied
+        var (path, range, title) = (Clip.Path, Range, ExportText);
+        if (!IsCut || (await ConfirmCutAsync(title) && await SaveCut(path, range)))
+        {
+            DesktopShell.CopyFile(path, Snackbar);
+        }
+    }
+
     private async Task ExportAsync()
     {
+        if (OnlyCopies)
+        {
+            await CopyAsync();
+            return;
+        }
+
         var cut = IsCut;
         if (cut && !await ConfirmCutAsync(ExportText))
         {
@@ -276,7 +341,7 @@ public partial class ExportPanel : IDisposable
             Range,
             Plan,
             FrameRate,
-            WithAudio,
+            Track,
             Controller.Settings.ExportsDirectory
         );
 

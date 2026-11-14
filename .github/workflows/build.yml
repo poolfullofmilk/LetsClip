@@ -27,4 +27,20 @@ jobs:
         run: ./LetsClip.Desktop/FFmpeg/Get-FFmpeg.ps1
 
       - name: Build
-        run: dotnet build LetsClip.slnx -c Release
+        run: dotnet build LetsClip.slnx -c Release -warnaserror
+
+      # The Messages Visual Studio Lists, Which A Build Never Prints
+      - name: Check Analyzers And Style
+        run: |
+          foreach ($project in Get-ChildItem -Recurse -Filter *.csproj) {
+            dotnet format analyzers $project.FullName --verify-no-changes --severity info
+            if ($LASTEXITCODE) { exit 1 }
+            dotnet format style $project.FullName --verify-no-changes --severity info
+            if ($LASTEXITCODE) { exit 1 }
+          }
+
+      # The Same CSharpier As On The Owner's PC
+      - name: Check Formatting
+        run: |
+          dotnet tool install --global csharpier --version 1.3.0
+          csharpier check .

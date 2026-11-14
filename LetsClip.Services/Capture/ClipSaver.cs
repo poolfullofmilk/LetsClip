@@ -9,6 +9,24 @@ public static class ClipSaver
 {
     private static readonly TimeSpan s_timeout = TimeSpan.FromMinutes(2);
 
+    // Windows' Own Disk Full Code, Whoever Runs Out First
+    public const int DiskFullCode = unchecked((int)0x80070070);
+    private const long DiskMargin = 50_000_000;
+
+    private static long FreeBytes(string folder)
+    {
+        try
+        {
+            return new DriveInfo(Path.GetFullPath(folder)).AvailableFreeSpace;
+        }
+        catch (Exception exception)
+            when (exception is IOException or ArgumentException or UnauthorizedAccessException)
+        {
+            // Unknown Space Is Tried, FFmpeg Then Says If It Fails
+            return long.MaxValue;
+        }
+    }
+
     public static async Task<ClipInfo> SaveAsync(
         IReadOnlyList<Segment> video,
         IReadOnlyList<Segment> audio,
@@ -20,10 +38,19 @@ public static class ClipSaver
         int frameRate,
         string? game,
         int? monitor,
+        bool separateTracks,
         ClipLibrary library
     )
     {
         var clipsFolder = FolderFor(library.Folder);
+
+        // A Full Drive Is Named Before FFmpeg Fails Halfway
+        var needed = video.Sum(segment => segment.Bytes) + audio.Sum(segment => segment.Bytes);
+        if (FreeBytes(clipsFolder) < needed + DiskMargin)
+        {
+            throw new IOException("Not Enough Space For The Clip", DiskFullCode);
+        }
+
         var temporary = ClipLibrary.PartialPathIn(clipsFolder);
         try
         {
@@ -57,6 +84,7 @@ public static class ClipSaver
                 .. audioInput,
                 "-c",
                 "copy",
+                .. separateTracks ? TrackNames() : [],
                 "-to",
                 FFmpeg.Seconds(to - from),
                 "-movflags",
@@ -83,7 +111,10 @@ public static class ClipSaver
                 throw new InvalidDataException("The saved clip did not read back");
             }
 
-            var finalPath = UniquePath(clipsFolder, ClipNames.For(recordedAt));
+            var finalPath = UniquePath(
+                clipsFolder,
+                ClipNames.For(ClipNames.SourceOf(game, monitor), recordedAt)
+            );
             File.Move(temporary, finalPath);
             // Keeps The Capture Rate, Game And Monitor, Thumbnails Come Later
             ClipLibrary.WriteMetadata(
@@ -111,6 +142,23 @@ public static class ClipSaver
             // Only This Save's Own Unfinished File, Never Anything Else
             await FFmpeg.DeleteOutputAsync(temporary);
         }
+    }
+
+    private static List<string> TrackNames()
+    {
+        // Named For Players, Only The Mix Plays By Default
+        List<string> arguments = [];
+        for (var index = 0; index < AudioTracks.Separate.Length; index++)
+        {
+            arguments.AddRange([
+                $"-metadata:s:a:{index}",
+                $"handler_name={AudioTracks.Separate[index]}",
+                $"-disposition:a:{index}",
+                index == 0 ? "default" : "0",
+            ]);
+        }
+
+        return arguments;
     }
 
     private static string FolderFor(string picked)

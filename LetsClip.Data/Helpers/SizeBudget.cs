@@ -45,7 +45,7 @@ public static class SizeBudget
         {
             DiscordPlan.Free => 20,
             DiscordPlan.NitroBasic => 50,
-            DiscordPlan.Nitro => 500,
+            DiscordPlan.Nitro => 1000,
             _ => null,
         };
     }
@@ -70,7 +70,7 @@ public static class SizeBudget
         return packets.AudioBytesPerSecond + (IndexBytesPerPacket * packets.AudioPacketsPerSecond);
     }
 
-    public static long CopyBytes(PacketMap packets, TrimRange range, bool withAudio)
+    public static long CopyBytes(PacketMap packets, TrimRange range, int tracks)
     {
         // A Copy Runs From The Keyframe Before Its Seek
         var times = packets.Times;
@@ -94,7 +94,7 @@ public static class SizeBudget
         var lead = times.Length > 0 ? Math.Max(0, seek - times[first]) : 0;
 
         // The Page Script Weighs The Same, Rounding The Same Way
-        var sound = withAudio ? (range.Length + lead) * SoundBytesPerSecond(packets) : 0;
+        var sound = tracks * (range.Length + lead) * SoundBytesPerSecond(packets);
         return bytes
             + (IndexBytesPerPacket * count)
             + (long)Math.Round(sound, MidpointRounding.AwayFromZero)
@@ -153,12 +153,11 @@ public static class SizeBudget
             2
         );
         var copies =
-            CopyBytes(packets, new TrimRange(0.6, 0.8), false) == 300 + (3 * 12) + HeaderBytes
-            && CopyBytes(packets, new TrimRange(0.5, 0.8), false) == 800 + (8 * 12) + HeaderBytes
-            && CopyBytes(packets, new TrimRange(0, 1), true)
+            CopyBytes(packets, new TrimRange(0.6, 0.8), 0) == 300 + (3 * 12) + HeaderBytes
+            && CopyBytes(packets, new TrimRange(0.5, 0.8), 0) == 800 + (8 * 12) + HeaderBytes
+            && CopyBytes(packets, new TrimRange(0, 1), 1)
                 == 1000 + (10 * 12) + 50 + 24 + HeaderBytes
-            && CopyBytes(packets, new TrimRange(0.6, 0.8), true)
-                == 300 + (3 * 12) + 22 + HeaderBytes;
+            && CopyBytes(packets, new TrimRange(0.6, 0.8), 1) == 300 + (3 * 12) + 22 + HeaderBytes;
 
         // 20 MB Over A Minute Leaves About 2.4 Mbps
         var clip = new ExportShape(30, 1920, 1080, 60, true);
@@ -195,7 +194,7 @@ public static class SizeBudget
             && LimitOf(DiscordPlan.Off) is null
             && LimitOf(DiscordPlan.Free) == 20
             && LimitOf(DiscordPlan.NitroBasic) == 50
-            && LimitOf(DiscordPlan.Nitro) == 500
+            && LimitOf(DiscordPlan.Nitro) == 1000
             && KeepsClip(DiscordPlan.Off, 3600, 40_000_000)
             && KeepsClip(DiscordPlan.Free, 10, 1_000_000)
             && !KeepsClip(DiscordPlan.Free, 30, 1_000_000)

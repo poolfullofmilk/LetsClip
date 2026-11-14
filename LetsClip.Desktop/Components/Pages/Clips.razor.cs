@@ -4,6 +4,7 @@ using LetsClip.Data.ViewModels;
 using LetsClip.Desktop.Components.Shared.Dialogs;
 using LetsClip.Desktop.Interop;
 using LetsClip.Services.Capture;
+using LetsClip.Services.Media;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using MudBlazor;
@@ -52,6 +53,12 @@ public partial class Clips : IDisposable
     // Only Unedited Clips, Kept Like The Games
     private static bool s_uneditedOnly;
 
+    // Names Or Games Containing This, Kept Like The Filter
+    private static string? s_query;
+
+    // A Game Picked Elsewhere Starts At The Top
+    private static bool s_fromTop;
+
     private HashSet<string> _draft = [];
     private bool _draftUnedited;
     private string? _search;
@@ -62,6 +69,8 @@ public partial class Clips : IDisposable
 
     private static bool IsFiltered => s_shownGames is not null || s_uneditedOnly;
 
+    private static bool IsSearched => !string.IsNullOrWhiteSpace(s_query);
+
     // Sorted By Time, Each Day Gets Its Own Header
     private bool IsByDay => Controller.Settings.ClipSort is ClipSort.Newest or ClipSort.Oldest;
 
@@ -71,7 +80,9 @@ public partial class Clips : IDisposable
         get
         {
             var shown = (s_clips ?? []).Where(clip =>
-                s_shownGames?.Contains(clip.Source) != false && !(s_uneditedOnly && clip.IsEdited)
+                s_shownGames?.Contains(clip.Source) != false
+                && !(s_uneditedOnly && clip.IsEdited)
+                && Matches(clip)
             );
             var ordered = Controller.Settings.ClipSort switch
             {
@@ -97,12 +108,6 @@ public partial class Clips : IDisposable
             string.IsNullOrWhiteSpace(_search)
             || game.Contains(_search.Trim(), StringComparison.CurrentCultureIgnoreCase)
         );
-
-    // Checked, Unchecked Or Some
-    private bool? AllState =>
-        Games.All(_draft.Contains) ? true
-        : _draft.Count == 0 ? false
-        : null;
 
     protected override async Task OnInitializedAsync()
     {
@@ -223,10 +228,12 @@ public partial class Clips : IDisposable
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         // Back Where It Was Left, Once Cached Cards Are Drawn
-        if (firstRender && s_clips is not null)
+        if (firstRender && s_clips is not null && !s_fromTop)
         {
             await JavaScript.CallAsync("letsClip.restoreScroll");
         }
+
+        s_fromTop = false;
 
         // Ponytail: Each Batch Rebuilds Every Shown Card, Fine To Thousands
         if (ShownClips.Count > s_cards)
@@ -256,8 +263,23 @@ public partial class Clips : IDisposable
     private static string CountText(int shown)
     {
         return s_clips is not { Count: > 0 } clips ? ""
-            : IsFiltered ? $"{shown} of {clips.Count}"
+            : IsFiltered || IsSearched ? $"{shown} of {clips.Count}"
             : $"{clips.Count}";
+    }
+
+    private static bool Matches(ClipInfo clip)
+    {
+        // The Name, The File Or The Game, Any Case
+        var query = s_query?.Trim();
+        return string.IsNullOrEmpty(query)
+            || clip.Title.Contains(query, StringComparison.CurrentCultureIgnoreCase)
+            || clip.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase)
+            || clip.Source.Contains(query, StringComparison.CurrentCultureIgnoreCase);
+    }
+
+    private async Task SearchAsync(string? query)
+    {
+        await ChangeAsync(() => s_query = query, fromTop: true);
     }
 
     private static string? CardStyle(ClipInfo clip)
@@ -293,7 +315,7 @@ public partial class Clips : IDisposable
     #region Filter
     private void OpenFilter()
     {
-        // The Popover Edits A Copy Until Apply
+        // Checks Answer At Once, The Cards Follow Through Their Fade
         _draft = new HashSet<string>(s_shownGames ?? [.. Games], StringComparer.OrdinalIgnoreCase);
         _draftUnedited = s_uneditedOnly;
         _search = null;
@@ -305,21 +327,24 @@ public partial class Clips : IDisposable
         _filterOpen = false;
     }
 
-    private void SetGame(string game, bool shown)
+    private async Task SetGameAsync(string game, bool shown)
     {
         _ = shown ? _draft.Add(game) : _draft.Remove(game);
+        await ApplyFilterAsync();
     }
 
-    private void SetAll(bool? shown)
+    private async Task SetUneditedAsync(bool unedited)
     {
-        _draft = new HashSet<string>(shown == true ? Games : [], StringComparer.OrdinalIgnoreCase);
+        _draftUnedited = unedited;
+        await ApplyFilterAsync();
     }
 
-    private void ResetFilter()
+    private async Task ResetFilterAsync()
     {
-        SetAll(true);
+        _draft = new HashSet<string>(Games, StringComparer.OrdinalIgnoreCase);
         _draftUnedited = false;
         _search = null;
+        await ApplyFilterAsync();
     }
 
     private async Task ApplyFilterAsync()
@@ -329,13 +354,28 @@ public partial class Clips : IDisposable
             ? null
             : new HashSet<string>(_draft, StringComparer.OrdinalIgnoreCase);
         var unedited = _draftUnedited;
-        _filterOpen = false;
         await ChangeAsync(() => (s_shownGames, s_uneditedOnly) = (shown, unedited), fromTop: true);
     }
 
     private async Task ShowAllAsync()
     {
-        await ChangeAsync(() => (s_shownGames, s_uneditedOnly) = (null, false), fromTop: true);
+        await ChangeAsync(
+            () => (s_shownGames, s_uneditedOnly, s_query) = (null, false, null),
+            fromTop: true
+        );
+    }
+
+    public static void ShowOnly(string source)
+    {
+        // A Game Chip Lists That Game Alone, From The Top
+        s_shownGames =
+            Games is [var only] && only.Equals(source, StringComparison.OrdinalIgnoreCase)
+                ? null
+                : new HashSet<string>([source], StringComparer.OrdinalIgnoreCase);
+        s_uneditedOnly = false;
+        s_query = null;
+        s_cards = BatchSize;
+        s_fromTop = true;
     }
     #endregion
 
@@ -347,6 +387,28 @@ public partial class Clips : IDisposable
     private void Open(ClipInfo clip)
     {
         NavigationManager.NavigateTo(EditorOf(clip.Path));
+    }
+
+    private async Task RenameAsync(ClipInfo clip)
+    {
+        // The File Takes The Name, The Watcher Redraws Its Card
+        if (
+            await RenameDialog.AskAsync(DialogService, clip) is not { } name
+            || clip.CustomTitleFrom(name) is var title && title == clip.CustomTitle
+        )
+        {
+            return;
+        }
+
+        try
+        {
+            await Task.Run(() => ClipLibrary.RenameAsync(clip.Path, title));
+        }
+        catch (Exception exception)
+            when (exception is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            Snackbar.Add("The clip could not be renamed, it may be in use", Severity.Warning);
+        }
     }
 
     private async Task DeleteAsync(ClipInfo clip)

@@ -31,7 +31,14 @@ The owner's rule: consistent on every kind of system, and anything that can fix 
 | An update dies before it can log | The old version wrote `AttemptedUpdate` before launching it, so the next start of the old version skips that release instead of installing it at every sign in | Nothing records until the next start, then Recording |
 | A timer or thread body throws something unlisted | Caught and logged where it happens: the clip folder timers (`ClipLibrary.Guard`), the game check, the Discord watch, the audio writer, the save chime's output meter | Nothing |
 | No microphone or output device exists at all | Automatic records silence and connects when one becomes the default | `No Microphone Detected` in Settings, no warning |
-| Old versions' unpacked folders pile up in `%Temp%\.net` | Deleted at the next Release start, a running copy's own folder kept | Nothing |
+| Old versions' unpacked folders pile up in `%Temp%\.net` | Deleted at the next Release start, both the versioned `LetsClip_v*` folders of v2.0.9 and older and the other builds under `LetsClip`, a running copy's own folder kept | Nothing |
+| The clips drive fills up | A save first checks its segments plus 50 MB fit (`ClipSaver`) and refuses at once, never retried; Settings shows Almost Full beside Disk Space under room for three replays or 1 GB | The falling chime and `The clips drive is full, free some space` |
+| The GPU route will not start (a driver refusing `scale_d3d11`) | The same encoder runs on the CPU route, the next start tries the GPU first again | Recording throughout |
+| A clip is in use while it is renamed or moved | A rename retries five times a second apart (`ReplaceWhileBusyAsync`), then keeps its old name and title; a clip named before v2.0.10 whose file is held at the first start is renamed at a later start (`NameFilesAsync`); a folder move leaves that file in the old folder and counts it | A warning snackbar |
+| A newer LetsClip starts while an older one runs | The newer one renames the running exe aside, signals it to exit (`{FolderName}.Exit`), takes `LetsClip.exe` and starts from there (`Updater.TakeOver`); an equal or older one only shows the running window | Nothing |
+| An update cannot replace `LetsClip.exe` (held by a scanner) | The download starts under its versioned name and logs `Failed To Swap The Installed Exe`; the Run value and shortcuts follow it and the next update tries again | Nothing |
+| What an update changed cannot be read (offline, GitHub's rate limit) | Nothing is shown and the next start asks again (`Updater.ChangesAsync` returns null) | Nothing |
+| WebView2 is not installed | LetsClip says so before anything starts, OK opens Microsoft's download, and exits | The message |
 
 ## Reliability Research And Tests
 
