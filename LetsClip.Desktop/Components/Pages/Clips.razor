@@ -70,7 +70,7 @@
                           Visible="@IsFiltered"
                           Class="d-flex">
                     <IconButton Icon="@Icons.Material.Rounded.FilterList"
-                                Text="Filter Clips"
+                                Text="Filter by Source"
                                 Disabled="@(s_clips is not { Count: > 0 } && !IsFiltered)"
                                 OnClick="OpenFilter" />
                 </MudBadge>
@@ -89,7 +89,16 @@
                                      CheckedIcon="@Icons.Material.Rounded.CheckBox"
                                      UncheckedIcon="@Icons.Material.Rounded.CheckBoxOutlineBlank"
                                      Dense>
-                            <MudText Typo="Typo.body2">Only Unedited Clips</MudText>
+                            <MudStack Row
+                                      AlignItems="AlignItems.Center"
+                                      Justify="Justify.SpaceBetween"
+                                      Spacing="4">
+                                <MudText Typo="Typo.body2">Only Unedited Clips</MudText>
+                                <MudText Typo="Typo.body2"
+                                         Class="mud-text-secondary flex-shrink-0">
+                                    @UneditedCount
+                                </MudText>
+                            </MudStack>
                         </MudCheckBox>
                     </MudElement>
                     <MudElement HtmlTag="div"
@@ -98,14 +107,14 @@
                         <MudTextField T="string"
                                       @bind-Value="_search"
                                       Immediate
-                                      Placeholder="Search"
+                                      Placeholder="Search Sources"
                                       Adornment="Adornment.Start"
                                       AdornmentIcon="@Icons.Material.Rounded.Search"
                                       Clearable
                                       ClearIcon="@Icons.Material.Rounded.Clear"
                                       Variant="Variant.Outlined"
                                       Margin="Margin.Dense"
-                                      aria-label="Search Games and Apps"
+                                      aria-label="Search Sources"
                                       Class="my-0" />
                     </MudElement>
                     <MudElement HtmlTag="div"
@@ -121,10 +130,19 @@
                                          UncheckedIcon="@Icons.Material.Rounded.CheckBoxOutlineBlank"
                                          Disabled="@(Games.Count < 2)"
                                          Dense>
-                                <MudText Typo="Typo.body2">
-                                    <MudHighlighter Text="@game"
-                                                    HighlightedText="@_search" />
-                                </MudText>
+                                <MudStack Row
+                                          AlignItems="AlignItems.Center"
+                                          Justify="Justify.SpaceBetween"
+                                          Spacing="4">
+                                    <MudText Typo="Typo.body2">
+                                        <MudHighlighter Text="@game"
+                                                        HighlightedText="@_search" />
+                                    </MudText>
+                                    <MudText Typo="Typo.body2"
+                                             Class="mud-text-secondary flex-shrink-0">
+                                        @CountOf(game)
+                                    </MudText>
+                                </MudStack>
                             </MudCheckBox>
                         }
                     </MudElement>
@@ -221,7 +239,9 @@
                                   tabindex="0"
                                   data-keyclick
                                   aria-label="@($"Open {clip.Title}")"
-                                  aria-description="@FactsText(clip)"
+                                  aria-description="@DescriptionOf(clip)"
+                                  draggable="true"
+                                  data-file="@clip.Path"
                                   Style="@CardStyle(clip)"
                                   @onclick="() => Open(clip)">
                             <MudElement HtmlTag="div"
@@ -231,7 +251,8 @@
                                     <MudImage Src="@DesktopShell.ThumbnailUrl(clip.ThumbnailPath)"
                                               Alt="@clip.Title"
                                               loading="lazy"
-                                              decoding="async" />
+                                              decoding="async"
+                                              draggable="false" />
                                 }
                                 else if (Controller.Library.IsMakingPictures)
                                 {
@@ -244,8 +265,22 @@
                                 <MudElement HtmlTag="div"
                                             Class="clip-preview"
                                             data-clip="@DesktopShell.ClipUrl(clip)" />
-                                <SourceChip Clip="clip"
-                                            OnPicture />
+                                @* Top Chips *@
+                                <MudElement HtmlTag="div"
+                                            Class="clip-top-chips">
+                                    @if (IsNew(clip))
+                                    {
+                                        <MudChip T="string"
+                                                 Size="Size.Small"
+                                                 Variant="Variant.Filled"
+                                                 Color="Color.Dark"
+                                                 Class="new-chip ml-0 my-0 mr-auto">
+                                            New
+                                        </MudChip>
+                                    }
+                                    <SourceChip Clip="clip"
+                                                OnPicture />
+                                </MudElement>
                                 @* Picture Chips *@
                                 <MudElement HtmlTag="div"
                                             Class="clip-chips">

@@ -93,18 +93,18 @@ public static class VideoEncoders
         CaptureQuality quality
     )
     {
-        // Half The Peak, 20 Mbps At 1080p60
-        return PeakBytesPerSecond(width, height, frameRate, quality) / 2;
+        // AMF's Target, 28 Mbps At 1080p60, Seven Tenths Of Peak
+        return PeakBytesPerSecond(width, height, frameRate, quality) * 7 / 10;
     }
 
-    private static (double Scale, string Level, string AmfLevel) TuningOf(CaptureQuality quality)
+    private static (double Scale, string Level) TuningOf(CaptureQuality quality)
     {
-        // AMF Counts Quality Up, Matched To x264 By PSNR
+        // Quality Steps Scale The Rates, Levels For NVENC, QSV, x264
         return quality switch
         {
-            CaptureQuality.High => (1.75, "19", "48"),
-            CaptureQuality.Max => (2.5, "16", "51"),
-            _ => (1, "22", "42"),
+            CaptureQuality.High => (1.75, "19"),
+            CaptureQuality.Max => (2.5, "16"),
+            _ => (1, "22"),
         };
     }
 
@@ -129,15 +129,15 @@ public static class VideoEncoders
     )
     {
         // Peaks Stay Capped So The Replay Cache Stays Bounded
-        var (scale, level, amfLevel) = TuningOf(quality);
+        var (scale, level) = TuningOf(quality);
         var load = LoadOf(width, height, frameRate) * scale;
-        var target = Megabits(20 * load);
         var peak = Megabits(40 * load);
         // A Keyframe Every Second, So Every Segment Starts Decodable
         var group = frameRate.ToString(CultureInfo.InvariantCulture);
         IReadOnlyList<string> shared = ["-g", group, "-bf", "0", "-profile:v", "high"];
         IReadOnlyList<string> specific = encoder.Codec switch
         {
+            // Preanalysis Held 420 MB, Peak Rate Without It Scored Higher
             "h264_amf" =>
             [
                 "-usage",
@@ -145,11 +145,11 @@ public static class VideoEncoders
                 "-quality",
                 "balanced",
                 "-rc",
-                "qvbr",
-                "-qvbr_quality_level",
-                amfLevel,
+                "vbr_peak",
+                "-preanalysis",
+                "0",
                 "-b:v",
-                target,
+                Megabits(28 * load),
                 "-maxrate",
                 peak,
                 "-bufsize",

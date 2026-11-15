@@ -207,12 +207,12 @@ public sealed class ReplayRecorder : IDisposable
         }
     }
 
-    public void SetSeconds(int seconds)
+    public void Adjust(CaptureOptions wanted)
     {
-        // A New Replay Length Keeps The Session And Its History
+        // A New Length Or Volume Keeps The Session's History
         lock (_gate)
         {
-            _session?.SetSeconds(seconds);
+            _session?.Adjust(wanted);
         }
     }
 
@@ -521,8 +521,8 @@ public sealed class ReplayRecorder : IDisposable
                     return false;
                 }
 
-                // A Length Changed Meanwhile Carries Over
-                standby.SetSeconds(current.Options.Seconds);
+                // A Length Or Volume Changed Meanwhile Carries Over
+                standby.Adjust(current.Options);
                 _session = standby;
                 Encoder = standby.Encoder;
             }
@@ -681,7 +681,10 @@ public sealed class ReplayRecorder : IDisposable
             )
         )
         {
-            await Task.Delay(100);
+            // Woken By The Next Segment, Else Checked Again Soon
+            using var poll = new CancellationTokenSource();
+            await Task.WhenAny(session.SegmentAdded, Task.Delay(100, poll.Token));
+            poll.Cancel();
         }
 
         // Most Of A Save Is This Wait, Logged Apart
@@ -729,6 +732,7 @@ public sealed class ReplayRecorder : IDisposable
                 session.Folder,
                 recordedAt,
                 session.Options.FrameRate,
+                session.Size,
                 session.Options.GameName,
                 monitor,
                 session.Options.SeparatesMicrophone && audio.Count > 0,
@@ -929,16 +933,8 @@ public sealed class ReplayRecorder : IDisposable
 
     private static long FreeBytes(string folder)
     {
-        try
-        {
-            return new DriveInfo(Path.GetPathRoot(Path.GetFullPath(folder))!).AvailableFreeSpace;
-        }
-        catch (Exception exception)
-            when (exception is IOException or ArgumentException or UnauthorizedAccessException)
-        {
-            // An Unreadable Drive Is Treated As Full
-            return 0;
-        }
+        // An Unreadable Drive Is Treated As Full
+        return ClipSaver.FreeBytes(folder) ?? 0;
     }
     #endregion
 

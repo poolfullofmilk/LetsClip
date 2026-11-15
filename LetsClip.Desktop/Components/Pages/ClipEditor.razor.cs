@@ -706,22 +706,15 @@ public partial class ClipEditor : IAsyncDisposable
 
     private async Task DeleteAsync()
     {
-        if (_path is not { } path || !await YesNoDialog.ConfirmDeleteAsync(DialogService))
+        if (_path is not { } path)
         {
             return;
         }
 
         // The Preview Lets Go First, A Typed Name Goes Too
         await DetachAsync();
-        if (Explorer.Recycle(path))
-        {
-            _path = null;
-        }
-        else
-        {
-            Snackbar.Add("The clip could not be deleted, it may be in use", Severity.Warning);
-        }
-
+        Clips.DeleteLater(path, Snackbar);
+        _path = null;
         Back();
     }
 

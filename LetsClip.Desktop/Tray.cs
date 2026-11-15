@@ -3,6 +3,7 @@ using System.Net.Http;
 using LetsClip.Data.Enums;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
+using LetsClip.Desktop.Components.Pages;
 using LetsClip.Desktop.Interop;
 using LetsClip.Desktop.Theming;
 using LetsClip.Services.Capture;
@@ -141,6 +142,8 @@ public sealed class Tray
             await Task.Delay(100);
         }
 
+        // A Clip Deleted Moments Ago Stays Deleted
+        Clips.FinishDeletes();
         ExitNow();
     }
 

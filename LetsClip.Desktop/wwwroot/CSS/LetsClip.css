@@ -968,6 +968,12 @@
     border-top: 1px solid var(--mud-palette-lines-default);
 }
 
+/* Each Row's Clip Count Sits Greyed On The Right */
+.filter-popover .mud-checkbox > .mud-typography {
+    flex: 1;
+    min-width: 0;
+}
+
 /* Search Matches Read Tonal, With No Padding */
 mark {
     padding: 0 !important;
@@ -987,10 +993,10 @@ mark {
         box-shadow: 0 0 0 2px var(--tonal-info-hover), var(--mud-elevation-4);
     }
 
-/* Cards Stay Wide Enough For Date And Length */
+/* Five Across On A 2560 Wide Screen At 125% */
 .clip-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(272px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     gap: 12px;
 }
 
@@ -1033,11 +1039,29 @@ mark {
         gap: 8px;
     }
 
-    .clip-thumb .source-chip {
+    /* New Left, The Source Right, Along The Top */
+    .clip-thumb .clip-top-chips {
         position: absolute;
         top: 8px;
+        left: 8px;
         right: 8px;
-        max-width: calc(100% - 16px);
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+    }
+
+        /* MudBlazor Wraps Each Chip, The Chips Themselves Line Up */
+        .clip-thumb .clip-top-chips > .mud-chip-container {
+            display: contents;
+        }
+
+    .clip-thumb .source-chip {
+        min-width: 0;
+    }
+
+    /* Saved Since LetsClip Was Last Open, In The Accent */
+    .clip-thumb .new-chip {
+        color: var(--mud-palette-info);
     }
 
         /* Chips On A Picture Take The Icon's Softer Shadow */

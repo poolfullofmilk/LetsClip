@@ -47,17 +47,22 @@ public sealed class AudioMixer : IDisposable
     private long _emittedFrames;
     private long _muteUntilFrame = long.MinValue;
 
+    // Halved So It Passes The Full Scale Clamp
+    private volatile float _halfMicrophoneVolume;
+
     public AudioMixer(
         long originTimestamp,
         string? systemId,
         string? microphoneId,
         bool separateMicrophone,
+        double microphoneVolume,
         int gameProcess
     )
     {
-        // A Cleaned Microphone Gets Its Own Two Channels
+        // A Cleaned Microphone Gets Two Channels, Its Volume A Fifth
         _origin = originTimestamp;
-        _outputChannels = separateMicrophone ? Channels * 2 : Channels;
+        _outputChannels = separateMicrophone ? (Channels * 2) + 1 : Channels;
+        SetMicrophoneVolume(microphoneVolume);
         if (systemId is not null && gameProcess != 0)
         {
             // Only The Game And Voice Chat, Each With Its Children
@@ -187,6 +192,12 @@ public sealed class AudioMixer : IDisposable
         _writer.Start();
     }
 
+    public void SetMicrophoneVolume(double volume)
+    {
+        // The Encoder Multiplies The Cleaned Microphone By It, No Restart
+        _halfMicrophoneVolume = (float)(volume / 2);
+    }
+
     public void MuteSystemAudio(TimeSpan duration)
     {
         // Our Own Save Chime Never Lands In The Next Clip
@@ -245,6 +256,15 @@ public sealed class AudioMixer : IDisposable
                 foreach (var source in _sources)
                 {
                     source.Drain(_emittedFrames, mix, _outputChannels);
+                }
+
+                if (_outputChannels > Channels * 2)
+                {
+                    var volume = _halfMicrophoneVolume;
+                    for (var index = Channels * 2; index < mix.Length; index += _outputChannels)
+                    {
+                        mix[index] = volume;
+                    }
                 }
 
                 for (var index = 0; index < mix.Length; index++)

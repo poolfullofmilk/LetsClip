@@ -13,7 +13,7 @@ public static class ClipSaver
     public const int DiskFullCode = unchecked((int)0x80070070);
     private const long DiskMargin = 50_000_000;
 
-    private static long FreeBytes(string folder)
+    internal static long? FreeBytes(string folder)
     {
         try
         {
@@ -22,8 +22,8 @@ public static class ClipSaver
         catch (Exception exception)
             when (exception is IOException or ArgumentException or UnauthorizedAccessException)
         {
-            // Unknown Space Is Tried, FFmpeg Then Says If It Fails
-            return long.MaxValue;
+            // Unknown, Each Caller Decides What That Means
+            return null;
         }
     }
 
@@ -36,6 +36,7 @@ public static class ClipSaver
         string sessionFolder,
         DateTimeOffset recordedAt,
         int frameRate,
+        (int Width, int Height) size,
         string? game,
         int? monitor,
         bool separateTracks,
@@ -44,7 +45,7 @@ public static class ClipSaver
     {
         var clipsFolder = FolderFor(library.Folder);
 
-        // A Full Drive Is Named Before FFmpeg Fails Halfway
+        // Named Before FFmpeg Fails Halfway, Unknown Space Is Tried
         var needed = video.Sum(segment => segment.Bytes) + audio.Sum(segment => segment.Bytes);
         if (FreeBytes(clipsFolder) < needed + DiskMargin)
         {
@@ -75,6 +76,9 @@ public static class ClipSaver
                 "-nostdin",
                 "-loglevel",
                 "error",
+                "-nostats",
+                "-progress",
+                "pipe:1",
                 "-y",
                 "-copyts",
                 "-itsoffset",
@@ -100,15 +104,10 @@ public static class ClipSaver
                 CancellationToken.None,
                 workingDirectory: sessionFolder
             );
-            if (!result.Succeeded)
+            // The Remux Reports Its Own End, No Second Read
+            if (!result.Succeeded || !WroteVideo(result.Output))
             {
                 throw new IOException($"Failed To Write The Clip, {result.LastError}");
-            }
-
-            var media = await MediaProbe.ProbeAsync(temporary, CancellationToken.None);
-            if (media is not { HasVideo: true, Duration: > 0.2 })
-            {
-                throw new InvalidDataException("The saved clip did not read back");
             }
 
             var finalPath = UniquePath(
@@ -121,7 +120,7 @@ public static class ClipSaver
                 finalPath,
                 new ClipMetadata(
                     recordedAt,
-                    media.Duration,
+                    to - from,
                     null,
                     null,
                     0,
@@ -129,8 +128,8 @@ public static class ClipSaver
                     frameRate,
                     null,
                     game,
-                    media.Width,
-                    media.Height,
+                    size.Width,
+                    size.Height,
                     Monitor: monitor
                 )
             );
@@ -142,6 +141,21 @@ public static class ClipSaver
             // Only This Save's Own Unfinished File, Never Anything Else
             await FFmpeg.DeleteOutputAsync(temporary);
         }
+    }
+
+    private static bool WroteVideo(string progress)
+    {
+        // Ended With Frames Written, Its Reported Times Mislead Here
+        var frames = progress
+            .Split('\n')
+            .LastOrDefault(line => line.StartsWith("frame=", StringComparison.Ordinal));
+        return progress.Contains("progress=end", StringComparison.Ordinal)
+            && int.TryParse(
+                frames?["frame=".Length..].Trim(),
+                CultureInfo.InvariantCulture,
+                out var count
+            )
+            && count > 0;
     }
 
     private static List<string> TrackNames()

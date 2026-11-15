@@ -23,15 +23,6 @@ public partial class YesNoDialog
     [Parameter]
     public (string Text, string Route)? Link { get; set; }
 
-    public static Task<bool> ConfirmDeleteAsync(IDialogService dialogService)
-    {
-        return ConfirmAsync(
-            dialogService,
-            "Delete Clip",
-            "It goes to the Recycle Bin, its exports stay"
-        );
-    }
-
     public static Task<bool> ConfirmCutAsync(IDialogService dialogService, string title)
     {
         // Without Kept Originals, A Cut Cannot Be Undone

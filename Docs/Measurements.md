@@ -280,3 +280,62 @@ Details in `Docs/Layout.md` (Edge Cases And A Ponytail Ultra Audit) and `Docs/Re
 - An added app that is itself a voice app, 440 Hz: -43.04 dB with its own pid left out of the voice apps; a game started by a voice app after the audit's shrink: -43.05 dB.
 - Exit mid export: one unfinished file in Exports before, none after, the app gone 0.2 s after the exit signal.
 - Not run: a clips folder move failing outright, a folder at a real drive's root, a game scan throwing, a kept original refusing the Recycle Bin. Each was read and built, the paths are a few lines.
+
+## A Live Match, 15 November 2026
+
+The owner played Overwatch on v2.0.12 with the default settings (Games and Apps Only, 1080p60 Normal, a minute, game and voice chat sound, the cleaned microphone at 80%) while the session watched his real install from outside. 7800X3D with 8 threads, RX 9070 XT (driver 32.0.32015.7029), 32 GB, the game at 2560 x 1440 on the 240 Hz monitor.
+
+- His running copy, sampled every 5 s for 20 minutes of match (222 samples, `Get-Process` deltas and the WMI class `Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine`, since `Get-Counter` returned nothing from a background shell): video FFmpeg 0.68 of a core on average and 0.88 at most, 639 MB, the video engine 15% and the 3D engine 2%; audio FFmpeg 0.08 of a core and 55 MB; LetsClip 0.01 of a core and 183 MB. Overwatch beside it: 3.1 cores (4.7 at most) and 74% of the 3D engine. So recording takes about 0.77 of the 8 threads, a tenth of the CPU, a fifth of what the game itself uses. Medal measured 0.13 to 0.20 of a core on the same game (Overwatch Field Test), so LetsClip still costs four to five times its CPU, all of it the readback and conversion (see `Docs/Capture.md`, Where The CPU Route's Time Goes).
+- His logs of 13 to 15 November: no error and no fatal; on 14 November the three session ends already noted (`Docs/Capture.md`, Sweep With The Owner's Settings), each recording again within 3.5 s; two headset mode switches (`AudioDeviceDisconnectedException`) reconnected within 25 ms without a restart; one hotkey clash with a sandbox. On 15 November the start at sign in took 5.2 s to Ready (0.4 s warm on 14 November), recording began 1.4 s after the game's window was found, and two Microphone Volume changes restarted the whole recording (fixed, `Docs/Capture.md`, Live Microphone Volume).
+- Capture chains measured beside his game, 20 s each, see `Docs/Capture.md`: the CPU route 54 to 67% of a core, the GPU route 14.8%, the hybrid with GPU conversion and CPU Lanczos 79 to 88% (rejected), Lanczos, bicubic and `bicublin` alike within the noise.
+- Tools, all throwaway in the session's scratchpad: the sampler above, a bench script running one FFmpeg capture chain for 20 s and reading its CPU after a 5 s warm up, the graph comparison and benchmark scripts for the audio, and the three size sweep over CDP.
+
+## Where A Thumbnail Comes From, 15 November 2026
+
+The owner asked for thumbnails from near the end. Frames taken from copies of four of his clips at 1 s in and at 8, 5, 3, 2 and 1 s before the end (two untouched 60 s Overwatch replays from that day's match, two clips he had cut to a few seconds):
+
+- 1 s in showed the hero select screen on one replay and a different fight from the start of the minute on the other.
+- 1 s before the end caught the communication wheel open on one replay: the press comes right after the moment, sometimes with a menu on screen.
+- 2 and 3 s before the end showed the fight on both replays; 2 s was picked.
+- On the cut clips the whole clip is the moment, and the middle (2.2 to 2.5 s of 4.4 to 4.5 s) showed it, where 1 s before the end showed the aftermath on one.
+- So a thumbnail is the later of the middle and 2 s before the end. A whole pass over 13 sandbox clips made every picture again with no failure.
+
+## Performance Sweep, 15 November 2026
+
+The owner asked for a thorough sweep with fixes to suggest. Nothing here is applied: performance work waits for his pick.
+
+Live, read only, his v2.0.12 during that afternoon's match (WMI counters over 60 s):
+
+- Video FFmpeg 0.63 of a core, 639 MB private but 160 MB resident (Windows trimmed it beside Overwatch's 20 GB), the cache written at 0.26 MB/s in a menu with 61 writes a second (a flush per packet for windows). Audio FFmpeg 0.08 of a core and 54 MB. LetsClip itself 0.007 of a core, 215 MB private while hidden with its page released (the aggressive collection after the release already runs, so this is the floor with WPF and Blazor loaded) and 0.73 MB/s into the audio pipe (four channels of 32 bit float at 48 kHz on that version).
+- Handles 2552 at 14:41 and 2469 at 15:03: no leak. Overwatch found to recording: 1.4 s.
+- Saves of 149 to 283 MB took 1.1 to 2.8 s: 0.4 to 1.3 s waiting for the segments holding the press, the remux 0.47 to 0.74 s, the probe back 69 to 688 ms during the match against 35 to 106 ms at rest. A fresh file under Videos probes in 28 to 34 ms, and under every core busy at normal priority in 110 to 162 ms (71 to 120 ms at above normal), so the slow probes in the match are most likely ffprobe's libraries paged back in beside the game.
+
+Measured offline on copies of his clips and on test sources:
+
+- Thumbnails: the exact frame (now) took 0.36 to 0.75 s of CPU, 0.22 to 0.40 s and 97 MB; the keyframe at or before the spot (`-noaccurate_seek -skip_frame nokey`) 0.03 to 0.11 s of CPU, 0.07 to 0.11 s and 45 MB, on two 60 s 1080p60 clips. With LetsClip's one second keyframes the picture then lands 2 to 3 s before the end.
+- The video encoder's memory, the window route on a 1440p test feed: QVBR with its preanalysis (now, onnxruntime loaded) 712 MB private, the same with `-async_depth` 1 or 4, the low latency usage or the motion boost off; VBR peak or CQP without preanalysis 289 MB; the graph without an encoder 225 MB. QVBR does not open without preanalysis. The CPU difference was within the noise, about 0.05 of a core. So the 14 November note that AMF's memory had nothing to trim was wrong.
+- Quality at the same size, 20 s of his match re-encoded: QVBR 16.7 Mbps, SSIM 0.961, PSNR 37.2 dB; VBR peak without preanalysis 17.6 Mbps, SSIM 0.964, PSNR 39.5 dB. Both metrics punish adaptive quantisation, so VMAF has to decide; the export test of 13 November found preanalysis moved VMAF by under 0.1.
+- Audio, 120 s of five channel audio through the capture graph: now 6.5 to 6.8% of a core; the microphone cleaned in mono 5.7 to 5.9%; AAC's fast coder 4.6%, but 17.8 against 19.8 dB signal to distortion on his game audio at the same size, so not worth it; both 3.8 to 4.5%; the graph without encoding 1.6 to 1.8%.
+- Saves: remuxing 61 one second segments of a 270 MB minute took 0.52 s, 0.59 to 0.74 s with faststart. Faststart stays.
+- The game watcher's scan while no game runs: 1 ms of CPU and 373 KB per scan of 235 processes every 2 s, 0.05% of a core. During a game it does not scan.
+
+## Rate Control And Saves, 15 November 2026, Evening
+
+The owner picked fixes 1, 2, 3, 5, 6 and 7 of the Performance Sweep and the card drag. What was measured before shipping them:
+
+- Preanalysis features, QVBR at 1080p60 on a test feed, private memory: on 543 MB, TAQ off 542, PAQ off 544, the motion boost mode off 543, CAQ off 543, lookahead 0 542, scene and static detection off 542, all of them off 542, onnxruntime loaded in every case. Only turning preanalysis itself off (VBR peak or CQP) drops it.
+- VMAF (the libvmaf of a FFmpeg 9.0.2 essentials build already on the PC, read only) against 20 s of the owner's 1080p60 Overwatch clips as reference, AMF at the capture's own settings:
+
+| Sample | QVBR 42 (was) | VBR peak 20 | VBR peak 28 (now) | VBR peak 36 | CQP 22 |
+|---|---|---|---|---|---|
+| A fight | 39.6 Mbps, 99.43, 1% low 92.9 | 20.2 Mbps, 98.94, 91.8 | 28.6 Mbps, 99.78, 96.4 | 36.8 Mbps, 99.89, 97.2 | 40.1 Mbps, 99.78, 96.7 |
+| The hero select screen | 27.3 Mbps, 99.46, 93.3 | 20.4 Mbps, 99.74, 94.1 | 28.5 Mbps, 99.92, 97.3 | 36.0 Mbps, 99.94, 97.3 | 25.9 Mbps, 99.88, 97.0 |
+| A calmer stretch | 21.4 Mbps, 98.73, 93.3 | 20.3 Mbps, 99.66, 96.4 | 28.7 Mbps, 99.84, 97.8 | 36.4 Mbps, 99.87, 98.0 | 21.0 Mbps, 99.56, 96.2 |
+
+- The reference is already compressed, so every score sits near the top; the 1% lows show the gap. VBR peak holds its target on calm content too (no padding below it either), so the disk use matches the owner's QVBR clips of that day (20, 27 and 38 Mbps, 28 on average).
+- Thumbnails: on a clip whose video ends 10 s before its sound, the exact seek and the plain keyframe seek both wrote nothing past the last frame (the frame decoded but came before the output's start); `-fps_mode passthrough` wrote it at every spot tried, on that clip and two of the owner's, 67 ms each.
+- Mono cleaning against stereo cleaning, the same five channel input: the mix, game and microphone tracks identical sample for sample over 30 s.
+- The remux's progress report under the save's `-copyts`: `out_time_us=0` for a correct 30 s file, `-37650000` for an out of range cut, 2312 frames reported for 1835 written; only `progress=end` and the frame count being above zero are trusted.
+- Saves in the sandbox, monitor capture: 0.6 and 0.7 s from press to file (segment waits 529 to 608 ms, remux 94 to 110 ms, no probe), against 1.1 to 2.8 s for the owner's three saves that afternoon with the probe.
+- The settle delay: Frame Rate 60 to 30 and back 1.2 s apart restarted nothing; 60 to 30 alone restarted 2.0 s later, and back to 60 the same.
+- Live, the sandbox recording the first monitor at 1080p60: video FFmpeg 176 MB private, 118 MB in RAM, 1087 handles; audio FFmpeg 33 MB, 142 handles.

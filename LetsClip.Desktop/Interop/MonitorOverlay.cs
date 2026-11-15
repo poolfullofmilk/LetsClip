@@ -27,6 +27,7 @@ public sealed partial class MonitorOverlay : Window
     // The Edge Traces The Screen, The Name Sits Top Centre
     private const double EdgeThickness = 8;
     private const double NameSize = 22;
+    private static readonly FontFamily s_font = new("Segoe UI Variable Display, Segoe UI");
 
     // A Toast Takes Only A Band Along The Top
     private const int ToastBand = 200;
@@ -63,7 +64,7 @@ public sealed partial class MonitorOverlay : Window
         var palette = AppTheme.Custom.PaletteDark;
         var words = new TextBlock
         {
-            FontFamily = new FontFamily("Segoe UI Variable Display, Segoe UI"),
+            FontFamily = s_font,
             FontSize = NameSize,
             FontWeight = FontWeights.SemiBold,
             Foreground = BrushOf(isWarning ? palette.Warning : palette.TextPrimary),
@@ -133,7 +134,7 @@ public sealed partial class MonitorOverlay : Window
         {
             Text = monitor.Label,
             Foreground = BrushOf(isChosen ? palette.Black : palette.TextPrimary),
-            FontFamily = new FontFamily("Segoe UI Variable Display, Segoe UI"),
+            FontFamily = s_font,
             FontSize = NameSize,
             FontWeight = FontWeights.SemiBold,
         };

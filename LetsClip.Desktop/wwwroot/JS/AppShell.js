@@ -177,6 +177,16 @@ window.letsClip = (() => {
         if (scroller) scroller.scrollTop = scrolled.get(location.pathname) ?? 0;
     };
 
+    // A Dragged Card Hands Its File To Windows
+    let dragger = null;
+    const dragClips = (dotnet) => (dragger = dotnet);
+    document.addEventListener("dragstart", (event) => {
+        const card = event.target instanceof Element ? event.target.closest(".hover-card[data-file]") : null;
+        if (!card || !dragger) return;
+        event.preventDefault();
+        dragger.invokeMethodAsync("DragFile", card.dataset.file).catch(() => {});
+    });
+
     // The Last Card Nearing The View Asks For More Cards
     let listEnd = null;
     const watchEnd = (dotnet, method) => {
@@ -669,5 +679,5 @@ window.letsClip = (() => {
     // Scrolled Just Enough To Show The Whole Panel, Never Animated
     const reveal = (id) => document.getElementById(id)?.scrollIntoView({ block: "nearest" });
 
-    return { transition, watchEnd, restoreScroll, attach, detach, play, pause, place, stepEdge, mark, showStrip, showWave, setVolume, fullScreen, watchKeys, stopKeys: () => stopKeys(), reveal };
+    return { transition, dragClips, watchEnd, restoreScroll, attach, detach, play, pause, place, stepEdge, mark, showStrip, showWave, setVolume, fullScreen, watchKeys, stopKeys: () => stopKeys(), reveal };
 })();

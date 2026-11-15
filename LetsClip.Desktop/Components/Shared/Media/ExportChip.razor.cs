@@ -68,6 +68,8 @@ public partial class ExportChip : IDisposable
             Severity.Success,
             options =>
             {
+                // A Button Alone Would Keep It Open Until Pressed
+                options.RequireInteraction = false;
                 options.Action = "Copy File";
                 options.OnClick = _ =>
                 {

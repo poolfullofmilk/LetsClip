@@ -39,6 +39,7 @@ public sealed record UserSettings(
     ClipSort ClipSort = ClipSort.Newest,
     string? AttemptedUpdate = null,
     string? SeenCommit = null,
+    DateTimeOffset? ClipsSeenAt = null,
     double PlayerVolume = UserSettings.OpeningVolume,
     bool PlayerMuted = false,
     WindowBounds? Window = null
@@ -160,6 +161,7 @@ public sealed record UserSettings(
             ClipSort = ClipSort,
             AttemptedUpdate = AttemptedUpdate,
             SeenCommit = SeenCommit,
+            ClipsSeenAt = ClipsSeenAt,
             PlayerVolume = PlayerVolume,
             PlayerMuted = PlayerMuted,
             Window = Window,

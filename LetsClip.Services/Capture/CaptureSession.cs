@@ -32,18 +32,41 @@ public sealed class CaptureSession(
     private static readonly TimeSpan s_startTimeout = TimeSpan.FromSeconds(12);
 
     private readonly Lock _pinGate = new();
+    private TaskCompletionSource _segmentAdded = new(
+        TaskCreationOptions.RunContinuationsAsynchronously
+    );
     private int _pins;
     private bool _deleteWhenUnused;
 
     public CaptureOptions Options { get; private set; } = options;
 
-    public void SetSeconds(int seconds)
+    public static bool CanAdjust(CaptureOptions running, CaptureOptions wanted)
     {
-        // The Cache Grows Or Shrinks From Its Next Segment On
+        // The Length, Or A Volume The Same Filters Can Carry
+        return running with
+            {
+                Seconds = wanted.Seconds,
+                MicrophoneVolume = wanted.MicrophoneVolume,
+            } == wanted
+            && (
+                running.MicrophoneVolume == wanted.MicrophoneVolume
+                || (
+                    running.SeparatesMicrophone
+                    && wanted.SeparatesMicrophone
+                    && running.MicrophoneVolume > 1 == wanted.MicrophoneVolume > 1
+                )
+            );
+    }
+
+    public void Adjust(CaptureOptions wanted)
+    {
+        // Length From The Next Segment, Volume From The Next Chunk
         Options = Options with
         {
-            Seconds = seconds,
+            Seconds = wanted.Seconds,
+            MicrophoneVolume = wanted.MicrophoneVolume,
         };
+        Mixer?.SetMicrophoneVolume(wanted.MicrophoneVolume);
     }
 
     // High Frame Rates Need Room For Their Whole Replay
@@ -88,6 +111,9 @@ public sealed class CaptureSession(
 
     public double NewestEnd => Math.Min(VideoEnd, AudioEnd);
 
+    // Completes With The Next Finished Segment, Video Or Audio
+    public Task SegmentAdded => Volatile.Read(ref _segmentAdded).Task;
+
     public double MediaNow()
     {
         return Stopwatch.GetElapsedTime(OriginTimestamp).TotalSeconds + LeadSeconds;
@@ -107,6 +133,7 @@ public sealed class CaptureSession(
                 Options.SystemAudioId,
                 Options.MicrophoneId,
                 Options.SeparatesMicrophone,
+                Options.MicrophoneVolume,
                 Options.GameProcess
             );
             Audio = new SegmentProcess(
@@ -214,6 +241,14 @@ public sealed class CaptureSession(
                 s_logger.Warn($"Failed To Evict Segment {exception.GetType().Name}");
             }
         }
+
+        // A Waiting Save Wakes Now, Not On Its Next Poll
+        Interlocked
+            .Exchange(
+                ref _segmentAdded,
+                new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)
+            )
+            .TrySetResult();
     }
 
     private List<string> VideoArguments(long baseMicroseconds)
@@ -376,27 +411,38 @@ public sealed class CaptureSession(
     {
         // Cleaned First, The Gate Hears The Microphone Unchanged
         var cleaning = clean ? $"{VoiceCleaning}," : "";
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"{cleaning}volume={volume}{LimiterFor(volume)}"
+        );
+    }
 
+    private static string LimiterFor(double volume)
+    {
         // A Boost Is Held Under Full Scale
-        var limiter = volume > 1 ? ",alimiter=limit=0.95:level=0" : "";
-        return string.Create(CultureInfo.InvariantCulture, $"{cleaning}volume={volume}{limiter}");
+        return volume > 1 ? ",alimiter=limit=0.95:level=0" : "";
     }
 
     private static List<string> AudioArguments(CaptureOptions options)
     {
-        // A Filtered Microphone Arrives On Channels Three And Four
+        // Microphone On Channels Three And Four, Halved Volume On Five
         var separate = options.SeparatesMicrophone;
-        var voice = VoiceFilters(options.CleanMicrophone, options.MicrophoneVolume);
+
+        // Cleaned In Mono, One Channel Is Half The Work
+        var microphone = options.CleanMicrophone
+            ? $"pan=mono|c0=0.5*c2+0.5*c3,{VoiceCleaning},pan=stereo|c0=c0|c1=c0"
+            : "pan=stereo|c0=c2|c1=c3";
+        var limiter = LimiterFor(options.MicrophoneVolume);
         IReadOnlyList<string> layout = separate
-            ? ["-ac", "4", "-ch_layout", "4.0"]
+            ? ["-ac", "5", "-ch_layout", "5.0"]
             : ["-ac", "2", "-ch_layout", "stereo"];
 
         // The Mix Plays Everywhere, Game And Voice Ride Beside It
-        IReadOnlyList<string> cleaning = separate
+        IReadOnlyList<string> filters = separate
             ?
             [
                 "-filter_complex",
-                $"[0:a]asplit[a][b];[a]pan=stereo|c0=c0|c1=c1,asplit[system][game];[b]pan=stereo|c0=c2|c1=c3,{voice},asplit[voice][microphone];[system][voice]amix=inputs=2:normalize=0[mix]",
+                $"[0:a]asplit=3[a][b][c];[a]pan=stereo|c0=c0|c1=c1,asplit[system][game];[b]{microphone}[clean];[c]pan=stereo|c0=2*c4|c1=2*c4[volume];[clean][volume]amultiply{limiter},asplit[voice][microphone];[system][voice]amix=inputs=2:normalize=0[mix]",
                 "-map",
                 "[mix]",
                 "-map",
@@ -420,7 +466,7 @@ public sealed class CaptureSession(
             .. layout,
             "-i",
             "pipe:0",
-            .. cleaning,
+            .. filters,
             "-c:a",
             "aac",
             "-b:a",

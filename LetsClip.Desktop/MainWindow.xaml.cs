@@ -85,11 +85,18 @@ public partial class MainWindow : Window
             if (!IsVisible)
             {
                 RememberPlacement();
+                MarkClipsSeen();
             }
 
             _ = RestPageAsync();
         };
         controller.Changed += () => Dispatcher.InvokeAsync(MapClipsFolder);
+
+        // A First Start Counts As Seen, Later Clips Get Dots
+        if (controller.Settings.ClipsSeenAt is null)
+        {
+            MarkClipsSeen();
+        }
     }
 
     // Only The Tray's Exit Ends LetsClip, Closing Hides
@@ -112,6 +119,12 @@ public partial class MainWindow : Window
         }
 
         _controller.UpdateSettings(settings => settings with { Window = bounds });
+    }
+
+    private void MarkClipsSeen()
+    {
+        // Clips Saved From Now On Read As New
+        _controller.UpdateSettings(settings => settings with { ClipsSeenAt = DateTimeOffset.Now });
     }
 
     public void ShowFromTray()

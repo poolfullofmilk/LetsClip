@@ -59,10 +59,14 @@ public partial class Clips : IDisposable
     // A Game Picked Elsewhere Starts At The Top
     private static bool s_fromTop;
 
+    // Deleted Clips Wait Out Their Undo, Then Get Recycled
+    private static readonly HashSet<string> s_deleting = [with(StringComparer.OrdinalIgnoreCase)];
+
     private HashSet<string> _draft = [];
     private bool _draftUnedited;
     private string? _search;
     private bool _filterOpen;
+    private DateTimeOffset? _seenAt;
 
     private DotNetObjectReference<Clips> Reference =>
         _reference ??= DotNetObjectReference.Create(this);
@@ -70,6 +74,8 @@ public partial class Clips : IDisposable
     private static bool IsFiltered => s_shownGames is not null || s_uneditedOnly;
 
     private static bool IsSearched => !string.IsNullOrWhiteSpace(s_query);
+
+    private static int UneditedCount => s_clips?.Count(clip => !clip.IsEdited) ?? 0;
 
     // Sorted By Time, Each Day Gets Its Own Header
     private bool IsByDay => Controller.Settings.ClipSort is ClipSort.Newest or ClipSort.Oldest;
@@ -109,8 +115,20 @@ public partial class Clips : IDisposable
             || game.Contains(_search.Trim(), StringComparison.CurrentCultureIgnoreCase)
         );
 
+    private static event Action? DeleteUndone;
+
     protected override async Task OnInitializedAsync()
     {
+        // A Clip Deleted In The Editor Never Flashes Back
+        if (s_clips is not null)
+        {
+            s_clips = Kept(s_clips);
+        }
+
+        _seenAt = Controller.Settings.ClipsSeenAt;
+        Controller.Changed += OnControllerChanged;
+        DeleteUndone += OnLibraryChanged;
+
         // Saves List At Once, The Watcher Covers Explorer
         Controller.Library.Changed += OnLibraryChanged;
         Controller.Library.PicturesDone += OnPicturesDone;
@@ -142,6 +160,16 @@ public partial class Clips : IDisposable
                 StateHasChanged();
             }
         });
+    }
+
+    private void OnControllerChanged()
+    {
+        // Hidden Again, Its Dots Go Before The Next Look
+        if (Controller.Settings.ClipsSeenAt != _seenAt)
+        {
+            _seenAt = Controller.Settings.ClipsSeenAt;
+            _ = InvokeAsync(StateHasChanged);
+        }
     }
 
     private void OnExportsChanged()
@@ -184,9 +212,10 @@ public partial class Clips : IDisposable
         }
     }
 
-    private async Task ShowAsync(IReadOnlyList<ClipInfo> clips)
+    private async Task ShowAsync(IReadOnlyList<ClipInfo> listed)
     {
         // The Same Cards Just Update
+        var clips = Kept(listed);
         if (
             s_clips is not null
             && s_clips.Select(clip => clip.Path).SequenceEqual(clips.Select(clip => clip.Path))
@@ -227,6 +256,12 @@ public partial class Clips : IDisposable
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        // A Card Dragged Out Asks This Page For Its File
+        if (firstRender)
+        {
+            await JavaScript.CallAsync("letsClip.dragClips", Reference);
+        }
+
         // Back Where It Was Left, Once Cached Cards Are Drawn
         if (firstRender && s_clips is not null && !s_fromTop)
         {
@@ -239,6 +274,16 @@ public partial class Clips : IDisposable
         if (ShownClips.Count > s_cards)
         {
             await JavaScript.CallAsync("letsClip.watchEnd", Reference, nameof(ShowMoreCards));
+        }
+    }
+
+    [JSInvokable]
+    public void DragFile(string path)
+    {
+        // Only A Shown Card's Clip, The Page Names No Other File
+        if (ShownClips.Any(clip => clip.Path == path))
+        {
+            DesktopShell.DragFile(path);
         }
     }
 
@@ -307,9 +352,25 @@ public partial class Clips : IDisposable
         yield return ("Bitrate", Formatter.FormatBitrate(clip.SizeBytes * 8 / clip.Duration));
     }
 
-    private static string FactsText(ClipInfo clip)
+    private string DescriptionOf(ClipInfo clip)
     {
-        return string.Join(", ", FactsOf(clip).Select(fact => $"{fact.Label} {fact.Value}"));
+        // Screen Readers Hear The Dot Too
+        var facts = string.Join(", ", FactsOf(clip).Select(fact => $"{fact.Label} {fact.Value}"));
+        return IsNew(clip) ? $"New, {facts}" : facts;
+    }
+
+    private bool IsNew(ClipInfo clip)
+    {
+        // Saved Since LetsClip Was Last Hidden
+        return clip.RecordedAt > Controller.Settings.ClipsSeenAt;
+    }
+
+    private static int CountOf(string source)
+    {
+        return s_clips?.Count(clip =>
+                clip.Source.Equals(source, StringComparison.OrdinalIgnoreCase)
+            )
+            ?? 0;
     }
 
     #region Filter
@@ -414,21 +475,86 @@ public partial class Clips : IDisposable
 
     private async Task DeleteAsync(ClipInfo clip)
     {
-        if (!await YesNoDialog.ConfirmDeleteAsync(DialogService))
-        {
-            return;
-        }
-
-        if (!Explorer.Recycle(clip.Path))
-        {
-            Snackbar.Add("The clip could not be deleted, it may be in use", Severity.Warning);
-            return;
-        }
-
-        // The Card Goes At Once, The Watcher's Reload Then Agrees
+        // The Card Goes At Once, Undo Brings It Back
+        DeleteLater(clip.Path, Snackbar);
         ++_loads;
-        await ShowAsync([.. (s_clips ?? []).Where(shown => shown.Path != clip.Path)]);
+        await ShowAsync(s_clips ?? []);
     }
+
+    #region Deletes
+    public static void DeleteLater(string path, ISnackbar snackbar)
+    {
+        // Gone From The List At Once, Recycled After Undo
+        s_deleting.Add(path);
+        var undone = false;
+        var shown = snackbar.Add(
+            "Deleted the clip",
+            Severity.Success,
+            options =>
+            {
+                // A Button Alone Would Keep It Open Until Pressed
+                options.RequireInteraction = false;
+                options.Action = "Undo";
+                options.OnClick = _ =>
+                {
+                    undone = true;
+                    if (s_deleting.Remove(path))
+                    {
+                        DeleteUndone?.Invoke();
+                    }
+
+                    return Task.CompletedTask;
+                };
+            },
+            path
+        );
+        if (shown is null)
+        {
+            Recycle(path, snackbar);
+            return;
+        }
+
+        // Closed On A Timer Thread, Recycled On The Window's
+        var dispatcher = System.Windows.Application.Current.Dispatcher;
+        shown.OnClose += _ =>
+            dispatcher.InvokeAsync(() =>
+            {
+                if (!undone)
+                {
+                    Recycle(path, snackbar);
+                }
+            });
+    }
+
+    private static void Recycle(string path, ISnackbar snackbar)
+    {
+        // Exit May Have Recycled It, Or The File Moved
+        if (!s_deleting.Remove(path) || !File.Exists(path) || Explorer.Recycle(path))
+        {
+            return;
+        }
+
+        snackbar.Add("The clip could not be deleted, it may be in use", Severity.Warning);
+        DeleteUndone?.Invoke();
+    }
+
+    public static void FinishDeletes()
+    {
+        // Exiting Never Waits Out An Undo
+        foreach (var path in s_deleting.ToList())
+        {
+            s_deleting.Remove(path);
+            _ = Explorer.Recycle(path);
+        }
+    }
+
+    private static IReadOnlyList<ClipInfo> Kept(IReadOnlyList<ClipInfo> clips)
+    {
+        return s_deleting.Count == 0
+            ? clips
+            : [.. clips.Where(clip => !s_deleting.Contains(clip.Path))];
+    }
+    #endregion
 
     private void OpenFolder()
     {
@@ -437,6 +563,8 @@ public partial class Clips : IDisposable
 
     public void Dispose()
     {
+        Controller.Changed -= OnControllerChanged;
+        DeleteUndone -= OnLibraryChanged;
         Controller.Library.Changed -= OnLibraryChanged;
         Controller.Library.PicturesDone -= OnPicturesDone;
         Controller.Library.PictureMade -= OnPictureMade;

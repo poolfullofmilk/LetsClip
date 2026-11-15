@@ -277,6 +277,28 @@ public sealed class DesktopShell
         }
     }
 
+    public static void DragFile(string path)
+    {
+        // After The Page's Call Returns, WebView2 Never Waits
+        Application.Current.Dispatcher.BeginInvoke(() =>
+        {
+            // A Released Button Would Drop It Wherever The Pointer Rests
+            if (!Forms.Control.MouseButtons.HasFlag(Forms.MouseButtons.Left))
+            {
+                s_logger.Debug($"Skipped Dragging {Path.GetFileName(path)}, The Button Was Up");
+                return;
+            }
+
+            // Copied, A Drop On A Folder Never Moves It
+            var effect = DragDrop.DoDragDrop(
+                Application.Current.MainWindow,
+                new DataObject(DataFormats.FileDrop, new[] { path }),
+                DragDropEffects.Copy
+            );
+            s_logger.Debug($"Dragged {Path.GetFileName(path)} Out, {effect}");
+        });
+    }
+
     public static string? PickFolder(string current)
     {
         var dialog = new OpenFolderDialog

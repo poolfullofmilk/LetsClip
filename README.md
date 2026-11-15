@@ -15,9 +15,12 @@
 - Keep just the trimmed part without losing any quality, and keep the full clip to bring back if you want
 - The length, size and bitrate shown before an export are what the file comes out as, and a selection too long for a Discord plan tells you how long it can be
 - Clips sit under a header per day, each tagged with its game, app or monitor, with its resolution, bitrate and size in its menu
-- Search, rename and sort clips, and filter them by game or to the ones you have not edited yet
+- Search, rename and sort clips, and filter them by game, app or monitor, each with its count, or to the ones you have not edited yet
+- Clips saved since you last opened LetsClip are marked New
+- Each clip's picture shows the moment just before you saved it
 - Rest the pointer on a clip to preview it
-- Copy any clip as a file and paste it straight into Discord
+- Copy any clip as a file and paste it straight into Discord, or drag its card into Discord or a folder
+- Deleting a clip can be undone for a moment, then it goes to the Recycle Bin
 - Changing the clips folder moves every clip with its details, with a progress bar
 - A different sound tells you when a press saved nothing, and no notification ever plays a Windows sound over your game
 - A problem, like keys another app already uses or an almost full drive, shows as a small chip next to where you fix it

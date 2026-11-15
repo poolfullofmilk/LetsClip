@@ -20,7 +20,10 @@ public sealed class ClipLibrary : IDisposable
 
     // Copies To Another Drive Move In Pieces This Big
     private const int CopyBuffer = 4 * 1024 * 1024;
-    private const string ThumbnailSuffix = ".jpg";
+    private const string ThumbnailSuffix = ".end.jpg";
+
+    // Pictures From A Second In, Shown Until Remade
+    private const string FirstSecondSuffix = ".jpg";
 
     // Frames In A Strip, Each Twice The Timeline's Height
     public const int StripCells = 40;
@@ -131,7 +134,11 @@ public sealed class ClipLibrary : IDisposable
                 .Select(path => GetAsync(path, token))
         );
         var listed = clips.OfType<ClipInfo>().OrderByDescending(clip => clip.RecordedAt).ToList();
-        FillThumbnails([.. listed.Where(clip => clip.ThumbnailPath is null)]);
+        FillThumbnails([
+            .. listed.Where(clip =>
+                clip.ThumbnailPath?.EndsWith(ThumbnailSuffix, StringComparison.Ordinal) != true
+            ),
+        ]);
         return listed;
     }
 
@@ -207,13 +214,16 @@ public sealed class ClipLibrary : IDisposable
         }
 
         var thumbnail = PicturePathOf(path, ThumbnailSuffix);
+        var firstSecond = PicturePathOf(path, FirstSecondSuffix);
         return new ClipInfo(
             file.FullName,
             Path.GetFileNameWithoutExtension(file.Name),
             metadata.RecordedAt,
             metadata.Duration,
             file.Length,
-            File.Exists(thumbnail) ? thumbnail : null,
+            File.Exists(thumbnail) ? thumbnail
+                : File.Exists(firstSecond) ? firstSecond
+                : null,
             metadata.Title,
             metadata.Game,
             !metadata.ForeignOriginal && File.Exists(OriginalPathOf(path)),
@@ -928,10 +938,27 @@ public sealed class ClipLibrary : IDisposable
 
     private static Task<string?> ThumbnailAsync(string path, double duration)
     {
-        var at = FFmpeg.Seconds(Math.Min(1, duration / 2));
+        // The Keyframe Two Seconds Before The Press, One Frame Decoded
+        // Passed Through, So A Still Window's Last Frame Still Counts
         return RenderAsync(
             PicturePathOf(path, ThumbnailSuffix),
-            ["-ss", at, "-i", path, "-frames:v", "1", "-vf", "scale=480:-2", "-q:v", "4"],
+            [
+                "-noaccurate_seek",
+                "-skip_frame",
+                "nokey",
+                "-ss",
+                FFmpeg.Seconds(Math.Max(duration / 2, duration - 2)),
+                "-i",
+                path,
+                "-frames:v",
+                "1",
+                "-fps_mode",
+                "passthrough",
+                "-vf",
+                "scale=480:-2",
+                "-q:v",
+                "4",
+            ],
             TimeSpan.FromSeconds(30),
             CancellationToken.None
         );

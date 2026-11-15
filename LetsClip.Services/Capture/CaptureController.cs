@@ -27,6 +27,9 @@ public sealed class CaptureController : IDisposable
     // Retries Come Within Two Minutes, Later Ones Count Anew
     private static readonly TimeSpan s_failuresForgotten = TimeSpan.FromMinutes(5);
 
+    // Settings Changed In A Burst Restart Capture Once
+    private static readonly TimeSpan s_settle = TimeSpan.FromSeconds(2);
+
     private readonly Lock _gate = new();
     private readonly Lock _registering = new();
 
@@ -42,6 +45,7 @@ public sealed class CaptureController : IDisposable
     private int _failures;
     private long _lastFailure;
     private int _retry;
+    private int _settings;
     private volatile bool _quietRetry;
     private readonly Lazy<bool> _hasHardwareEncoder = new(() =>
         VideoEncoders.Candidates().Any(encoder => encoder.IsHardware)
@@ -191,7 +195,27 @@ public sealed class CaptureController : IDisposable
         }
 
         Changed?.Invoke();
-        _ = StepAsync(null);
+        _ = StepWhenSettledAsync();
+    }
+
+    private async Task StepWhenSettledAsync()
+    {
+        // A Later Change Takes Over The Wait
+        var settings = Interlocked.Increment(ref _settings);
+        try
+        {
+            await Task.Delay(s_settle, _closing.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // LetsClip Is Closing, Nothing Starts Again
+            return;
+        }
+
+        if (settings == Volatile.Read(ref _settings))
+        {
+            await StepAsync(null);
+        }
     }
 
     public void RegisterWithWindows(bool isInstall = false)
@@ -515,17 +539,19 @@ public sealed class CaptureController : IDisposable
                 return;
             }
 
-            // Only The Length Differs, The Session And Its History Stay
+            // Only The Length Or Volume Differs, The History Stays
             if (
                 wanted is not null
                 && running is not null
                 && stopReason is null
-                && running with { Seconds = wanted.Seconds } == wanted
+                && CaptureSession.CanAdjust(running, wanted)
             )
             {
-                Recorder.SetSeconds(wanted.Seconds);
+                Recorder.Adjust(wanted);
                 s_logger.Info(
-                    $"Changed The Replay Length From {running.Seconds} s To {wanted.Seconds} s, Recording Kept"
+                    running.Seconds != wanted.Seconds
+                        ? $"Changed The Replay Length From {running.Seconds} s To {wanted.Seconds} s, Recording Kept"
+                        : $"Changed The Microphone Volume From {running.MicrophoneVolume * 100:0}% To {wanted.MicrophoneVolume * 100:0}%, Recording Kept"
                 );
                 return;
             }
