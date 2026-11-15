@@ -88,6 +88,17 @@ public static partial class Formatter
         };
     }
 
+    public static string FormatGroup(DateTimeOffset time, DateTime today)
+    {
+        // Today, Yesterday, This Week, Last Week, Then Each Month
+        var day = time.ToLocalTime().Date;
+        var monday = today.AddDays(-(((int)today.DayOfWeek + 6) % 7));
+        return day >= today.AddDays(-1) ? FormatDay(time, today)
+            : day >= monday ? "This Week"
+            : day >= monday.AddDays(-7) ? "Last Week"
+            : day.ToString("MMMM yyyy", s_invariant);
+    }
+
     public static string FormatTime(DateTimeOffset time)
     {
         return time.ToLocalTime().ToString("H:mm", s_invariant);
@@ -125,6 +136,13 @@ public static partial class Formatter
             && FormatDateTime(morning.AddHours(-9), today) == "Yesterday at 23:05"
             && FormatDateTime(evening, today) == "4-11-2026 at 22:43"
             && FormatDateTime(morning.AddDays(1), today) == "7-11-2026 at 8:05"
+            && FormatGroup(morning, today) == "Today"
+            && FormatGroup(morning.AddDays(-1), today) == "Yesterday"
+            && FormatGroup(evening, today) == "This Week"
+            && FormatGroup(morning.AddDays(-4), today) == "This Week"
+            && FormatGroup(morning.AddDays(-5), today) == "Last Week"
+            && FormatGroup(morning.AddDays(-11), today) == "Last Week"
+            && FormatGroup(morning.AddDays(-12), today) == "October 2026"
             && FormatSize(20_000_000) == "20 MB"
             && FormatSize(20_540_000) == $"20{Point}5 MB"
             && FormatSize(2_000_000_000) == "2 GB"

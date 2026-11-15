@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using LetsClip.Data.Enums;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
@@ -77,8 +78,8 @@ public partial class Clips : IDisposable
 
     private static int UneditedCount => s_clips?.Count(clip => !clip.IsEdited) ?? 0;
 
-    // Sorted By Time, Each Day Gets Its Own Header
-    private bool IsByDay => Controller.Settings.ClipSort is ClipSort.Newest or ClipSort.Oldest;
+    // Sorted By Time, Clips Sit Under Day, Week Or Month
+    private bool IsGrouped => Controller.Settings.ClipSort is ClipSort.Newest or ClipSort.Oldest;
 
     // What The Cards Show, Filtered Then Ordered
     private IReadOnlyList<ClipInfo> ShownClips
@@ -134,6 +135,7 @@ public partial class Clips : IDisposable
         Controller.Library.PicturesDone += OnPicturesDone;
         Controller.Library.PictureMade += OnPictureMade;
         Controller.Exports.Changed += OnExportsChanged;
+        Controller.Exports.Finished += OnExportFinished;
         Controller.Recorder.ClipSaved += OnClipSaved;
         await LoadAsync();
     }
@@ -176,6 +178,12 @@ public partial class Clips : IDisposable
     {
         // An Exporting Clip Cannot Be Deleted Meanwhile
         _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void OnExportFinished(ExportOutcome outcome)
+    {
+        // Its Card Offers The New Export At Once
+        _ = InvokeAsync(LoadAsync);
     }
 
     private void OnLibraryChanged()
@@ -270,7 +278,7 @@ public partial class Clips : IDisposable
 
         s_fromTop = false;
 
-        // Ponytail: Each Batch Rebuilds Every Shown Card, Fine To Thousands
+        // Ponytail: Each Batch Diffs Every Shown Card, Fine To Thousands
         if (ShownClips.Count > s_cards)
         {
             await JavaScript.CallAsync("letsClip.watchEnd", Reference, nameof(ShowMoreCards));
@@ -335,28 +343,72 @@ public partial class Clips : IDisposable
             : $"view-transition-name:clip-{(uint)clip.Path.GetHashCode(StringComparison.OrdinalIgnoreCase)}";
     }
 
-    private static IEnumerable<(string Label, string Value)> FactsOf(ClipInfo clip)
+    private static string GroupOf(ClipInfo clip)
     {
-        // The Editor's Order, Old Metadata May Lack Some
-        yield return ("Size", Formatter.FormatSize(clip.SizeBytes));
-        if (clip.Width > 0)
-        {
-            yield return ("Resolution", Formatter.FormatResolution(clip.Width, clip.Height));
-        }
-
-        if (clip.FrameRate > 0)
-        {
-            yield return ("Frame Rate", Formatter.FormatFrameRate(clip.FrameRate));
-        }
-
-        yield return ("Bitrate", Formatter.FormatBitrate(clip.SizeBytes * 8 / clip.Duration));
+        return Formatter.FormatGroup(clip.RecordedAt, DateTime.Today);
     }
 
-    private string DescriptionOf(ClipInfo clip)
+    private string TimeOf(ClipInfo clip)
     {
-        // Screen Readers Hear The Dot Too
-        var facts = string.Join(", ", FactsOf(clip).Select(fact => $"{fact.Label} {fact.Value}"));
-        return IsNew(clip) ? $"New, {facts}" : facts;
+        // Today Or Yesterday Shows The Time, Elsewhere The Date Too
+        return IsGrouped && clip.RecordedAt.LocalDateTime.Date >= DateTime.Today.AddDays(-1)
+            ? Formatter.FormatTime(clip.RecordedAt)
+            : Formatter.FormatDateTime(clip.RecordedAt);
+    }
+
+    private async Task CopyForDiscordAsync(ClipInfo clip, DiscordPlan plan)
+    {
+        // The Kept Selection And Sound, On The Clipboard Once Ready
+        Controller.UpdateSettings(settings => settings with { ExportDiscordPlan = plan });
+        MediaInfo? media;
+        try
+        {
+            media = await Task.Run(() =>
+                MediaProbe.ProbeAsync(clip.Path, CancellationToken.None, withPackets: true)
+            );
+        }
+        catch (Exception exception) when (exception is TimeoutException or Win32Exception)
+        {
+            media = null;
+        }
+
+        if (media is not { HasVideo: true, Duration: > 0 })
+        {
+            Snackbar.Add("The clip could not be read, it may be in use", Severity.Warning);
+            return;
+        }
+
+        var metadata = ClipLibrary.MetadataOf(clip.Path);
+        var range = metadata is { TrimStart: { } start, TrimEnd: { } end }
+            ? TrimRange.Fit(start, end, media.Duration)
+            : TrimRange.Whole(media.Duration);
+        var settings = Controller.Settings;
+        var copy = ClipExporter.ForDiscord(
+            clip,
+            media,
+            range,
+            plan,
+            settings.ExportAudio,
+            settings.ExportMicrophone,
+            settings.ExportsDirectory,
+            metadata?.Crop
+        );
+        if (copy.Problem is { } problem)
+        {
+            Snackbar.Add(problem, Severity.Warning);
+        }
+        else if (copy.Request is { } request)
+        {
+            Snackbar.Add(
+                $"Exporting for {SizeBudget.NameOf(plan)}, copied once it is ready",
+                Severity.Info
+            );
+            _ = Controller.Exports.RunAsync(request, saveCut: false, keepOriginal: true);
+        }
+        else
+        {
+            DesktopShell.CopyFile(clip.Path, Snackbar);
+        }
     }
 
     private bool IsNew(ClipInfo clip)
@@ -569,6 +621,7 @@ public partial class Clips : IDisposable
         Controller.Library.PicturesDone -= OnPicturesDone;
         Controller.Library.PictureMade -= OnPictureMade;
         Controller.Exports.Changed -= OnExportsChanged;
+        Controller.Exports.Finished -= OnExportFinished;
         Controller.Recorder.ClipSaved -= OnClipSaved;
         _closing.Cancel();
         _closing.Dispose();

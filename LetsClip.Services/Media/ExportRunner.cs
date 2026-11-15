@@ -19,6 +19,10 @@ public sealed class ExportRunner
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
     private CancellationTokenSource? _cancel;
 
+    // One At A Time, Exports Pressed Meanwhile Wait In Line
+    private readonly SemaphoreSlim _turn = new(1, 1);
+    private readonly List<ExportRequest> _waiting = [];
+
     // Started Or Ended, Pages Redraw
     public event Action? Changed;
 
@@ -37,9 +41,19 @@ public sealed class ExportRunner
     // The Open Editor Cuts Its Clip, It Holds The File
     public (string Path, Func<TrimRange, Task<bool>> Cut)? Editor { get; set; }
 
+    public IReadOnlyList<ExportRequest> Waiting => _waiting;
+
+    // Running Or Waiting, The Page And Exit Wait For Both
+    public bool IsBusy => Running is not null || _waiting.Count > 0;
+
     public bool IsExporting(string? path)
     {
-        return path is not null && Running?.SourcePath == path;
+        return path is not null && (Running?.SourcePath == path || IsWaiting(path));
+    }
+
+    public bool IsWaiting(string? path)
+    {
+        return _waiting.Any(request => request.SourcePath == path);
     }
 
     public void Renamed(string from, string to)
@@ -53,9 +67,20 @@ public sealed class ExportRunner
 
     public async Task RunAsync(ExportRequest request, bool saveCut, bool keepOriginal)
     {
-        // One At A Time, Other Clips Wait
-        if (Running is not null)
+        // A Clip Already In Line Is Not Added Twice
+        if (IsExporting(request.SourcePath))
         {
+            return;
+        }
+
+        _waiting.Add(request);
+        Changed?.Invoke();
+        await _turn.WaitAsync();
+
+        // Cancelled While It Waited, The Next One Goes
+        if (!_waiting.Remove(request))
+        {
+            _turn.Release();
             return;
         }
 
@@ -104,19 +129,40 @@ public sealed class ExportRunner
             _cancel.Dispose();
             _cancel = null;
             Running = null;
+            _turn.Release();
         }
 
-        if (outcome.File is not null)
+        if (outcome.File is { } exported)
         {
+            // Remembered With Its Clip, Shown Again After A Restart
             Last = outcome;
+            ClipLibrary.UpdateMetadata(
+                request.SourcePath,
+                stored => stored with { Export = Path.GetFileName(exported) }
+            );
         }
 
         Changed?.Invoke();
         Finished?.Invoke(outcome);
     }
 
-    public void Cancel()
+    public void Cancel(string? path = null)
     {
+        // A Waiting Clip Leaves The Line, No Path Stops All
+        if (path is null)
+        {
+            _waiting.Clear();
+        }
+        else if (_waiting.RemoveAll(request => request.SourcePath == path) > 0)
+        {
+            Changed?.Invoke();
+            return;
+        }
+        else if (Running?.SourcePath != path)
+        {
+            return;
+        }
+
         _cancel?.Cancel();
     }
 

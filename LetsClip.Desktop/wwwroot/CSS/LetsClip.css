@@ -642,6 +642,11 @@
     }
 }
 
+/* Stop Recording, Its Seconds Never Shift It */
+.record-button {
+    font-variant-numeric: tabular-nums;
+}
+
 /* Export Progress, Centred In The App Bar */
 .appbar-center {
     position: absolute;
@@ -1137,6 +1142,8 @@ mark {
 /* The Side Panel Takes What The Clip Or Controls Leave */
 .split.editor {
     container-type: size;
+    /* The Selection Lines And The Crop Frame Share One Width */
+    --bar-width: round(5px, var(--device-pixel));
     /* The Height Left For The Clip In A Full Panel */
     --clip-room: calc(100cqh - 48px - 32px - var(--controls-height) - var(--timeline-height));
 }
@@ -1212,6 +1219,33 @@ mark {
         display: none;
     }
 
+/* Vertical Crop, The 9 By 16 Part An Export Keeps */
+.crop-box {
+    position: absolute;
+    overflow: hidden;
+    border-radius: var(--radius-inner);
+    pointer-events: none;
+}
+
+.crop-row {
+    --crop-width: calc(100% * 9 / 16 / var(--clip-aspect));
+    display: grid;
+    grid-template-columns: calc((100% - var(--crop-width)) * var(--crop)) var(--crop-width) 1fr;
+    height: 100%;
+}
+
+.crop-shade {
+    background-color: var(--shade);
+}
+
+.crop-frame {
+    outline: var(--bar-width) solid var(--grabber);
+    outline-offset: calc(0px - var(--bar-width));
+    cursor: grab;
+    pointer-events: auto;
+    touch-action: none;
+}
+
 /* A Held Frame Covers A File Change, Then Fades */
 .player-frozen {
     position: absolute;
@@ -1247,7 +1281,6 @@ mark {
     --grip-gap: round(5px, var(--device-pixel));
     --grip-width: round(3px, var(--device-pixel));
     --grip-height: round(22px, calc(2 * var(--device-pixel)));
-    --bar-width: round(5px, var(--device-pixel));
     --handle-width: calc(2 * var(--grip-gap) + var(--grip-width));
     height: var(--timeline-height);
     position: relative;
@@ -1365,6 +1398,17 @@ mark {
     }
 
 /* The Playhead Draws Over The Handles */
+/* A Zoomed Timeline Shows Where Its Window Sits */
+.timeline-zoom {
+    position: absolute;
+    z-index: 1;
+    bottom: 0;
+    height: var(--grip-width);
+    border-radius: var(--radius-pill);
+    background-color: var(--grip);
+    pointer-events: none;
+}
+
 .timeline-playhead {
     position: absolute;
     z-index: 1;

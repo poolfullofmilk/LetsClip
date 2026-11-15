@@ -74,6 +74,9 @@ public sealed class ReplayRecorder : IDisposable
     private readonly Lock _gate = new();
     private readonly Timer _health;
     private CaptureSession? _session;
+
+    // Kept From Start Until Stopped, Its Session Holds Every Segment
+    private ManualRecording? _manual;
     private int _saves;
     private int _healthTicks;
     private int _problemTicks;
@@ -102,6 +105,18 @@ public sealed class ReplayRecorder : IDisposable
     public event Action<CaptureFailure>? Failed;
 
     public CaptureStatus Status { get; private set; }
+
+    // Set While A Recording Runs Until Stopped
+    public DateTimeOffset? RecordingSince
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _manual?.StartedAt;
+            }
+        }
+    }
 
     // The Encoder Recording Now, Or Last, For About
     public VideoEncoder? Encoder { get; private set; }
@@ -188,6 +203,8 @@ public sealed class ReplayRecorder : IDisposable
             {
                 _session = null;
             }
+
+            FinishRecordingOf(session);
 
             _health.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
 
@@ -386,6 +403,7 @@ public sealed class ReplayRecorder : IDisposable
 
             await Task.Run(session.Shutdown);
             _health.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            FinishRecordingOf(session);
 
             // The Controller Hears First, A Quick Retry Shows No Error
             Failed?.Invoke(
@@ -415,12 +433,11 @@ public sealed class ReplayRecorder : IDisposable
     #region Encoder Recovery
     private static bool ConvertsOnGpu(CaptureOptions options, int width, int height)
     {
-        // A Monitor At Its Own Size Only Converts, Lanczos Scales
+        // At Its Own Size It Only Converts, Lanczos Scales
         var monitor = options.Monitor;
-        return options.GameWindow == 0
-            && monitor.Rotation == 0
-            && width == monitor.Width
-            && height == monitor.Height;
+        return options.GameWindow != 0
+            ? MonitorCatalog.ClientSizeOf(options.GameWindow) == (width, height)
+            : monitor.Rotation == 0 && width == monitor.Width && height == monitor.Height;
     }
 
     private async Task UpgradeAsync(CaptureSession current)
@@ -460,11 +477,12 @@ public sealed class ReplayRecorder : IDisposable
 
     private async Task<bool> TryMoveToAsync(CaptureSession current, VideoEncoder encoder)
     {
-        // Runs Beside The Fallback Until It Holds A Whole Replay
+        // Runs Beside The Fallback For A Replay, Never Mid Recording
         var (width, height) = current.Size;
         var options = current.Options;
         if (
-            !await VideoEncoders.WorksAsync(
+            RecordingSince is not null
+            || !await VideoEncoders.WorksAsync(
                 encoder,
                 width,
                 height,
@@ -530,6 +548,7 @@ public sealed class ReplayRecorder : IDisposable
             _ = WatchEndAsync(standby);
             _ = UpgradeAsync(standby);
             UpdateStatus(standby, null);
+            FinishRecordingOf(current);
             await Task.Run(current.Shutdown);
             s_logger.Info($"Moved Recording From {current.Encoder.Name} To {standby.Encoder.Name}");
             return true;
@@ -662,11 +681,158 @@ public sealed class ReplayRecorder : IDisposable
         }
     }
 
+    public bool StartRecording(int? monitor)
+    {
+        // Pinned From Now, Every Segment Stays Until Stop Saves It
+        lock (_gate)
+        {
+            if (
+                _session is not { } session
+                || Status.State != CaptureState.Recording
+                || _manual is not null
+            )
+            {
+                return false;
+            }
+
+            var from = session.MediaNow();
+            session.Pin(from);
+            _manual = new ManualRecording(session, from, DateTimeOffset.Now, monitor);
+        }
+
+        s_logger.Info("Started Recording Until Stopped");
+        StatusChanged?.Invoke();
+        return true;
+    }
+
+    public async Task<SaveOutcome> StopRecordingAsync()
+    {
+        ManualRecording? manual;
+        double end;
+        lock (_gate)
+        {
+            manual = _manual;
+            if (manual is null)
+            {
+                return new SaveOutcome(null, "Nothing is being recorded until stopped");
+            }
+
+            _manual = null;
+            _saves++;
+            var session = manual.Session;
+            end = session.HasEnded ? session.NewestEnd : session.MediaNow();
+        }
+
+        var stopped = Stopwatch.GetTimestamp();
+        try
+        {
+            StatusChanged?.Invoke();
+            SaveStarted?.Invoke();
+
+            // Segments Older Than The Live Replay Go As They Join
+            var keepFrom = manual.Session.HasEnded
+                ? double.MaxValue
+                : end - manual.Session.Options.Seconds - (CaptureSession.SegmentSeconds * 3);
+            var clip = await SaveFromAsync(
+                manual.Session,
+                end,
+                manual.StartedAt,
+                manual.Monitor,
+                manual.From,
+                keepFrom
+            );
+            ClipSaved?.Invoke(clip);
+            s_logger.Info(
+                $"Saved {Path.GetFileName(clip.Path)} Recorded Until Stopped, {Formatter.FormatDuration(clip.Duration)}, {Formatter.FormatSize(clip.SizeBytes)}, In {Stopwatch.GetElapsedTime(stopped).TotalSeconds:0.0} s"
+            );
+            return new SaveOutcome(clip, null);
+        }
+        catch (Exception exception)
+            when (exception
+                    is IOException
+                        or UnauthorizedAccessException
+                        or InvalidDataException
+                        or TimeoutException
+                        or Win32Exception
+            )
+        {
+            s_logger.Warn(
+                $"Failed To Save A Recording {exception.GetType().Name}, {exception.Message}"
+            );
+            return new SaveOutcome(null, SaveErrorOf(exception));
+        }
+        finally
+        {
+            manual.Session.Unpin(manual.From);
+            lock (_gate)
+            {
+                _saves--;
+            }
+
+            UpdateStatus(manual.Session, null);
+            StatusChanged?.Invoke();
+        }
+    }
+
+    private void FinishRecordingOf(CaptureSession session)
+    {
+        // A Session Ending Ends Its Recording, Saving What It Holds
+        bool ends;
+        lock (_gate)
+        {
+            ends = _manual?.Session == session;
+        }
+
+        if (ends)
+        {
+            _ = StopRecordingAsync();
+        }
+    }
+
+    private bool RecordingNeedsStop(CaptureSession session)
+    {
+        // Stopped Before The Clips Drive Cannot Hold The Recording
+        ManualRecording? manual;
+        lock (_gate)
+        {
+            manual = _manual;
+        }
+
+        if (manual?.Session != session || ClipSaver.FreeBytes(_library.Folder) is not { } free)
+        {
+            return false;
+        }
+
+        var now = session.MediaNow();
+        var recorded =
+            (session.Video?.Segments.Covering(manual.From, now).Sum(segment => segment.Bytes) ?? 0)
+            + (
+                session.Audio?.Segments.Covering(manual.From, now).Sum(segment => segment.Bytes)
+                ?? 0
+            );
+        if (free >= recorded + StopFreeBytes)
+        {
+            return false;
+        }
+
+        s_logger.Warn("Stopped Recording Until Stopped, The Clips Drive Is Nearly Full");
+        return true;
+    }
+
+    private sealed record ManualRecording(
+        CaptureSession Session,
+        double From,
+        DateTimeOffset StartedAt,
+        int? Monitor
+    );
+
     private async Task<ClipInfo> SaveFromAsync(
         CaptureSession session,
         double end,
         DateTimeOffset recordedAt,
-        int? monitor
+        int? monitor,
+        double? since = null,
+        double? deleteBefore = null
     )
     {
         // Waits For The Press's Segment, A Still Window Sends None
@@ -689,7 +855,7 @@ public sealed class ReplayRecorder : IDisposable
 
         // Most Of A Save Is This Wait, Logged Apart
         s_logger.Debug($"Waited {waited.ElapsedMilliseconds} ms For The Press's Segments");
-        var from = end - session.Options.Seconds;
+        var from = since ?? end - session.Options.Seconds;
         var video = session.Video?.Segments.Covering(from, end) ?? [];
         var to = Math.Min(end, session.NewestEnd);
         var videoOffset = 0.0;
@@ -736,7 +902,8 @@ public sealed class ReplayRecorder : IDisposable
                 session.Options.GameName,
                 monitor,
                 session.Options.SeparatesMicrophone && audio.Count > 0,
-                _library
+                _library,
+                deleteBefore
             );
         }
 
@@ -825,6 +992,11 @@ public sealed class ReplayRecorder : IDisposable
         }
 
         _windowQuiet = windowQuiet;
+
+        if (_healthTicks % 10 == 0 && RecordingNeedsStop(session))
+        {
+            _ = StopRecordingAsync();
+        }
 
         if (++_healthTicks % 10 == 0 && FreeBytes(session.Folder) < StopFreeBytes)
         {

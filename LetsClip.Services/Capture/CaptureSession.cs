@@ -21,6 +21,9 @@ public sealed class CaptureSession(
     private const double KeepMarginSeconds = 3;
     private const long CacheByteFloor = 1_500_000_000;
 
+    // Loud Game And Voice Together Stay Under Full Scale
+    private const string Limiter = ",alimiter=limit=0.95:level=0";
+
     // Past 1440p Reading Whole Frames Back Costs Too Much
     private const int MaximumWholeWindowPixels = 2560 * 1440;
 
@@ -420,7 +423,7 @@ public sealed class CaptureSession(
     private static string LimiterFor(double volume)
     {
         // A Boost Is Held Under Full Scale
-        return volume > 1 ? ",alimiter=limit=0.95:level=0" : "";
+        return volume > 1 ? Limiter : "";
     }
 
     private static List<string> AudioArguments(CaptureOptions options)
@@ -442,7 +445,7 @@ public sealed class CaptureSession(
             ?
             [
                 "-filter_complex",
-                $"[0:a]asplit=3[a][b][c];[a]pan=stereo|c0=c0|c1=c1,asplit[system][game];[b]{microphone}[clean];[c]pan=stereo|c0=2*c4|c1=2*c4[volume];[clean][volume]amultiply{limiter},asplit[voice][microphone];[system][voice]amix=inputs=2:normalize=0[mix]",
+                $"[0:a]asplit=3[a][b][c];[a]pan=stereo|c0=c0|c1=c1,asplit[system][game];[b]{microphone}[clean];[c]pan=stereo|c0=2*c4|c1=2*c4[volume];[clean][volume]amultiply{limiter},asplit[voice][microphone];[system][voice]amix=inputs=2:normalize=0{Limiter}[mix]",
                 "-map",
                 "[mix]",
                 "-map",

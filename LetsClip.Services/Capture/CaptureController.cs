@@ -30,6 +30,11 @@ public sealed class CaptureController : IDisposable
     // Settings Changed In A Burst Restart Capture Once
     private static readonly TimeSpan s_settle = TimeSpan.FromSeconds(2);
 
+    // A Session Lost To A Display Change Restarts Soon
+    private static readonly TimeSpan s_displayGrace = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan s_displayRetry = TimeSpan.FromSeconds(0.5);
+    private long _displaysChanged;
+
     private readonly Lock _gate = new();
     private readonly Lock _registering = new();
 
@@ -403,6 +408,36 @@ public sealed class CaptureController : IDisposable
             await Task.Delay(100);
         }
 
+        var outcome = await Recorder.SaveAsync(MonitorNumber());
+        if (outcome.Error is not null)
+        {
+            SaveFailed?.Invoke();
+        }
+
+        return outcome;
+    }
+
+    // Set While A Recording Runs Until Stopped
+    public DateTimeOffset? RecordingSince => Recorder.RecordingSince;
+
+    public bool StartRecording()
+    {
+        return Recorder.StartRecording(MonitorNumber());
+    }
+
+    public async Task<SaveOutcome> StopRecordingAsync()
+    {
+        var outcome = await Recorder.StopRecordingAsync();
+        if (outcome.Error is not null)
+        {
+            SaveFailed?.Invoke();
+        }
+
+        return outcome;
+    }
+
+    private int? MonitorNumber()
+    {
         // A Monitor Clip Is Named By Its Monitor's Place
         var number = Recorder.Options is { GameWindow: 0 } options
             ? Monitors
@@ -415,18 +450,13 @@ public sealed class CaptureController : IDisposable
                     )
                 ) + 1
             : 0;
-        var outcome = await Recorder.SaveAsync(number > 0 ? number : null);
-        if (outcome.Error is not null)
-        {
-            SaveFailed?.Invoke();
-        }
-
-        return outcome;
+        return number > 0 ? number : null;
     }
 
     public Task DisplaysChangedAsync()
     {
         // The Running Monitor Unplugged Or Changed Ends Its Session
+        Volatile.Write(ref _displaysChanged, Stopwatch.GetTimestamp());
         var running = Recorder.Options?.Monitor;
         RefreshMonitors();
         var now = MonitorCatalog.Find(Monitors, running?.DevicePath);
@@ -486,17 +516,24 @@ public sealed class CaptureController : IDisposable
         var retry = Interlocked.Increment(ref _retry);
         _quietRetry = failure != CaptureFailure.Blocked && failures <= QuietFailures;
         Changed?.Invoke();
-        var seconds = s_retrySeconds[Math.Min(failures, s_retrySeconds.Length) - 1];
+
+        // A Display Change Broke It, Nothing To Wait Out
+        var wait =
+            Stopwatch.GetElapsedTime(Volatile.Read(ref _displaysChanged)) < s_displayGrace
+                ? s_displayRetry
+                : TimeSpan.FromSeconds(
+                    s_retrySeconds[Math.Min(failures, s_retrySeconds.Length) - 1]
+                );
 
         // A Closed Window Is No Failure, Its Game Closed Too
         s_logger.Info(
             failure == CaptureFailure.WindowClosed
-                ? $"Starting Again In {seconds} s If The Game Still Runs"
-                : $"Retrying In {seconds} s, Failure {failures} In A Row, {failure}{(_quietRetry ? ", Out Of Sight" : "")}"
+                ? $"Starting Again In {wait.TotalSeconds:0.#} s If The Game Still Runs"
+                : $"Retrying In {wait.TotalSeconds:0.#} s, Failure {failures} In A Row, {failure}{(_quietRetry ? ", Out Of Sight" : "")}"
         );
         try
         {
-            await Task.Delay(TimeSpan.FromSeconds(seconds), _closing.Token);
+            await Task.Delay(wait, _closing.Token);
         }
         catch (OperationCanceledException)
         {

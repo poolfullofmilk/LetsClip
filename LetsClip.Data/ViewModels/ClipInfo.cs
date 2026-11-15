@@ -17,7 +17,8 @@ public sealed record ClipInfo(
     int FrameRate,
     int? Monitor,
     DateTime WrittenUtc,
-    bool IsEdited
+    bool IsEdited,
+    string? Export
 )
 {
     public string Source => ClipNames.SourceOf(Game, Monitor);

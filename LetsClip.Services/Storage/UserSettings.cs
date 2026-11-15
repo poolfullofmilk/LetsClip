@@ -22,6 +22,7 @@ public sealed record UserSettings(
     bool StartWithWindows = true,
     bool SaveSound = true,
     double SaveSoundVolume = 1,
+    bool Notifications = false,
     bool SystemAudio = true,
     string SystemAudioDeviceId = "",
     bool OnlyGameAndDiscord = true,

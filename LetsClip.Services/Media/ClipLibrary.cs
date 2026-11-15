@@ -18,6 +18,9 @@ public sealed class ClipLibrary : IDisposable
     private const string OriginalsFolder = ".Originals";
     public const string ExportsFolder = "Exports";
 
+    // Each Clip's Details, Hidden Beside It, So Moves Keep Them
+    private const string DetailsFolder = ".Details";
+
     // Copies To Another Drive Move In Pieces This Big
     private const int CopyBuffer = 4 * 1024 * 1024;
     private const string ThumbnailSuffix = ".end.jpg";
@@ -37,9 +40,15 @@ public sealed class ClipLibrary : IDisposable
 
     // The Sound's Outline, Drawn Under The Strip Once Per File
     private const string WaveSuffix = ".wave.jpg";
+
+    // A Zoomed Timeline's Window, Only The Newest Kept Per Clip
+    private const string ZoomMark = ".zoom-";
+    private const string ZoomWaveMark = ".zoomwave-";
     private const string WaveSize = "1600x64";
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
-    private static readonly string s_metadataDirectory = Path.Combine(
+
+    // Where Details Lived Before They Moved Beside The Clips
+    private static readonly string s_legacyDetailsDirectory = Path.Combine(
         AppInfo.DataDirectory,
         "Clips"
     );
@@ -63,6 +72,9 @@ public sealed class ClipLibrary : IDisposable
     );
     private int _filling;
     private int _fillAgain;
+
+    // Leftovers Of Clips Gone While Closed, Swept Once Per Start
+    private int _sweptLeftovers;
 
     public ClipLibrary(string folder)
     {
@@ -112,11 +124,22 @@ public sealed class ClipLibrary : IDisposable
 
     public async Task<IReadOnlyList<ClipInfo>> ListAsync(CancellationToken token)
     {
+        var folder = Folder;
         string[] paths;
         try
         {
-            IsUnavailable = !Directory.Exists(Folder);
-            paths = IsUnavailable ? [] : Directory.GetFiles(Folder, "*.mp4");
+            IsUnavailable = !Directory.Exists(folder);
+            paths = IsUnavailable
+                ? []
+                :
+                [
+                    .. Directory
+                        .GetFiles(folder, "*.mp4")
+                        .Where(path =>
+                            !Path.GetFileName(path)
+                                .StartsWith(PartialPrefix, StringComparison.Ordinal)
+                        ),
+                ];
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -126,19 +149,22 @@ public sealed class ClipLibrary : IDisposable
             return [];
         }
 
-        var clips = await Task.WhenAll(
-            paths
-                .Where(path =>
-                    !Path.GetFileName(path).StartsWith(PartialPrefix, StringComparison.Ordinal)
-                )
-                .Select(path => GetAsync(path, token))
+        // Gathered Once, Only When A Clip Lacks Its Details
+        var orphans = new Lazy<ConcurrentDictionary<(long Size, DateTime Written), string>>(() =>
+            OrphanDetails(folder, paths)
         );
+        var clips = await Task.WhenAll(paths.Select(path => GetAsync(path, token, orphans)));
         var listed = clips.OfType<ClipInfo>().OrderByDescending(clip => clip.RecordedAt).ToList();
         FillThumbnails([
             .. listed.Where(clip =>
                 clip.ThumbnailPath?.EndsWith(ThumbnailSuffix, StringComparison.Ordinal) != true
             ),
         ]);
+        if (!IsUnavailable && Interlocked.Exchange(ref _sweptLeftovers, 1) == 0)
+        {
+            _ = Task.Run(() => Guard(() => SweepLeftovers(folder, paths)), CancellationToken.None);
+        }
+
         return listed;
     }
 
@@ -195,7 +221,11 @@ public sealed class ClipLibrary : IDisposable
         });
     }
 
-    public async Task<ClipInfo?> GetAsync(string path, CancellationToken token)
+    public async Task<ClipInfo?> GetAsync(
+        string path,
+        CancellationToken token,
+        Lazy<ConcurrentDictionary<(long Size, DateTime Written), string>>? orphans = null
+    )
     {
         var file = new FileInfo(path);
         if (!file.Exists)
@@ -207,17 +237,27 @@ public sealed class ClipLibrary : IDisposable
             ? known.Width > 0
                 ? known
                 : await AddSizeAsync(file, known, token)
-            : await ProbeMetadataAsync(file, token);
+            : Adopt(file, orphans) ?? await ProbeMetadataAsync(file, token);
         if (metadata is null)
         {
             return null;
         }
 
+        // Details Without A Source Take It From The Saved Name
+        var name = Path.GetFileNameWithoutExtension(file.Name);
+        var (game, monitor) = ClipNames.SourceFrom(name);
+        if (metadata is { Game: null, Monitor: null } && (game is not null || monitor is not null))
+        {
+            metadata = metadata with { Game = game, Monitor = monitor };
+            UpdateMetadata(path, stored => stored with { Game = game, Monitor = monitor });
+        }
+
         var thumbnail = PicturePathOf(path, ThumbnailSuffix);
         var firstSecond = PicturePathOf(path, FirstSecondSuffix);
+        var export = ExportPathOf(path, metadata.Export);
         return new ClipInfo(
             file.FullName,
-            Path.GetFileNameWithoutExtension(file.Name),
+            name,
             metadata.RecordedAt,
             metadata.Duration,
             file.Length,
@@ -232,8 +272,17 @@ public sealed class ClipLibrary : IDisposable
             metadata.FrameRate ?? 0,
             metadata.Monitor,
             file.LastWriteTimeUtc,
-            metadata.IsEdited
+            metadata.IsEdited,
+            File.Exists(export) ? export : null
         );
+    }
+
+    public static string? ExportPathOf(string clip, string? export)
+    {
+        // The Last Export Is Remembered By Its Name In Exports
+        return export is null
+            ? null
+            : Path.Combine(Path.GetDirectoryName(clip) ?? "", ExportsFolder, export);
     }
 
     #region Names And Moves
@@ -323,7 +372,7 @@ public sealed class ClipLibrary : IDisposable
         }
 
         // Clips Saved Meanwhile Land In The Old Folder, Passes Repeat
-        var moved = 0;
+        List<string> arrived = [];
         HashSet<string> stuck = [with(StringComparer.OrdinalIgnoreCase)];
         for (var pass = 0; pass < 3; pass++)
         {
@@ -341,7 +390,7 @@ public sealed class ClipLibrary : IDisposable
                         await MoveFileAsync(original, OriginalPathOf(target), Moved);
                     }
 
-                    moved++;
+                    arrived.Add(target);
                 }
                 catch (Exception exception)
                     when (exception is IOException or UnauthorizedAccessException)
@@ -353,15 +402,20 @@ public sealed class ClipLibrary : IDisposable
             }
         }
 
+        Dictionary<string, string> renamed = [with(StringComparer.OrdinalIgnoreCase)];
         foreach (var export in ClipsIn(exportsFrom))
         {
             try
             {
-                await MoveFileAsync(
-                    export,
-                    ClipSaver.UniquePath(exportsTo, Path.GetFileNameWithoutExtension(export)),
-                    Moved
+                var target = ClipSaver.UniquePath(
+                    exportsTo,
+                    Path.GetFileNameWithoutExtension(export)
                 );
+                await MoveFileAsync(export, target, Moved);
+                if (Path.GetFileName(target) != Path.GetFileName(export))
+                {
+                    renamed[Path.GetFileName(export)] = Path.GetFileName(target);
+                }
             }
             catch (Exception exception)
                 when (exception is IOException or UnauthorizedAccessException)
@@ -371,14 +425,30 @@ public sealed class ClipLibrary : IDisposable
             }
         }
 
+        // An Export Renamed On Arrival Stays Its Clip's Export
+        foreach (var clip in renamed.Count > 0 ? arrived : [])
+        {
+            UpdateMetadata(
+                clip,
+                stored =>
+                    stored.Export is { } name && renamed.TryGetValue(name, out var now)
+                        ? stored with
+                        {
+                            Export = now,
+                        }
+                        : stored
+            );
+        }
+
         // Only Emptied Folders Go, Anything Else Stays
         RemoveEmptyFolder(Path.Combine(from, OriginalsFolder));
+        RemoveEmptyFolder(Path.Combine(from, DetailsFolder));
         RemoveEmptyFolder(exportsFrom);
         RemoveEmptyFolder(from);
         s_logger.Info(
-            $"Moved {moved} Clips And {Formatter.FormatSize(done)} To {to}, {stuck.Count} Stayed"
+            $"Moved {arrived.Count} Clips And {Formatter.FormatSize(done)} To {to}, {stuck.Count} Stayed"
         );
-        return (moved, stuck.Count);
+        return (arrived.Count, stuck.Count);
     }
 
     public static long BytesToMove(string from)
@@ -416,23 +486,24 @@ public sealed class ClipLibrary : IDisposable
     private static List<string> ClipsIn(string folder)
     {
         // Finished Files Only, A Partial Save Never Moves
+        return
+        [
+            .. FilesIn(folder, "*.mp4")
+                .Where(path =>
+                    !Path.GetFileName(path).StartsWith(PartialPrefix, StringComparison.Ordinal)
+                ),
+        ];
+    }
+
+    private static List<string> FilesIn(string folder, string pattern)
+    {
         try
         {
-            return Directory.Exists(folder)
-                ?
-                [
-                    .. Directory
-                        .EnumerateFiles(folder, "*.mp4")
-                        .Where(path =>
-                            !Path.GetFileName(path)
-                                .StartsWith(PartialPrefix, StringComparison.Ordinal)
-                        ),
-                ]
-                : [];
+            return Directory.Exists(folder) ? [.. Directory.EnumerateFiles(folder, pattern)] : [];
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            // An Unreadable Folder Holds Nothing To Move
+            // An Unreadable Folder Holds Nothing
             return [];
         }
     }
@@ -514,7 +585,7 @@ public sealed class ClipLibrary : IDisposable
             if (ReadStored(from) is { } stored)
             {
                 WriteMetadata(to, stored);
-                TryDelete(MetadataPathOf(from));
+                DeleteDetails(from);
             }
         }
 
@@ -967,32 +1038,44 @@ public sealed class ClipLibrary : IDisposable
     public static Task<string?> EnsureStripAsync(
         string path,
         double duration,
-        CancellationToken token
+        CancellationToken token,
+        TrimRange? window = null
     )
     {
-        // Keyframes Across The Clip, The Page Draws What Fits
-        // Sparse Keyframes Repeat Their Last, So No Tile Stays Black
-        var rate = FFmpeg.Seconds(StripCells / Math.Max(duration - 1, 0.5));
-        return RenderAsync(
-            PicturePathOf(path, s_stripSuffix),
-            [
+        // One Seek Per Cell, Twice As Fast As Decoding All
+        var from = window?.Start ?? 0;
+        var step = (window?.Length ?? Math.Max(duration - 1, 0.5)) / StripCells;
+        var cells = Enumerable.Range(0, StripCells).ToList();
+        var inputs = cells.SelectMany(cell =>
+            new[]
+            {
+                "-threads",
+                "1",
+                "-noaccurate_seek",
                 "-skip_frame",
                 "nokey",
+                "-ss",
+                FFmpeg.Seconds(from + (cell * step)),
                 "-i",
                 path,
-                "-an",
-                "-vf",
+            }
+        );
+        var graph = string.Concat(
+            cells.Select(cell =>
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"fps={rate},tpad=stop={StripCells}:stop_mode=clone,scale=-2:{StripHeight},tile={StripCells}x1"
-                ),
-                "-frames:v",
-                "1",
-                "-fps_mode",
-                "passthrough",
-                "-q:v",
-                "5",
-            ],
+                    $"[{cell}:v]trim=end_frame=1,setpts=PTS-STARTPTS,scale=-2:{StripHeight}[c{cell}];"
+                )
+            )
+        );
+        var stack =
+            string.Concat(cells.Select(cell => $"[c{cell}]")) + $"hstack=inputs={StripCells}";
+        return RenderAsync(
+            PicturePathOf(
+                path,
+                window is { } zoomed ? WindowSuffix(ZoomMark, zoomed) : s_stripSuffix
+            ),
+            [.. inputs, "-filter_complex", graph + stack, "-frames:v", "1", "-q:v", "5"],
             TimeSpan.FromSeconds(60),
             token
         );
@@ -1039,19 +1122,21 @@ public sealed class ClipLibrary : IDisposable
     public static Task<string?> EnsureWaveAsync(
         string path,
         double duration,
-        CancellationToken token
+        CancellationToken token,
+        TrimRange? window = null
     )
     {
         // White On Black, The Page Lays It Over The Strip
+        var (from, to) = window is { } zoomed ? (zoomed.Start, zoomed.End) : (0, duration);
         return RenderAsync(
-            PicturePathOf(path, WaveSuffix),
+            PicturePathOf(path, window is { } part ? WindowSuffix(ZoomWaveMark, part) : WaveSuffix),
             [
                 "-i",
                 path,
                 "-filter_complex",
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"[0:a:0]atrim=0:{FFmpeg.Seconds(duration)},showwavespic=s={WaveSize}:colors=white:scale=sqrt:draw=full:filter=peak"
+                    $"[0:a:0]atrim={FFmpeg.Seconds(from)}:{FFmpeg.Seconds(to)},showwavespic=s={WaveSize}:colors=white:scale=sqrt:draw=full:filter=peak"
                 ),
                 "-frames:v",
                 "1",
@@ -1063,10 +1148,20 @@ public sealed class ClipLibrary : IDisposable
         );
     }
 
+    private static string WindowSuffix(string mark, TrimRange window)
+    {
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"{mark}{window.Start:0.###}-{window.End:0.###}.jpg"
+        );
+    }
+
     private static string KindOf(string picture)
     {
         return picture.EndsWith(s_stripSuffix, StringComparison.Ordinal) ? s_stripSuffix
             : picture.EndsWith(WaveSuffix, StringComparison.Ordinal) ? WaveSuffix
+            : picture.Contains(ZoomWaveMark, StringComparison.Ordinal) ? ZoomWaveMark
+            : picture.Contains(ZoomMark, StringComparison.Ordinal) ? ZoomMark
             : ThumbnailSuffix;
     }
 
@@ -1114,7 +1209,97 @@ public sealed class ClipLibrary : IDisposable
             }
         }
 
-        TryDelete(MetadataPathOf(path));
+        DeleteDetails(path);
+    }
+
+    private static void SweepLeftovers(string folder, string[] paths)
+    {
+        // Details And Pictures Of Clips Deleted While LetsClip Was Closed
+        var kept = KeysOf(paths);
+        var details = LeftDetails(folder, kept);
+        var pictures = FilesIn(AppInfo.ThumbnailsDirectory, "*.jpg")
+            .Select(Path.GetFileName)
+            .OfType<string>()
+            .Where(name =>
+                name.Length > FilePaths.KeyLength
+                && !name.EndsWith(".tmp.jpg", StringComparison.Ordinal)
+                && !kept.Contains(name[..FilePaths.KeyLength])
+            )
+            .Select(name => Path.Combine(AppInfo.ThumbnailsDirectory, name))
+            .ToList();
+        foreach (var file in details.Concat(pictures))
+        {
+            TryDelete(file);
+        }
+
+        RemoveEmptyFolder(s_legacyDetailsDirectory);
+        if (details.Count + pictures.Count > 0)
+        {
+            s_logger.Info(
+                $"Swept {details.Count} Details And {pictures.Count} Pictures Of Clips Gone While LetsClip Was Closed"
+            );
+        }
+    }
+
+    private static ConcurrentDictionary<(long Size, DateTime Written), string> OrphanDetails(
+        string folder,
+        string[] paths
+    )
+    {
+        var orphans = new ConcurrentDictionary<(long Size, DateTime Written), string>();
+        foreach (var file in LeftDetails(folder, KeysOf(paths)))
+        {
+            if (ReadJson(file) is { } stored)
+            {
+                orphans.TryAdd((stored.FileSize, stored.FileWriteTimeUtc), file);
+            }
+        }
+
+        return orphans;
+    }
+
+    private static HashSet<string> KeysOf(string[] paths)
+    {
+        return paths
+            .Select(path => FilePaths.KeyOf(path))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static List<string> LeftDetails(string folder, HashSet<string> kept)
+    {
+        // Details Whose Clip Left, Here Or In The Older Folder
+        return
+        [
+            .. FilesIn(Path.Combine(folder, DetailsFolder), "*.json")
+                .Where(file =>
+                    !File.Exists(Path.Combine(folder, Path.GetFileNameWithoutExtension(file)))
+                )
+                .Concat(
+                    FilesIn(s_legacyDetailsDirectory, "*.json")
+                        .Where(file => !kept.Contains(Path.GetFileNameWithoutExtension(file)))
+                ),
+        ];
+    }
+
+    private static ClipMetadata? Adopt(
+        FileInfo file,
+        Lazy<ConcurrentDictionary<(long Size, DateTime Written), string>>? orphans
+    )
+    {
+        // Renamed Or Moved Outside LetsClip, Size And Time Find Details
+        if (
+            orphans is null
+            || !orphans.Value.TryRemove((file.Length, file.LastWriteTimeUtc), out var source)
+            || ReadJson(source) is not { } stored
+        )
+        {
+            return null;
+        }
+
+        WriteMetadata(file.FullName, stored);
+        TryDelete(source);
+        s_logger.Info($"Found The Details Of {file.Name} By Its Size And Time");
+        return ReadMetadata(file);
     }
 
     private async Task<ClipMetadata?> ProbeMetadataAsync(FileInfo file, CancellationToken token)
@@ -1196,9 +1381,31 @@ public sealed class ClipLibrary : IDisposable
 
     private static ClipMetadata? ReadStored(string path)
     {
+        // Beside The Clip, Else Moved There From The Older Folder
+        if (ReadJson(MetadataPathOf(path)) is { } stored)
+        {
+            return stored;
+        }
+
+        var legacy = LegacyPathOf(path);
+        if (ReadJson(legacy) is not { } older)
+        {
+            return null;
+        }
+
+        if (WriteJson(MetadataPathOf(path), older))
+        {
+            TryDelete(legacy);
+        }
+
+        return older;
+    }
+
+    private static ClipMetadata? ReadJson(string file)
+    {
         try
         {
-            return JsonSerializer.Deserialize<ClipMetadata>(File.ReadAllText(MetadataPathOf(path)));
+            return JsonSerializer.Deserialize<ClipMetadata>(File.ReadAllText(file));
         }
         catch (Exception exception)
             when (exception is IOException or UnauthorizedAccessException or JsonException)
@@ -1210,34 +1417,72 @@ public sealed class ClipLibrary : IDisposable
 
     public static void WriteMetadata(string path, ClipMetadata metadata)
     {
-        var target = MetadataPathOf(path);
+        lock (s_metadataGate)
+        {
+            // A Clip Gone Meanwhile Has Nothing Left To Remember
+            var file = new FileInfo(path);
+            if (!file.Exists)
+            {
+                return;
+            }
+
+            var stamped = metadata with
+            {
+                FileSize = file.Length,
+                FileWriteTimeUtc = file.LastWriteTimeUtc,
+            };
+
+            // A Folder Refusing Them Keeps Them In The Older Folder
+            if (
+                !WriteJson(MetadataPathOf(path), stamped) && !WriteJson(LegacyPathOf(path), stamped)
+            )
+            {
+                // Metadata Only Remembers The Trim, The Clip Itself Is Safe
+                s_logger.Warn($"Failed To Save Clip Metadata Of {file.Name}");
+            }
+        }
+    }
+
+    private static bool WriteJson(string target, ClipMetadata metadata)
+    {
         var temporary = $"{target}.{Guid.NewGuid():N}.tmp";
         try
         {
-            lock (s_metadataGate)
+            var folder = Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            if (folder.Name == DetailsFolder)
             {
-                var file = new FileInfo(path);
-                var stamped = metadata with
-                {
-                    FileSize = file.Length,
-                    FileWriteTimeUtc = file.LastWriteTimeUtc,
-                };
-                Directory.CreateDirectory(s_metadataDirectory);
-                File.WriteAllText(temporary, JsonSerializer.Serialize(stamped));
-                File.Move(temporary, target, overwrite: true);
+                folder.Attributes |= FileAttributes.Hidden;
             }
+
+            File.WriteAllText(temporary, JsonSerializer.Serialize(metadata));
+            File.Move(temporary, target, overwrite: true);
+            return true;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            // Metadata Only Remembers The Trim, The Clip Itself Is Safe
-            s_logger.Warn($"Failed To Save Clip Metadata {exception.GetType().Name}");
             TryDelete(temporary);
+            return false;
         }
     }
 
     private static string MetadataPathOf(string path)
     {
-        return Path.Combine(s_metadataDirectory, FilePaths.KeyOf(path) + ".json");
+        return Path.Combine(
+            Path.GetDirectoryName(path) ?? "",
+            DetailsFolder,
+            Path.GetFileName(path) + ".json"
+        );
+    }
+
+    private static string LegacyPathOf(string path)
+    {
+        return Path.Combine(s_legacyDetailsDirectory, FilePaths.KeyOf(path) + ".json");
+    }
+
+    private static void DeleteDetails(string path)
+    {
+        TryDelete(MetadataPathOf(path));
+        TryDelete(LegacyPathOf(path));
     }
 
     private static void TryDelete(string path)

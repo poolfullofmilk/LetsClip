@@ -21,6 +21,9 @@ public sealed partial class MonitorOverlay : Window
     private const uint NoActivate = 0x0010;
     private static readonly nint s_topMost = -1;
 
+    // Raised Again Without Moving, Sizing Or Focus
+    private const uint StayInPlace = 0x0013;
+
     // Seen On The Monitor, Never In A Capture
     private const uint ExcludeFromCapture = 0x11;
 
@@ -34,19 +37,24 @@ public sealed partial class MonitorOverlay : Window
     private static readonly TimeSpan s_toastTime = TimeSpan.FromSeconds(2.5);
     private static readonly Duration s_fade = new(TimeSpan.FromMilliseconds(150));
 
+    // A Game Raising Itself Never Covers A Toast For Long
+    private static readonly TimeSpan s_raiseAgain = TimeSpan.FromMilliseconds(250);
+
     private readonly MonitorInfo _monitor;
     private readonly int _height;
+    private readonly bool _hideFromCapture;
 
     public MonitorOverlay(MonitorInfo monitor, bool isChosen)
-        : this(monitor, monitor.Height)
+        : this(monitor, monitor.Height, hideFromCapture: true)
     {
         Content = Frame(monitor, isChosen);
     }
 
-    private MonitorOverlay(MonitorInfo monitor, int height)
+    private MonitorOverlay(MonitorInfo monitor, int height, bool hideFromCapture)
     {
         _monitor = monitor;
         _height = height;
+        _hideFromCapture = hideFromCapture;
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
         Background = Brushes.Transparent;
@@ -58,7 +66,13 @@ public sealed partial class MonitorOverlay : Window
         SourceInitialized += (_, _) => Place();
     }
 
-    public static void Toast(MonitorInfo monitor, string text, string? detail, bool isWarning)
+    public static void Toast(
+        MonitorInfo monitor,
+        string text,
+        string? detail,
+        bool isWarning,
+        bool hideFromCapture
+    )
     {
         // The Name Badge's Look, Faded In Over A Game
         var palette = AppTheme.Custom.PaletteDark;
@@ -81,16 +95,36 @@ public sealed partial class MonitorOverlay : Window
             );
         }
 
-        var toast = new MonitorOverlay(monitor, Math.Min(ToastBand, monitor.Height))
+        var toast = new MonitorOverlay(
+            monitor,
+            Math.Min(ToastBand, monitor.Height),
+            hideFromCapture
+        )
         {
             Content = Badge(words, palette.AppbarBackground),
             Opacity = 0,
         };
         toast.Show();
         toast.BeginAnimation(OpacityProperty, new DoubleAnimation(1, s_fade));
-        var timer = new DispatcherTimer { Interval = s_toastTime };
+        var raised = 0;
+        var timer = new DispatcherTimer { Interval = s_raiseAgain };
         timer.Tick += (_, _) =>
         {
+            // On Top Again Each Quarter Second, Then It Fades
+            _ = SetWindowPos(
+                new WindowInteropHelper(toast).Handle,
+                s_topMost,
+                0,
+                0,
+                0,
+                0,
+                StayInPlace
+            );
+            if (++raised * s_raiseAgain < s_toastTime)
+            {
+                return;
+            }
+
             timer.Stop();
             var fade = new DoubleAnimation(0, s_fade);
             fade.Completed += (_, _) => toast.Close();
@@ -110,7 +144,10 @@ public sealed partial class MonitorOverlay : Window
                 | ToolWindow
                 | NeverActivates
         );
-        _ = SetWindowDisplayAffinity(handle, ExcludeFromCapture);
+        if (_hideFromCapture)
+        {
+            _ = SetWindowDisplayAffinity(handle, ExcludeFromCapture);
+        }
 
         // Moving There First Settles The DPI, Then The Size
         for (var pass = 0; pass < 2; pass++)

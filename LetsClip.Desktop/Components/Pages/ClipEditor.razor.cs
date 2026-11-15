@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Globalization;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
@@ -77,6 +78,15 @@ public partial class ClipEditor : IAsyncDisposable
     private int _volumeShown;
     private double _duration;
     private TrimRange _range;
+
+    // A Vertical Export's Crop, Placed Once Shown
+    private double? _crop;
+    private bool _placeCrop;
+
+    // The Timeline's Shown Window, The Whole Clip Unless Zoomed
+    private double _viewStart;
+    private double _viewEnd;
+    private int _zooms;
     private Timer? _saveTimer;
     private MudTextField<string>? _titleField;
     private string _titleText = "";
@@ -199,6 +209,7 @@ public partial class ClipEditor : IAsyncDisposable
             metadata is { TrimStart: { } start, TrimEnd: { } end }
                 ? TrimRange.Fit(start, end, media.Duration)
                 : TrimRange.Whole(media.Duration),
+            metadata?.Crop,
             opening,
             token
         );
@@ -235,6 +246,8 @@ public partial class ClipEditor : IAsyncDisposable
         (_clip, _media, _path) = (loaded.Clip, loaded.Media, loaded.Path);
         Controller.Exports.Editor = (loaded.Path, CutHereAsync);
         (_stripUrl, _duration, _range) = (loaded.StripUrl, loaded.Media.Duration, loaded.Range);
+        (_viewStart, _viewEnd) = (0, loaded.Media.Duration);
+        (_crop, _placeCrop) = (loaded.Crop, loaded.Crop is not null);
         _waveUrl = null;
         if (loaded.Media.HasAudio)
         {
@@ -290,6 +303,13 @@ public partial class ClipEditor : IAsyncDisposable
         {
             _drawnWave = _waveUrl;
             await JavaScript.CallAsync("letsClip.showWave", _strip, _waveUrl);
+        }
+
+        // The Crop Box Lies Over The Picture Once Drawn
+        if (_placeCrop && _ready)
+        {
+            _placeCrop = false;
+            await JavaScript.CallAsync("letsClip.placeCrop");
         }
 
         // Element References Arrive One Render After The Markup
@@ -401,8 +421,81 @@ public partial class ClipEditor : IAsyncDisposable
     public void OnPlayerReady()
     {
         // Controls Wait For The First Frame
-        _ready = true;
+        (_ready, _placeCrop) = (true, _crop is not null);
         StateHasChanged();
+    }
+
+    [JSInvokable]
+    public async Task OnView(double start, double end)
+    {
+        // Settled After The Wheel, Blazor Draws The Same Window
+        (_viewStart, _viewEnd) = (start, end);
+        StateHasChanged();
+        if (_path is not { } path || end - start >= _duration - 0.001)
+        {
+            return;
+        }
+
+        // A Zoomed Window Gets Its Own Strip, The Newest Wins
+        var zoom = ++_zooms;
+        var (duration, token) = (_duration, _lifetime?.Token ?? CancellationToken.None);
+        var window = new TrimRange(start, end);
+        try
+        {
+            var strip = await Task.Run(
+                () => ClipLibrary.EnsureStripAsync(path, duration, token, window),
+                token
+            );
+            var wave =
+                _media?.HasAudio == true
+                    ? await Task.Run(
+                        () => ClipLibrary.EnsureWaveAsync(path, duration, token, window),
+                        token
+                    )
+                    : null;
+            if (zoom == _zooms && strip is not null && !string.IsNullOrEmpty(_strip.Id))
+            {
+                await JavaScript.CallAsync(
+                    "letsClip.showZoom",
+                    _strip,
+                    DesktopShell.ThumbnailUrl(strip),
+                    wave is null ? null : DesktopShell.ThumbnailUrl(wave),
+                    start,
+                    end
+                );
+            }
+        }
+        catch (Exception exception)
+            when (exception is OperationCanceledException or TimeoutException or Win32Exception)
+        {
+            // The Stretched Whole Clip Strip Stays
+        }
+    }
+
+    [JSInvokable]
+    public void OnCrop(double center)
+    {
+        // Dragged In The Page Script, Remembered With The Clip
+        _crop = Math.Clamp(center, 0, 1);
+        SaveCrop();
+        StateHasChanged();
+    }
+
+    private void SetVertical(bool vertical)
+    {
+        (_crop, _placeCrop) = (vertical ? 0.5 : null, vertical);
+        SaveCrop();
+    }
+
+    private void SaveCrop()
+    {
+        if (_path is { } path)
+        {
+            var crop = _crop;
+            _ = Task.Run(() =>
+                ClipLibrary.UpdateMetadata(path, metadata => metadata with { Crop = crop })
+            );
+        }
     }
 
     [JSInvokable]
@@ -482,8 +575,24 @@ public partial class ClipEditor : IAsyncDisposable
 
     private string Percent(double seconds)
     {
-        var share = _duration > 0 ? Math.Clamp(seconds / _duration, 0, 1) : 0;
+        // Over The Shown Window, Like The Page Script Paints
+        var span = _viewEnd - _viewStart;
+        var share = span > 0 ? Math.Clamp((seconds - _viewStart) / span, 0, 1) : 0;
         return $"round({Exact(share * 100)}%, var(--device-pixel))";
+    }
+
+    // A Zoomed Window's Place In The Whole Clip
+    private string ZoomStyle =>
+        _duration <= 0 || _viewEnd - _viewStart >= _duration - 0.001
+            ? "display:none"
+            : $"left:{Exact(_viewStart / _duration * 100)}%; width:{Exact((_viewEnd - _viewStart) / _duration * 100)}%";
+
+    private string HandleStyle(double seconds)
+    {
+        // A Point Outside A Zoomed Window Hides
+        return seconds < _viewStart - 1e-6 || seconds > _viewEnd + 1e-6
+            ? $"left:{Percent(seconds)}; visibility:hidden"
+            : $"left:{Percent(seconds)}";
     }
 
     private static string Exact(double value)
@@ -786,6 +895,7 @@ public partial class ClipEditor : IAsyncDisposable
         string Path,
         string? StripUrl,
         TrimRange Range,
+        double? Crop,
         bool Opening,
         CancellationToken Token
     );

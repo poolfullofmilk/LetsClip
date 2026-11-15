@@ -187,6 +187,11 @@ public partial class Settings : IDisposable
         Controller.UpdateSettings(settings => settings with { DeleteOriginals = enabled });
     }
 
+    private void SetNotifications(bool enabled)
+    {
+        Controller.UpdateSettings(settings => settings with { Notifications = enabled });
+    }
+
     private async Task DeleteOriginalsAsync()
     {
         // Names The Clips That Lose Their Way Back
@@ -607,7 +612,7 @@ public partial class Settings : IDisposable
         var bytes = await Task.Run(() => ClipLibrary.BytesToMove(from));
         if (!FilePaths.AreSame(from, to) && bytes > 0)
         {
-            if (Controller.Exports.Running is not null)
+            if (Controller.Exports.IsBusy)
             {
                 Snackbar.Add(
                     "Wait for the export to finish, then change the folder",

@@ -14,18 +14,28 @@ public sealed record ExportRequest(
     DiscordPlan Plan,
     double FrameRate,
     int? AudioTrack,
-    string ExportsFolder
+    string ExportsFolder,
+    bool CopyWhenDone = false,
+    double? Crop = null
 );
 
 public sealed record ExportProgress(string Phase, double Fraction);
 
 public sealed class ExportException(string message) : Exception(message);
 
+public sealed record DiscordCopy(ExportRequest? Request, string? Problem)
+{
+    // Neither Means The Clip Itself Already Fits
+    public bool CopiesClip => Request is null && Problem is null;
+}
+
 public static class ClipExporter
 {
     // A Shorter Result Means Part Of The Selection Was Lost
     private const double DurationTolerance = 0.25;
-    private const int AttemptsPerEncoder = 2;
+
+    // A Third Try Follows The Line The First Two Drew
+    private const int AttemptsPerEncoder = 3;
 
     // Single Pass AMF Overshot Its Average By 5 To 8%
     private const double HardwareAim = 0.9;
@@ -42,6 +52,11 @@ public static class ClipExporter
 
     private const string RejectedMessage = "The exported file did not check out, nothing was kept";
 
+    static ClipExporter()
+    {
+        Debug.Assert(SelfTestPasses());
+    }
+
     public static (int Width, int Height) OutputSize(
         int width,
         int height,
@@ -56,6 +71,130 @@ public static class ClipExporter
             Math.Min((portrait ? lines : across) / width, (portrait ? across : lines) / height)
         );
         return (EvenUp(width * scale), EvenUp(height * scale));
+    }
+
+    internal static double NextBitrate(
+        IReadOnlyList<(double Bitrate, long Size)> tries,
+        long target
+    )
+    {
+        // The Miss Plus Margin, Then Along Two Tries' Line
+        var (bitrate, size) = tries[^1];
+        var proportional = bitrate * target / size * 0.97;
+        if (tries.Count < 2)
+        {
+            return proportional;
+        }
+
+        // Quick Sync Barely Shrank At Lower Bitrates, Step Harder
+        var (earlierBitrate, earlierSize) = tries[^2];
+        var bytesPerBit = (size - earlierSize) / (bitrate - earlierBitrate);
+        var aimed =
+            bytesPerBit > 0 ? bitrate - ((size - (target * 0.97)) / bytesPerBit) : bitrate / 2;
+        return Math.Clamp(aimed, bitrate / 2, proportional);
+    }
+
+    public static (int Width, int Height) CropSizeOf(int height)
+    {
+        // The Tallest 9 By 16 Part Of The Frame, Even
+        return ((int)(height * 9 / 16.0) / 2 * 2, height / 2 * 2);
+    }
+
+    public static long VerticalBytes(
+        long clipBytes,
+        double clipSeconds,
+        MediaInfo media,
+        double seconds
+    )
+    {
+        // Off Keeps The Clip's Bits Per Pixel Over The Crop
+        var (width, height) = CropSizeOf(media.Height);
+        var kept = width * height / (double)(media.Width * media.Height);
+        return (long)(clipBytes / clipSeconds * seconds * kept);
+    }
+
+    public static double FrameRateOf(MediaInfo media, bool encodes)
+    {
+        // Odd Probes Read As 60, An Encode Stops At 60
+        var rate = media.FrameRate is > 1 and < 241 ? Math.Round(media.FrameRate) : 60;
+        return encodes ? Math.Min(rate, 60) : rate;
+    }
+
+    public static int? TrackOf(MediaInfo media, bool game, bool microphone)
+    {
+        // Separate Tracks Can Leave Out Game Or Voice
+        var keepsGame = game && media.HasAudio;
+        return media.HasSeparateTracks ? AudioTracks.IndexOf(keepsGame, microphone)
+            : keepsGame ? 0
+            : null;
+    }
+
+    public static long CopyBytes(long clipBytes, MediaInfo media, TrimRange range, int tracks)
+    {
+        // The Whole Clip Is The File, A Part Never More
+        if (!range.CutsShort(media.Duration) && tracks == media.AudioTrackCount)
+        {
+            return clipBytes;
+        }
+
+        return Math.Min(
+            clipBytes,
+            media.Packets is { } packets
+                ? SizeBudget.CopyBytes(packets, range, tracks)
+                : (long)(clipBytes * range.Length / media.Duration)
+        );
+    }
+
+    public static DiscordCopy ForDiscord(
+        ClipInfo clip,
+        MediaInfo media,
+        TrimRange range,
+        DiscordPlan plan,
+        bool game,
+        bool microphone,
+        string folder,
+        double? crop
+    )
+    {
+        // The Editor's Plan Rules, Pressed From A Card, Crop Included
+        var track = TrackOf(media, game, microphone);
+        var limit = SizeBudget.LimitOf(plan) ?? double.MaxValue;
+        var cropped = crop is not null && media.Width > media.Height;
+        var encodes =
+            cropped || CopyBytes(clip.SizeBytes, media, range, track is null ? 0 : 1) > limit * 1e6;
+        var everyTrack = media.HasSeparateTracks ? track == 0 : track is not null == media.HasAudio;
+        if (!encodes && everyTrack && !range.CutsShort(media.Duration))
+        {
+            return new(null, null);
+        }
+
+        var frameRate = FrameRateOf(media, encodes);
+        var (frameWidth, frameHeight) = cropped
+            ? CropSizeOf(media.Height)
+            : (media.Width, media.Height);
+        var (width, height) = OutputSize(frameWidth, frameHeight);
+        var shape = new ExportShape(range.Length, width, height, frameRate, track is not null);
+        if (encodes && SizeBudget.Plan(limit, shape).Verdict == BudgetVerdict.TooSmall)
+        {
+            return new(
+                null,
+                $"Too long for {SizeBudget.NameOf(plan)}, which fits about {Formatter.FormatDuration(SizeBudget.LongestSeconds(limit, shape))}, open it to pick a shorter selection"
+            );
+        }
+
+        return new(
+            new ExportRequest(
+                clip.Path,
+                range,
+                encodes ? plan : DiscordPlan.Off,
+                frameRate,
+                track,
+                folder,
+                CopyWhenDone: true,
+                Crop: cropped ? crop : null
+            ),
+            null
+        );
     }
 
     public static async Task<string> ExportAsync(
@@ -115,13 +254,21 @@ public static class ClipExporter
                     : 0
                 : null;
         var withAudio = track is not null;
-        var sourceRate = new FileInfo(request.SourcePath).Length / source.Duration;
+        var sourceBytes = new FileInfo(request.SourcePath).Length;
+        var sourceRate = sourceBytes / source.Duration;
         Directory.CreateDirectory(request.ExportsFolder);
         var started = Stopwatch.StartNew();
 
+        // A Vertical Crop Always Encodes, Only The Part It Keeps
+        var cropped = request.Crop is not null && source.Width > source.Height;
+        var (frameWidth, frameHeight) = cropped
+            ? CropSizeOf(source.Height)
+            : (source.Width, source.Height);
+
         // Off, Or Already Small Enough, Is An Exact Copy
         if (
-            SizeBudget.KeepsClip(request.Plan, duration, sourceRate)
+            !cropped
+            && SizeBudget.KeepsClip(request.Plan, duration, sourceRate)
             && await CopyAsync(request, track, progress, token) is { } copied
         )
         {
@@ -132,12 +279,14 @@ public static class ClipExporter
         }
 
         // Too Big For The Plan, Encoded Smaller To Fit
-        var limit = SizeBudget.LimitOf(request.Plan)!.Value;
-        var (fullWidth, fullHeight) = OutputSize(source.Width, source.Height);
+        var limit =
+            SizeBudget.LimitOf(request.Plan)
+            ?? VerticalBytes(sourceBytes, source.Duration, source, duration) / 1e6;
+        var (fullWidth, fullHeight) = OutputSize(frameWidth, frameHeight);
         var frameRate = request.FrameRate;
         var clip = new ExportShape(duration, fullWidth, fullHeight, frameRate, withAudio);
         var budget = SizeBudget.Plan(limit, clip);
-        var (width, height) = OutputSize(source.Width, source.Height, budget.Lines);
+        var (width, height) = OutputSize(frameWidth, frameHeight, budget.Lines);
         s_logger.Info(
             $"Exporting {Path.GetFileName(request.SourcePath)} From {Formatter.FormatDuration(request.Range.Start)} To {Formatter.FormatDuration(request.Range.End)} At {width} × {height}, {frameRate} FPS, {(withAudio ? "With Audio" : "Without Audio")}, Aiming Under {Formatter.FormatSize((long)(limit * 1_000_000))}, {budget.Verdict}"
         );
@@ -167,13 +316,29 @@ public static class ClipExporter
         encoders.Add(VideoEncoders.Software);
         var workFolder = CacheFolders.NewFolder();
         var temporary = ClipLibrary.PartialPathIn(request.ExportsFolder);
-        var job = new EncodeJob(request, temporary, workFolder, width, height, frameRate, track);
+        var crop = cropped
+            ? string.Create(
+                CultureInfo.InvariantCulture,
+                $"crop={frameWidth}:{frameHeight}:{(int)((source.Width - frameWidth) * request.Crop!.Value) / 2 * 2}:0,"
+            )
+            : "";
+        var job = new EncodeJob(
+            request,
+            temporary,
+            workFolder,
+            width,
+            height,
+            frameRate,
+            track,
+            crop
+        );
         try
         {
             var attempts = 0;
             foreach (var encoder in encoders)
             {
                 var bitrate = budget.VideoBitsPerSecond * (encoder.IsHardware ? HardwareAim : 1);
+                List<(double Bitrate, long Size)> tries = [];
                 var restarted = false;
                 for (var attempt = 1; attempt <= AttemptsPerEncoder; attempt++)
                 {
@@ -227,11 +392,12 @@ public static class ClipExporter
                         return finalPath;
                     }
 
-                    // Over The Limit, Retry Lower By The Miss Plus Margin
+                    // Over The Limit, Retry Lower By What The Encoder Showed
                     s_logger.Info(
                         $"Export came out at {Formatter.FormatSize(size)}, retrying smaller"
                     );
-                    bitrate *= budget.TargetBytes / (double)size * 0.97;
+                    tries.Add((bitrate, size));
+                    bitrate = NextBitrate(tries, budget.TargetBytes);
                 }
             }
 
@@ -313,7 +479,8 @@ public static class ClipExporter
         int Width,
         int Height,
         double FrameRate,
-        int? AudioTrack
+        int? AudioTrack,
+        string Crop
     );
 
     private static async Task EncodeAsync(
@@ -330,7 +497,7 @@ public static class ClipExporter
         var rate = job.FrameRate.ToString(CultureInfo.InvariantCulture);
         var filter = string.Create(
             CultureInfo.InvariantCulture,
-            $"scale={job.Width}:{job.Height}:force_original_aspect_ratio=decrease:flags=lanczos,pad={job.Width}:{job.Height}:-1:-1:color=black,setsar=1,format=yuv420p"
+            $"{job.Crop}scale={job.Width}:{job.Height}:force_original_aspect_ratio=decrease:flags=lanczos,pad={job.Width}:{job.Height}:-1:-1:color=black,setsar=1,format=yuv420p"
         );
 
         // A Hair Early, So The Start Frame Itself Is Kept
@@ -571,5 +738,19 @@ public static class ClipExporter
     private static int EvenUp(double value)
     {
         return Math.Max(2, (int)Math.Ceiling(Math.Round(value, 6) / 2) * 2);
+    }
+
+    private static bool SelfTestPasses()
+    {
+        // Quick Sync's Measured Miss, 51.4 Then 50.7 MB For 47.5
+        var first = NextBitrate([(10_000_000, 51_400_000)], 47_500_000);
+        var second = NextBitrate([(10_000_000, 51_400_000), (first, 50_700_000)], 47_500_000);
+        return Math.Abs(first - (10_000_000 * 47.5 / 51.4 * 0.97)) < 1
+            && second < first * 0.75
+            && second >= first / 2
+            && NextBitrate([(10_000_000, 30_000_000), (9_000_000, 31_000_000)], 20_000_000)
+                == 4_500_000
+            && FrameRateOf(new MediaInfo(5, "h264", null, 0, 0, 239.9, null, null), true) == 60
+            && FrameRateOf(new MediaInfo(5, "h264", null, 0, 0, 0, null, null), false) == 60;
     }
 }

@@ -18,7 +18,9 @@ public sealed record ClipMetadata(
     double? CutEnd = null,
     bool ForeignOriginal = false,
     int? Monitor = null,
-    bool Cut = false
+    bool Cut = false,
+    string? Export = null,
+    double? Crop = null
 )
 {
     // Named, Cut Or Trimmed Short, Only Unedited Leaves It Out

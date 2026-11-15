@@ -208,8 +208,12 @@ window.letsClip = (() => {
     // The Editor Attaches Only A Clip Longer Than Zero
     const duration = () => state.duration;
     const clamp = (time) => Math.min(duration(), Math.max(0, time));
-    // Whole Screen Pixels Of The Track, So Edges Meet Exactly
-    const percent = (time) => `round(${Math.min(100, Math.max(0, (time / duration()) * 100))}%, var(--device-pixel))`;
+    // Whole Screen Pixels Of The Shown Window, Edges Meet Exactly
+    const percent = (time) => {
+        const { start, end } = state.view;
+        return `round(${Math.min(100, Math.max(0, ((time - start) / (end - start)) * 100))}%, var(--device-pixel))`;
+    };
+    const outside = (time) => time < state.view.start - 1e-6 || time > state.view.end + 1e-6;
 
     // The Playhead Follows Each Frame, Blazor Hears Ten A Second
     const loop = () => {
@@ -221,7 +225,10 @@ window.letsClip = (() => {
             video.currentTime = Math.max(0, state.stopAt - inside);
         }
         const time = video.currentTime;
+        // Playing Past A Zoomed Window Turns The Page
+        if (!video.paused && outside(time)) follow(time);
         playhead.style.left = percent(time);
+        playhead.style.visibility = outside(time) ? "hidden" : "";
         const now = performance.now();
         if (video.paused !== state.paused || (time !== state.sent && now - state.reported > 100)) {
             state.reported = now;
@@ -253,7 +260,7 @@ window.letsClip = (() => {
         const totals = [0];
         for (const size of sizes) totals.push(totals[totals.length - 1] + size);
         const packets = { times: frames, totals, keys };
-        state = { video, playhead, timeline, dotnet, separator, bounds, packets, listening, duration: length, reported: 0, sent: -1, paused: true, stopAt: null, frame: 0, drag: null };
+        state = { video, playhead, timeline, dotnet, separator, bounds, packets, listening, duration: length, view: { start: 0, end: length }, viewTimer: 0, reported: 0, sent: -1, paused: true, stopAt: null, frame: 0, drag: null };
         // Points Saved Before Snapping Move Onto Their Frames
         const range = { start, end };
         setEdge(range, "start", start);
@@ -279,11 +286,15 @@ window.letsClip = (() => {
         if (video.error) failed();
         video.addEventListener("click", toggle, { signal });
         video.addEventListener("dblclick", fullScreen, { signal });
+        // The Crop Box Follows The Picture, Its Frame Drags Sideways
+        video.parentElement.addEventListener("pointerdown", cropDown, { signal });
+        cropSizes.observe(video);
         timeline.addEventListener("pointerdown", down, { signal });
         timeline.addEventListener("pointermove", move, { signal });
         timeline.addEventListener("pointerup", up, { signal });
         timeline.addEventListener("pointercancel", up, { signal });
         timeline.addEventListener("keydown", key, { signal });
+        timeline.addEventListener("wheel", wheel, { signal, passive: false });
         for (const name of wakers) video.addEventListener(name, kick, { signal });
         kick();
     };
@@ -310,6 +321,7 @@ window.letsClip = (() => {
         cancelAnimationFrame(state.frame);
         state.listening.abort();
         const { video } = state;
+        cropSizes.unobserve(video);
         if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
         if (holdFrame) hold(video);
         video.pause();
@@ -365,12 +377,15 @@ window.letsClip = (() => {
         after.style.left = percent(end);
         selection.style.left = percent(start);
         selection.style.width = `calc(${percent(end)} - ${percent(start)})`;
-        // Within Half A Pixel Of An End, Frame Colour
-        const half = duration() / state.timeline.clientWidth / devicePixelRatio / 2;
-        state.timeline.toggleAttribute("data-at-start", start < half);
-        state.timeline.toggleAttribute("data-at-end", duration() - end < half);
+        // Within Half A Pixel Of The Clip's End, Frame Colour
+        const { view } = state;
+        const half = (view.end - view.start) / state.timeline.clientWidth / devicePixelRatio / 2;
+        state.timeline.toggleAttribute("data-at-start", view.start <= 0 && start < half);
+        state.timeline.toggleAttribute("data-at-end", view.end >= duration() && duration() - end < half);
         handleOf("start").style.left = percent(start);
         handleOf("end").style.left = percent(end);
+        handleOf("start").style.visibility = outside(start) ? "hidden" : "";
+        handleOf("end").style.visibility = outside(end) ? "hidden" : "";
         // The Handles Stay The One Truth Between Inputs
         handleOf("start").dataset.time = start;
         handleOf("end").dataset.time = end;
@@ -467,7 +482,49 @@ window.letsClip = (() => {
     // Unclamped, So A Handle Grabbed Anywhere Reaches Both Ends
     const timeAt = (event) => {
         const bounds = state.timeline.getBoundingClientRect();
-        return ((event.clientX - bounds.left) / bounds.width) * duration();
+        const { start, end } = state.view;
+        return start + ((event.clientX - bounds.left) / bounds.width) * (end - start);
+    };
+
+    // The Wheel Zooms Around The Pointer, Shift Or Sideways Pans
+    const wheel = (event) => {
+        if (!state) return;
+        event.preventDefault();
+        const { view } = state;
+        const span = view.end - view.start;
+        if (event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
+            const delta = event.deltaX || event.deltaY;
+            return setView(view.start + (delta / state.timeline.clientWidth) * span, span);
+        }
+        // Down To A Sixtieth Of The Clip, Never Below Five
+        const smallest = Math.min(duration(), Math.max(5, duration() / 60));
+        const next = Math.min(duration(), Math.max(smallest, span * (event.deltaY < 0 ? 2 / 3 : 3 / 2)));
+        if (next === span) return;
+        const anchor = timeAt(event);
+        setView(anchor - ((anchor - view.start) * next) / span, next);
+    };
+
+    // Painted At Once, Blazor Told Once It Settles
+    const setView = (start, span) => {
+        const from = Math.min(Math.max(0, start), duration() - span);
+        state.view = { start: from, end: from + span };
+        paint(readRange());
+        const time = state.video.currentTime;
+        state.playhead.style.left = percent(time);
+        state.playhead.style.visibility = outside(time) ? "hidden" : "";
+        strips.forEach(paintStrip);
+        // A Bar Shows Where The Window Sits In The Clip
+        const bar = state.timeline.querySelector(".timeline-zoom");
+        bar.style.display = span >= duration() - 0.001 ? "none" : "";
+        bar.style.left = `${(from / duration()) * 100}%`;
+        bar.style.width = `${(span / duration()) * 100}%`;
+        clearTimeout(state.viewTimer);
+        state.viewTimer = setTimeout(() => state?.dotnet.invokeMethodAsync("OnView", state.view.start, state.view.end).catch(() => {}), 250);
+    };
+
+    const follow = (time) => {
+        const span = state.view.end - state.view.start;
+        setView(time - span / 10, span);
     };
 
     // A Handle Drags From Where It Was Grabbed, Else Seeks
@@ -541,6 +598,11 @@ window.letsClip = (() => {
         const pad = parseFloat(getComputedStyle(canvas.parentElement).paddingLeft) || 0;
         const cells = Number(canvas.dataset.cells);
         const cellWidth = image.naturalWidth / cells;
+        // Zoomed, Each Tile Is A Moment Of The Shown Window
+        const view = state?.view;
+        const length = state?.duration;
+        const zoom = canvas.zoom;
+        const zoomed = view && zoom?.image.naturalWidth && (!zoom.wave || zoom.wave.naturalWidth) && zoom.start <= view.start + 0.001 && zoom.end >= view.end - 0.001 ? zoom : null;
         const count = Math.max(1, Math.round(width / ((height * cellWidth) / image.naturalHeight)));
         canvas.width = Math.round(width * devicePixelRatio);
         canvas.height = Math.round(height * devicePixelRatio);
@@ -550,10 +612,14 @@ window.letsClip = (() => {
             // Times Run Over The Track, Between The Handles
             const centre = ((index + 0.5) * width) / count;
             const share = Math.min(Math.max((centre - pad) / Math.max(1, width - 2 * pad), 0), 1);
-            const cell = Math.min(cells - 1, Math.floor(share * cells));
+            const time = view && length ? view.start + share * (view.end - view.start) : share;
+            const source = zoomed ? zoomed.image : image;
+            const fraction = zoomed ? (time - zoomed.start) / (zoomed.end - zoomed.start) : view && length ? time / length : share;
+            const cell = Math.min(cells - 1, Math.max(0, Math.floor(fraction * cells)));
+            const sourceWidth = source.naturalWidth / cells;
             const left = Math.round((index * canvas.width) / count);
             const right = Math.round(((index + 1) * canvas.width) / count);
-            context.drawImage(image, cell * cellWidth, 0, cellWidth, image.naturalHeight, left, 0, right - left, canvas.height);
+            context.drawImage(source, cell * sourceWidth, 0, sourceWidth, source.naturalHeight, left, 0, right - left, canvas.height);
         }
 
         // The Sound Across The Strip's Middle, Timed Between The Handles
@@ -572,7 +638,13 @@ window.letsClip = (() => {
         // White Lightens, The Picture's Black Leaves The Frames Alone
         context.globalCompositeOperation = "screen";
         context.globalAlpha = 0.7;
-        context.drawImage(wave, side, top, canvas.width - 2 * side, band);
+        if (zoomed?.wave) context.drawImage(zoomed.wave, side, top, canvas.width - 2 * side, band);
+        else if (view && length) {
+            // The Whole Clip's Outline, Its Shown Window Stretched
+            const from = (view.start / length) * wave.naturalWidth;
+            const across = ((view.end - view.start) / length) * wave.naturalWidth;
+            context.drawImage(wave, from, 0, across, wave.naturalHeight, side, top, canvas.width - 2 * side, band);
+        } else context.drawImage(wave, side, top, canvas.width - 2 * side, band);
         context.globalAlpha = 1;
         context.globalCompositeOperation = "source-over";
     };
@@ -580,6 +652,7 @@ window.letsClip = (() => {
     addEventListener("resize", () => strips.forEach(paintStrip));
     const showStrip = (canvas) => {
         canvas.waveImage = null;
+        canvas.zoom = null;
         const image = new Image();
         image.onload = () => paintStrip(canvas);
         image.src = canvas.dataset.src;
@@ -595,6 +668,19 @@ window.letsClip = (() => {
         wave.onload = () => canvas.waveImage === wave && paintStrip(canvas);
         wave.src = url;
         canvas.waveImage = wave;
+    };
+
+    // A Zoomed Window's Strip And Outline, Drawn Once Loaded
+    const showZoom = (canvas, stripUrl, waveUrl, start, end) => {
+        const zoom = { start, end, image: new Image(), wave: waveUrl ? new Image() : null };
+        const loaded = () => canvas.zoom === zoom && paintStrip(canvas);
+        zoom.image.onload = loaded;
+        zoom.image.src = stripUrl;
+        if (zoom.wave) {
+            zoom.wave.onload = loaded;
+            zoom.wave.src = waveUrl;
+        }
+        canvas.zoom = zoom;
     };
 
     // A Typed Or Marked Point Moves Like A Drag
@@ -676,8 +762,46 @@ window.letsClip = (() => {
             stopKeys = () => {};
         };
     };
+    // The Crop Box Lies Exactly Over The Picture
+    const placeCrop = () => {
+        if (!state) return;
+        const { video } = state;
+        const box = video.parentElement.querySelector(".crop-box");
+        if (!box) return;
+        const player = video.parentElement.getBoundingClientRect();
+        const picture = video.getBoundingClientRect();
+        box.style.left = `${picture.left - player.left}px`;
+        box.style.top = `${picture.top - player.top}px`;
+        box.style.width = `${picture.width}px`;
+        box.style.height = `${picture.height}px`;
+    };
+    const cropSizes = new ResizeObserver(() => placeCrop());
+
+    // Dragged Sideways Within The Picture, Blazor Hears Where It Rests
+    const cropDown = (event) => {
+        const frame = event.target instanceof Element ? event.target.closest(".crop-frame") : null;
+        if (!state || !frame || event.button !== 0) return;
+        const row = frame.parentElement;
+        const room = Math.max(1, row.clientWidth - frame.offsetWidth);
+        const from = event.clientX;
+        const start = parseFloat(row.style.getPropertyValue("--crop")) || 0;
+        const at = (clientX) => Math.min(1, Math.max(0, start + (clientX - from) / room));
+        frame.setPointerCapture(event.pointerId);
+        event.preventDefault();
+        const dragged = new AbortController();
+        frame.addEventListener("pointermove", (move) => row.style.setProperty("--crop", at(move.clientX)), { signal: dragged.signal });
+        const done = (up) => {
+            dragged.abort();
+            const crop = at(up.clientX);
+            row.style.setProperty("--crop", crop);
+            state?.dotnet.invokeMethodAsync("OnCrop", crop).catch(() => {});
+        };
+        frame.addEventListener("pointerup", done, { signal: dragged.signal, once: true });
+        frame.addEventListener("pointercancel", done, { signal: dragged.signal, once: true });
+    };
+
     // Scrolled Just Enough To Show The Whole Panel, Never Animated
     const reveal = (id) => document.getElementById(id)?.scrollIntoView({ block: "nearest" });
 
-    return { transition, dragClips, watchEnd, restoreScroll, attach, detach, play, pause, place, stepEdge, mark, showStrip, showWave, setVolume, fullScreen, watchKeys, stopKeys: () => stopKeys(), reveal };
+    return { transition, dragClips, watchEnd, restoreScroll, attach, detach, play, pause, place, stepEdge, mark, showStrip, showWave, setVolume, fullScreen, placeCrop, showZoom, watchKeys, stopKeys: () => stopKeys(), reveal };
 })();

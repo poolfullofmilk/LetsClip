@@ -1,0 +1,150 @@
+@* Clip Card *@
+<MudPaper Elevation="4"
+          Class="rounded-panel pa-4 hover-card"
+          role="button"
+          tabindex="0"
+          data-keyclick
+          aria-label="@($"Open {Clip.Title}")"
+          aria-description="@Description"
+          draggable="true"
+          data-file="@Clip.Path"
+          Style="@CardStyle"
+          @onclick="Open">
+    <MudElement HtmlTag="div"
+                Class="clip-thumb rounded-inner">
+        @if (Clip.ThumbnailPath is not null)
+        {
+            <MudImage Src="@DesktopShell.ThumbnailUrl(Clip.ThumbnailPath)"
+                      Alt="@Clip.Title"
+                      loading="lazy"
+                      decoding="async"
+                      draggable="false" />
+        }
+        else if (MakingPicture)
+        {
+            @* Picture Spinner *@
+            <MudProgressCircular Color="Color.Info"
+                                 Size="Size.Small"
+                                 Indeterminate
+                                 Class="centred-spinner" />
+        }
+        <MudElement HtmlTag="div"
+                    Class="clip-preview"
+                    data-clip="@DesktopShell.ClipUrl(Clip)" />
+        @* Top Chips *@
+        <MudElement HtmlTag="div"
+                    Class="clip-top-chips">
+            @if (IsNew)
+            {
+                <MudChip T="string"
+                         Size="Size.Small"
+                         Variant="Variant.Filled"
+                         Color="Color.Dark"
+                         Class="new-chip ml-0 my-0 mr-auto">
+                    New
+                </MudChip>
+            }
+            <SourceChip Clip="Clip"
+                        OnPicture />
+        </MudElement>
+        @* Picture Chips *@
+        <MudElement HtmlTag="div"
+                    Class="clip-chips">
+            <MudChip T="string"
+                     Size="Size.Small"
+                     Variant="Variant.Filled"
+                     Color="Color.Dark"
+                     Class="ma-0">
+                @Time
+            </MudChip>
+            <MudChip T="string"
+                     Size="Size.Small"
+                     Variant="Variant.Filled"
+                     Color="Color.Dark"
+                     Class="ma-0">
+                @Formatter.FormatDuration(Clip.Duration)
+            </MudChip>
+        </MudElement>
+    </MudElement>
+    <MudStack Row
+              AlignItems="AlignItems.Center"
+              Spacing="1"
+              Class="mt-2 clip-title-row">
+        <MudText Typo="Typo.subtitle2"
+                 Class="two-lines">
+            <MudHighlighter Text="@Clip.Title"
+                            HighlightedText="@Query" />
+        </MudText>
+        @* Clip Menu *@
+        <MudElement HtmlTag="span"
+                    Class="d-flex"
+                    ClickPropagation="false">
+            <Tooltip Text="More">
+                <MudMenu Icon="@Icons.Material.Rounded.MoreVert"
+                         AriaLabel="More"
+                         Size="Size.Small"
+                         Dense
+                         AnchorOrigin="Origin.BottomRight"
+                         TransformOrigin="Origin.TopRight">
+                    @* Rename Clip *@
+                    <MudMenuItem Icon="@Icons.Material.Rounded.DriveFileRenameOutline"
+                                 Label="Rename"
+                                 Disabled="Exporting"
+                                 OnClick="Rename" />
+                    @* Copy File *@
+                    <MudMenuItem Icon="@Icons.Material.Rounded.ContentCopy"
+                                 Label="Copy File"
+                                 OnClick="() => DesktopShell.CopyFile(Clip.Path, Snackbar)" />
+                    @* Copy For Discord Menu *@
+                    <MudMenu StartIcon="@Icons.Material.Rounded.Movie"
+                             Label="Copy for Discord"
+                             Disabled="Exporting"
+                             Dense>
+                        @foreach (var plan in s_plans)
+                        {
+                            @* Discord Plan Item *@
+                            <MudMenuItem OnClick="() => CopyForDiscord.InvokeAsync(plan)">
+                                <ItemLabel Text="@SizeBudget.NameOf(plan)"
+                                           Detail="@SizeBudget.LimitTextOf(plan)" />
+                            </MudMenuItem>
+                        }
+                    </MudMenu>
+                    @if (Clip.Export is { } export)
+                    {
+                        @* Copy Export *@
+                        <MudMenuItem Icon="@Icons.Material.Rounded.ContentCopy"
+                                     Label="Copy Export"
+                                     OnClick="() => DesktopShell.CopyFile(export, Snackbar)" />
+                    }
+                    @* Show In Folder *@
+                    <MudMenuItem Icon="@Icons.Material.Rounded.FolderOpen"
+                                 Label="Show in Folder"
+                                 OnClick="() => Explorer.ShowFile(Clip.Path)" />
+                    @* Details Menu *@
+                    <MudMenu StartIcon="@AppTheme.InfoIcon"
+                             Label="Details"
+                             Dense>
+                        <MudElement HtmlTag="div"
+                                    Class="info-facts">
+                            @foreach (var fact in Facts)
+                            {
+                                <MudText Typo="Typo.body2"
+                                         Class="mud-text-secondary">
+                                    @fact.Label
+                                </MudText>
+                                <MudText Typo="Typo.body2">@fact.Value</MudText>
+                            }
+                        </MudElement>
+                    </MudMenu>
+                    <MudDivider />
+                    @* Delete Clip *@
+                    <MudMenuItem Icon="@Icons.Material.Rounded.Delete"
+                                 IconColor="Color.Error"
+                                 Label="Delete Clip"
+                                 Disabled="Exporting"
+                                 OnClick="Delete" />
+                </MudMenu>
+            </Tooltip>
+        </MudElement>
+    </MudStack>
+</MudPaper>

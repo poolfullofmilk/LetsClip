@@ -92,6 +92,10 @@
                                       Value="@(Controller.Settings.SaveSound ? Controller.Settings.SaveSoundVolume : 0)"
                                       ValueChanged="SetSaveSoundVolume" />
                     </SettingRow>
+                    <MudDivider />
+                    <SettingRow Title="Notifications"
+                                Switch="Controller.Settings.Notifications"
+                                SwitchChanged="SetNotifications" />
                 </Panel>
 
                 @* Audio Settings *@

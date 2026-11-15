@@ -20,11 +20,13 @@ public partial class ExportChip : IDisposable
 
     private ExportRunner Exports => Controller.Exports;
 
-    // The Cut Has No Percent, Everything Before It Does
+    // The Cut Has No Percent, Waiting Exports Follow
     private string Text =>
-        Exports.Progress.Phase == ExportRunner.CutPhase
-            ? ExportRunner.CutPhase
-            : $"Exporting {Exports.Progress.Fraction * 100:0}%";
+        (
+            Exports.Progress.Phase == ExportRunner.CutPhase
+                ? ExportRunner.CutPhase
+                : $"Exporting {Exports.Progress.Fraction * 100:0}%"
+        ) + (Exports.Waiting.Count > 0 ? $", {Exports.Waiting.Count} Waiting" : "");
 
     protected override void OnInitialized()
     {
@@ -54,6 +56,13 @@ public partial class ExportChip : IDisposable
         if (outcome.File is not { } file)
         {
             Snackbar.Add("Export cancelled, nothing was kept", Severity.Info);
+            return;
+        }
+
+        // Copy For Discord Ends On The Clipboard, Any Page
+        if (outcome.Request.CopyWhenDone)
+        {
+            DesktopShell.CopyFile(file, Snackbar);
             return;
         }
 

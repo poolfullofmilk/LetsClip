@@ -51,6 +51,13 @@ public partial class ExportPanel : IDisposable
     [Parameter]
     public bool Cutting { get; set; }
 
+    // Where A Vertical Crop Sits, Null Keeps The Whole Frame
+    [Parameter]
+    public double? Crop { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> VerticalChanged { get; set; }
+
     [Inject]
     public required CaptureController Controller { get; set; }
 
@@ -73,8 +80,17 @@ public partial class ExportPanel : IDisposable
             ? Controller.Settings.ExportDiscordPlan
             : DiscordPlan.Off;
 
-    // Off Copies Exactly, A Plan Only Past Its Limit
-    private bool KeepsClip => Plan == DiscordPlan.Off;
+    // Off Copies Exactly, A Crop Always Encodes
+    private bool KeepsClip => Plan == DiscordPlan.Off && !IsVertical;
+
+    // Only A Landscape Clip Has A 9 By 16 Part
+    private bool CanCrop => Media.Width > Media.Height;
+
+    private bool IsVertical => Crop is not null && CanCrop;
+
+    // The Frame An Export Starts From, Cropped Or Whole
+    private (int Width, int Height) Frame =>
+        IsVertical ? ClipExporter.CropSizeOf(Media.Height) : (Media.Width, Media.Height);
 
     private bool AnyPlanChanges =>
         Enum.GetValues<DiscordPlan>().Any(plan => plan != DiscordPlan.Off && Changes(plan));
@@ -85,20 +101,16 @@ public partial class ExportPanel : IDisposable
         get
         {
             // Budgeted At Full Size, The Budget Then Picks The Lines
-            var (width, height) = ClipExporter.OutputSize(Media.Width, Media.Height);
+            var (width, height) = ClipExporter.OutputSize(Frame.Width, Frame.Height);
             return new(Range.Length, width, height, FrameRate, WithAudio);
         }
     }
 
-    // Separate Tracks Can Leave Out Game Or Voice
     private bool KeepsGame => Controller.Settings.ExportAudio && Media.HasAudio;
 
     private bool KeepsMicrophone => Controller.Settings.ExportMicrophone;
 
-    private int? Track =>
-        Media.HasSeparateTracks ? AudioTracks.IndexOf(KeepsGame, KeepsMicrophone)
-        : KeepsGame ? 0
-        : null;
+    private int? Track => ClipExporter.TrackOf(Media, KeepsGame, KeepsMicrophone);
 
     private bool WithAudio => Track is not null;
 
@@ -125,12 +137,6 @@ public partial class ExportPanel : IDisposable
 
     private long CopyBytesOf(int tracks)
     {
-        // Never Weighed, The File's Own Size Reads Exactly
-        if (!IsCut && CopiesFile(tracks))
-        {
-            return Clip.SizeBytes;
-        }
-
         // Weighed From The Packets Once Per Range And Track Count
         if (_copiedRange != Range)
         {
@@ -140,13 +146,7 @@ public partial class ExportPanel : IDisposable
 
         if (!_copies.TryGetValue(tracks, out var bytes))
         {
-            // Part Of A Clip Never Weighs More Than It
-            bytes = Math.Min(
-                Clip.SizeBytes,
-                Media.Packets is { } packets
-                    ? SizeBudget.CopyBytes(packets, Range, tracks)
-                    : (long)(Clip.SizeBytes * Range.Length / Media.Duration)
-            );
+            bytes = ClipExporter.CopyBytes(Clip.SizeBytes, Media, Range, tracks);
             _copies[tracks] = bytes;
         }
 
@@ -155,18 +155,22 @@ public partial class ExportPanel : IDisposable
 
     private bool IsExporting => Exports.IsExporting(Clip.Path);
 
-    // One Export At A Time, Another Clip's Is Running
+    // Another Clip's Export Runs, This One Would Wait Its Turn
     private bool OtherExporting => Exports.Running is not null && !IsExporting;
 
-    private ExportProgress? ShownProgress => IsExporting ? Exports.Progress : null;
+    private ExportProgress? ShownProgress =>
+        !IsExporting ? null
+        : Exports.IsWaiting(Clip.Path) ? new("Waiting for Another Export", 0)
+        : Exports.Progress;
 
-    // This Clip's Newest Export, Kept Past Leaving The Editor
+    // This Clip's Newest Export, Kept Past Leaving And Restarts
     private string? ExportedFile =>
         Exports.Last is { File: { } file } last
         && last.Request.SourcePath == Clip.Path
         && File.Exists(file)
             ? file
-            : null;
+        : Clip.Export is { } remembered && File.Exists(remembered) ? remembered
+        : null;
 
     private bool IsCut => Range.CutsShort(Media.Duration);
 
@@ -184,23 +188,25 @@ public partial class ExportPanel : IDisposable
     private bool CanExport =>
         OnlyCopies
             ? !Busy && (!IsCut || CanSaveCut)
-            : Exports.Running is null && !Busy && Range.IsValidFor(Media.Duration) && !IsTooLong;
+            : !IsExporting && !Busy && Range.IsValidFor(Media.Duration) && !IsTooLong;
 
     private (int Width, int Height) OutputSize =>
         Budget is { } budget
-            ? ClipExporter.OutputSize(Media.Width, Media.Height, budget.Lines)
-            : (Media.Width, Media.Height);
+            ? ClipExporter.OutputSize(Frame.Width, Frame.Height, budget.Lines)
+            : Frame;
 
-    // Odd Probes Read As 60
-    private double ClipFrameRate =>
-        Media.FrameRate is > 1 and < 241 ? Math.Round(Media.FrameRate) : 60;
+    private double ClipFrameRate => ClipExporter.FrameRateOf(Media, encodes: false);
 
-    // An Encode Stops At 60
-    private double FrameRate => KeepsClip ? ClipFrameRate : Math.Min(ClipFrameRate, 60);
+    private double FrameRate => ClipExporter.FrameRateOf(Media, encodes: !KeepsClip);
 
-    // Null While The Export Is An Exact Copy
+    // Null For An Exact Copy, Crops Keep Bits Per Pixel
     private ExportBudget? Budget =>
-        SizeBudget.LimitOf(Plan) is { } limit ? SizeBudget.Plan(limit, Shape) : null;
+        SizeBudget.LimitOf(Plan) is { } limit ? SizeBudget.Plan(limit, Shape)
+        : IsVertical ? SizeBudget.Plan(VerticalBytes / 1e6, Shape)
+        : null;
+
+    private long VerticalBytes =>
+        ClipExporter.VerticalBytes(Clip.SizeBytes, Media.Duration, Media, Range.Length);
 
     // A Copy's Weight, Or Where An Encode Lands
     private long ExportBytes => Budget?.TypicalBytes ?? CopyBytesOf(CopiedTracks);
@@ -249,30 +255,13 @@ public partial class ExportPanel : IDisposable
 
     // Names The Longest Selection The Plan Fits
     private string TooLongText =>
-        $"Too long for {PlanLabel(Plan)}, which fits about {Formatter.FormatDuration(SizeBudget.LongestSeconds(SizeBudget.LimitOf(Plan) ?? 0, Shape))}, pick a shorter selection";
-
-    private static string PlanLabel(DiscordPlan plan)
-    {
-        return plan switch
-        {
-            DiscordPlan.Free => "Free",
-            DiscordPlan.NitroBasic => "Nitro Basic",
-            DiscordPlan.Nitro => "Nitro",
-            _ => "Off",
-        };
-    }
-
-    private static string? PlanDetail(DiscordPlan plan)
-    {
-        return SizeBudget.LimitOf(plan) is { } limit
-            ? Formatter.FormatSize((long)(limit * 1_000_000))
-            : null;
-    }
+        $"Too long for {SizeBudget.NameOf(Plan)}, which fits about {Formatter.FormatDuration(SizeBudget.LongestSeconds(SizeBudget.LimitOf(Plan) ?? 0, Shape))}, pick a shorter selection";
 
     // A Plan The Selection Fits Would Only Copy, Like Off
     private bool Changes(DiscordPlan plan)
     {
-        return SizeBudget.LimitOf(plan) is not { } limit || CopyBytes > limit * 1_000_000;
+        return SizeBudget.LimitOf(plan) is not { } limit
+            || (IsVertical ? VerticalBytes : CopyBytes) > limit * 1_000_000;
     }
 
     private void SetPlan(DiscordPlan plan)
@@ -358,6 +347,7 @@ public partial class ExportPanel : IDisposable
         // Read Before A Rename Replaces This Panel
         var (cut, title, keepOriginal) = (IsCut, ExportText, !Controller.Settings.DeleteOriginals);
         var (range, plan, frameRate, track) = (Range, Plan, FrameRate, Track);
+        var crop = IsVertical ? Crop : null;
         var folder = Controller.Settings.ExportsDirectory;
         if (await SettledPath() is not { } path || (cut && !await ConfirmCutAsync(title)))
         {
@@ -365,7 +355,7 @@ public partial class ExportPanel : IDisposable
         }
 
         // Runs On Past Leaving, The App Bar Shows It
-        var request = new ExportRequest(path, range, plan, frameRate, track, folder);
+        var request = new ExportRequest(path, range, plan, frameRate, track, folder, Crop: crop);
         _ = Exports.RunAsync(request, cut, keepOriginal);
     }
 
@@ -380,7 +370,7 @@ public partial class ExportPanel : IDisposable
 
     private void Cancel()
     {
-        Exports.Cancel();
+        Exports.Cancel(Clip.Path);
     }
 
     private void CopyFile()

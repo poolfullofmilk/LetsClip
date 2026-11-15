@@ -125,17 +125,34 @@ public sealed partial class GameWatcher : IDisposable
         }
     }
 
+    public static IReadOnlyList<int> ChildrenOf(int processId)
+    {
+        // Started By It, Never One That Reused An Old Number
+        return
+        [
+            .. ProcessTree()
+                .Where(entry => entry.Parent == processId && StarterOf(entry.Id) == processId)
+                .Select(entry => entry.Id),
+        ];
+    }
+
     private static int ParentOf(int processId)
+    {
+        return ProcessTree().FirstOrDefault(entry => entry.Id == processId).Parent;
+    }
+
+    private static List<(int Id, int Parent)> ProcessTree()
     {
         // From A Snapshot, Protected Games Refuse Their Handle
         var snapshot = CreateToolhelp32Snapshot(SnapshotProcesses, 0);
         if (snapshot == -1)
         {
-            return 0;
+            return [];
         }
 
         try
         {
+            List<(int Id, int Parent)> tree = [];
             var entry = new ProcessEntry { Size = ProcessEntrySize };
             for (
                 var more = Process32FirstW(snapshot, ref entry);
@@ -143,13 +160,10 @@ public sealed partial class GameWatcher : IDisposable
                 more = Process32NextW(snapshot, ref entry)
             )
             {
-                if (entry.ProcessId == processId)
-                {
-                    return (int)entry.ParentProcessId;
-                }
+                tree.Add(((int)entry.ProcessId, (int)entry.ParentProcessId));
             }
 
-            return 0;
+            return tree;
         }
         finally
         {

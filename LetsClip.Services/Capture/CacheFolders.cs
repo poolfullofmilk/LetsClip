@@ -108,7 +108,9 @@ public static partial class CacheFolders
     }
 
     // Six Digits Or More, Past A Million Segments Too
-    [GeneratedRegex(@"^((seg|aud)_\d{6,}\.ts|export-pass(-\d+)?\.log(\.mbtree)?(\.temp)?)$")]
+    [GeneratedRegex(
+        @"^((seg|aud)_\d{6,}\.ts|join-(video|audio)\.ts|export-pass(-\d+)?\.log(\.mbtree)?(\.temp)?)$"
+    )]
     private static partial Regex OwnedFileName();
 
     private static bool SelfTestPasses()
@@ -124,6 +126,7 @@ public static partial class CacheFolders
             && IsOwnedFile("seg_000123.ts")
             && IsOwnedFile("aud_000001.ts")
             && IsOwnedFile("seg_1000000.ts")
+            && IsOwnedFile("join-video.ts")
             && !IsOwnedFile("seg_12345.ts")
             && IsOwnedFile("export-pass-0.log.mbtree")
             && !IsOwnedFile("clip.mp4")

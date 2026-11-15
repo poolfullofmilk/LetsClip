@@ -1,0 +1,30 @@
+@if (Controller.RecordingSince is { } since)
+{
+    @* Stop Recording Button *@
+    <Tooltip Text="Stop and Save the Recording"
+             Placement="Placement.Bottom">
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Error"
+                   Size="Size.Small"
+                   StartIcon="@Icons.Material.Rounded.Stop"
+                   Class="record-button"
+                   OnClick="StopAsync">
+            @($"Stop {Formatter.FormatDuration(Math.Floor((DateTimeOffset.Now - since).TotalSeconds))}")
+        </MudButton>
+    </Tooltip>
+}
+else if (Controller.IsRecording && !Controller.ShowsError)
+{
+    @* Record Button *@
+    <Tooltip Text="Record Until Stopped"
+             Placement="Placement.Bottom">
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Info"
+                   Size="Size.Small"
+                   StartIcon="@Icons.Material.Rounded.FiberManualRecord"
+                   Disabled="@Controller.Recorder.Status.IsSaving"
+                   OnClick="Start">
+            Record
+        </MudButton>
+    </Tooltip>
+}

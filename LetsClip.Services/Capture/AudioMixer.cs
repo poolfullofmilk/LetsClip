@@ -27,6 +27,7 @@ public sealed class AudioMixer : IDisposable
     // A Voice App Started Or Closed Is Noticed Within This
     private static readonly TimeSpan s_voiceCheckPeriod = TimeSpan.FromSeconds(10);
     private const string VoiceKind = "Voice Chat Audio";
+    private const string HelperKind = "Game Helper Audio";
 
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
 
@@ -42,6 +43,10 @@ public sealed class AudioMixer : IDisposable
 
     // The Game And Its Starter, Both Trees Hold It
     private readonly int[] _holdingGame = [];
+
+    // A Voice App That Started The Game Records Both
+    private readonly int _game;
+    private readonly bool _throughStarter;
     private Thread? _writer;
     private volatile bool _stopping;
     private long _emittedFrames;
@@ -66,7 +71,21 @@ public sealed class AudioMixer : IDisposable
         if (systemId is not null && gameProcess != 0)
         {
             // Only The Game And Voice Chat, Each With Its Children
-            _sources = [new AudioSource(this, "Game Audio", "", true, 0, gameProcess)];
+            var starter = GameWatcher.StarterOf(gameProcess);
+            _game = gameProcess;
+            _holdingGame = [gameProcess, starter];
+            _throughStarter = starter != 0 && GameWatcher.VoiceProcesses().Contains(starter);
+            _sources =
+            [
+                new AudioSource(
+                    this,
+                    "Game Audio",
+                    "",
+                    true,
+                    0,
+                    _throughStarter ? starter : gameProcess
+                ),
+            ];
         }
         else if (systemId is not null)
         {
@@ -108,12 +127,11 @@ public sealed class AudioMixer : IDisposable
 
         if (systemId is not null && gameProcess != 0)
         {
-            // A Voice App Holding The Game Would Record It Twice
-            _holdingGame = [gameProcess, GameWatcher.StarterOf(gameProcess)];
-            if (GameWatcher.VoiceProcesses().Intersect(_holdingGame).ToList() is [_, ..] holding)
+            // Its Tree Holds The Game Once, Apart It Doubled
+            if (_throughStarter)
             {
                 s_logger.Info(
-                    $"Left Out {VoiceKind} From Process {string.Join(", ", holding)}, It Holds The Game And Would Record It Twice"
+                    $"Recorded {VoiceKind} Of Process {_holdingGame[1]} With The Game It Started, The Game's Own Helpers Apart"
                 );
             }
 
@@ -131,33 +149,15 @@ public sealed class AudioMixer : IDisposable
 
     private void FollowVoiceApps()
     {
-        // Each Running Voice App Gets A Recorder, Closed Ones Go
+        // Voice Apps And Game Helpers Get Recorders, Closed Ones Go
         try
         {
-            var running = GameWatcher.VoiceProcesses().Except(_holdingGame).ToList();
+            var voices = GameWatcher.VoiceProcesses().Except(_holdingGame).ToList();
+            var helpers = _throughStarter ? GameWatcher.ChildrenOf(_game) : [];
             lock (_sourcesGate)
             {
-                foreach (
-                    var gone in _sources.Where(source =>
-                        source.Kind == VoiceKind && !running.Contains(source.ProcessId)
-                    )
-                )
-                {
-                    _sources = [.. _sources.Where(source => source != gone)];
-                    gone.Dispose();
-                }
-
-                foreach (var process in running)
-                {
-                    if (_stopping || _sources.Any(source => source.ProcessId == process))
-                    {
-                        continue;
-                    }
-
-                    var voice = new AudioSource(this, VoiceKind, "", true, 0, process);
-                    voice.Connect();
-                    _sources = [.. _sources, voice];
-                }
+                Follow(VoiceKind, voices);
+                Follow(HelperKind, helpers);
             }
         }
         catch (Exception exception)
@@ -178,6 +178,32 @@ public sealed class AudioMixer : IDisposable
             {
                 // The Session Ended Meanwhile
             }
+        }
+    }
+
+    private void Follow(string kind, IReadOnlyList<int> running)
+    {
+        // Swapped Whole, The Writer Reads One List Per Chunk
+        foreach (
+            var gone in _sources.Where(source =>
+                source.Kind == kind && !running.Contains(source.ProcessId)
+            )
+        )
+        {
+            _sources = [.. _sources.Where(source => source != gone)];
+            gone.Dispose();
+        }
+
+        foreach (var process in running)
+        {
+            if (_stopping || _sources.Any(source => source.ProcessId == process))
+            {
+                continue;
+            }
+
+            var source = new AudioSource(this, kind, "", true, 0, process);
+            source.Connect();
+            _sources = [.. _sources, source];
         }
     }
 

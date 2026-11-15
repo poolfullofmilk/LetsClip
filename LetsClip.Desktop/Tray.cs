@@ -49,6 +49,9 @@ public sealed class Tray
     private Action? _balloonClick;
     private bool _isUpdating;
 
+    // The Game Last Announced, Restarts Never Repeat It
+    private string? _announcedGame;
+
     public Tray(MainWindow window, CaptureController controller, DesktopShell shell)
     {
         _window = window;
@@ -133,11 +136,12 @@ public sealed class Tray
         _window.IsExiting = true;
         _window.Hide();
         await _controller.HoldAsync(CaptureHolds.Exiting, "Stopped because LetsClip is closing");
-        await _controller.Recorder.WaitForSavesAsync(TimeSpan.FromSeconds(15));
+        // A Long Recording Stopped By Exit Gets Its Save Too
+        await _controller.Recorder.WaitForSavesAsync(TimeSpan.FromMinutes(2));
 
         // A Running Export Ends Cleanly, Its Unfinished File Deleted
         _controller.Exports.Cancel();
-        for (var waited = 0; _controller.Exports.Running is not null && waited < 50; waited++)
+        for (var waited = 0; _controller.Exports.IsBusy && waited < 50; waited++)
         {
             await Task.Delay(100);
         }
@@ -275,7 +279,7 @@ public sealed class Tray
             if (
                 _window.HiddenFor is { } idle
                 && idle >= s_idleBeforeUpdate
-                && _controller.Exports.Running is null
+                && !_controller.Exports.IsBusy
                 && !_controller.Recorder.Status.IsSaving
             )
             {
@@ -343,6 +347,16 @@ public sealed class Tray
         });
     }
 
+    private async Task StopRecordingAsync()
+    {
+        // Saved Like A Clip, Problems Show Like A Failed Press
+        var outcome = await Task.Run(_controller.StopRecordingAsync);
+        if (outcome.Error is { } error)
+        {
+            await _window.Dispatcher.InvokeAsync(() => ShowBalloon("Recording Not Saved", error));
+        }
+    }
+
     private void RecordFromNowOn(AddedGame app)
     {
         // One Click Turns A Missed Clip Into A Recorded Game
@@ -407,13 +421,26 @@ public sealed class Tray
             return false;
         }
 
-        MonitorOverlay.Toast(monitor, text, detail, isWarning);
+        // Only A Monitor Recording Could Ever Capture The Toast
+        MonitorOverlay.Toast(
+            monitor,
+            text,
+            detail,
+            isWarning,
+            hideFromCapture: _controller.Recorder.Options is { GameWindow: 0 }
+        );
         return true;
     }
 
     private void NotifySaved(ClipInfo clip)
     {
-        if (ToastInGame("Clip Saved", Formatter.FormatDuration(clip.Duration)))
+        _ = WarnIfBlackAsync(clip.Path);
+
+        // Off By Default, The Chime Already Answered The Press
+        if (
+            !_controller.Settings.Notifications
+            || ToastInGame("Clip Saved", Formatter.FormatDuration(clip.Duration))
+        )
         {
             return;
         }
@@ -426,6 +453,58 @@ public sealed class Tray
             $"{Formatter.FormatDuration(clip.Duration)} clip, click to open"
         );
     }
+
+    private async Task WarnIfBlackAsync(string path)
+    {
+        // A Game Hiding Its Picture Saves Black Clips, Always Said
+        try
+        {
+            if (!await Task.Run(() => MediaProbe.IsBlackAsync(path, CancellationToken.None)))
+            {
+                return;
+            }
+        }
+        catch (Exception exception) when (exception is TimeoutException or Win32Exception)
+        {
+            s_logger.Warn($"Failed To Check A Clip For Black {exception.GetType().Name}");
+            return;
+        }
+
+        s_logger.Warn($"Saved A Black Clip, {Path.GetFileName(path)}");
+        const string detail = "The game may hide its picture, try borderless or windowed mode";
+        if (!ToastInGame("Clip Is Black", detail, isWarning: true))
+        {
+            ShowBalloon("Clip Is Black", detail, () => _window.OpenClip(path));
+        }
+    }
+
+    private void AnnounceGame()
+    {
+        // A Newly Recorded Game Says So Once, Restarts Stay Quiet
+        var game = _controller.IsRecording ? _controller.Games.GameName : null;
+        if (game == _announcedGame)
+        {
+            return;
+        }
+
+        _announcedGame = game;
+        if (
+            game is null
+            || !_controller.Settings.Notifications
+            || ToastInGame($"Recording {game}", null)
+        )
+        {
+            return;
+        }
+
+        _balloonClick = null;
+        TrayBalloon.ShowQuiet(
+            _icon,
+            BalloonMilliseconds,
+            $"Recording {game}",
+            $"Press {_controller.Settings.Hotkey} to save a clip"
+        );
+    }
     #endregion
 
     #region Icon And Menu
@@ -433,8 +512,13 @@ public sealed class Tray
     {
         var open = new TrayMenuItem("Open LetsClip");
         var save = new TrayMenuItem(_controller.SaveText, _controller.IsRecording);
+        var recording = _controller.RecordingSince is not null;
+        var record = new TrayMenuItem(
+            recording ? "Stop Recording" : "Record Until Stopped",
+            recording || (_controller.IsRecording && !_controller.Recorder.Status.IsSaving)
+        );
         var exit = new TrayMenuItem("Exit");
-        var picked = TrayMenu.Show(_messages.Handle, open, save, null, exit);
+        var picked = TrayMenu.Show(_messages.Handle, open, save, record, null, exit);
         if (picked == open)
         {
             _window.ShowFromTray();
@@ -442,6 +526,17 @@ public sealed class Tray
         else if (picked == save)
         {
             _ = SaveFromHotkeyAsync();
+        }
+        else if (picked == record)
+        {
+            if (recording)
+            {
+                _ = StopRecordingAsync();
+            }
+            else
+            {
+                _controller.StartRecording();
+            }
         }
         else if (picked == exit)
         {
@@ -461,6 +556,7 @@ public sealed class Tray
             ? $"{AppInfo.DisplayName}, Error, {status.Message}"
             : $"{AppInfo.DisplayName}, {_controller.StatusText}";
         _icon.Text = text.Length > 127 ? text[..127] : text;
+        AnnounceGame();
     }
 
     private static Drawing.Icon WithDot(Drawing.Icon baseIcon, Drawing.Color color)

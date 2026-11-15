@@ -2,26 +2,31 @@
 
 ## Features
 - Keeps the last 30 seconds to 10 minutes of your game, app or monitor, ready to save with one key
+- Record keeps everything from the moment you press it until you stop, saved as one clip
 - Games and Apps Only records just that window, so chats and notifications stay out, and you pick any installed game or app from one list
 - Press the key in a game LetsClip does not know yet and it offers to record that game from then on
 - Recommended marks the best quality for your PC, or record up to your monitor's own resolution and refresh rate
 - Records only your game and voice chat (Discord, Vesktop, TeamSpeak, Mumble, Steam), or everything your PC plays, and your microphone at the volume you set with its background noise cleaned out and quiet words brought up
 - Your microphone also gets its own track, so an export can leave out your voice or the game
 - Test your microphone live and hear how it will sound in a clip
-- A small toast over your full screen game says when a clip is saved
+- Turn on Notifications for a small toast over your full screen game when a clip is saved or a game starts recording
+- A clip that comes out black always tells you, with the fix
 - Clips are named after their game and time, and renaming a clip renames its file, so it shares under that name
-- Trim a clip to the exact frame, by dragging, typing or stepping, over a strip with its sound drawn across it, and export an exact copy of it, or fit it to Discord's Free, Nitro Basic or Nitro limit as HEVC at the size that looks sharpest
-- Exports keep going when you leave the editor, with their progress in the top bar
+- Trim a clip to the exact frame, by dragging, typing or stepping, over a strip with its sound drawn across it that the mouse wheel zooms, and export an exact copy of it, or fit it to Discord's Free, Nitro Basic or Nitro limit as HEVC at the size that looks sharpest
+- Make a vertical export of any landscape clip for phones, dragging the box to the part you want
+- Exports keep going when you leave the editor and wait their turn, with their progress in the top bar
 - Keep just the trimmed part without losing any quality, and keep the full clip to bring back if you want
 - The length, size and bitrate shown before an export are what the file comes out as, and a selection too long for a Discord plan tells you how long it can be
-- Clips sit under a header per day, each tagged with its game, app or monitor, with its resolution, bitrate and size in its menu
+- Clips sit under Today, Yesterday, This Week, Last Week and then each month, each tagged with its game, app or monitor, with its resolution, bitrate and size in its menu
 - Search, rename and sort clips, and filter them by game, app or monitor, each with its count, or to the ones you have not edited yet
 - Clips saved since you last opened LetsClip are marked New
 - Each clip's picture shows the moment just before you saved it
 - Rest the pointer on a clip to preview it
 - Copy any clip as a file and paste it straight into Discord, or drag its card into Discord or a folder
+- Copy a clip sized for your Discord plan straight from its card, and copy its last export again any time
 - Deleting a clip can be undone for a moment, then it goes to the Recycle Bin
 - Changing the clips folder moves every clip with its details, with a progress bar
+- Each clip's details sit beside it, so moving or renaming clips in Explorer keeps their names, trims and games
 - A different sound tells you when a press saved nothing, and no notification ever plays a Windows sound over your game
 - A problem, like keys another app already uses or an almost full drive, shows as a small chip next to where you fix it
 - Spamming the key saves one clip, not a pile of copies

@@ -10,6 +10,9 @@ public static class MediaProbe
 {
     private static readonly TimeSpan s_timeout = TimeSpan.FromSeconds(20);
 
+    // Brightest Grey A Black Capture Holds, Limited Or Full Range
+    private const byte BlackLevel = 24;
+
     // ffprobe Uses Snake Case And Writes Numbers As Strings
     private static readonly JsonSerializerOptions s_json = new()
     {
@@ -55,6 +58,61 @@ public static class MediaProbe
         {
             // A Damaged File Reads As Unreadable, Never As A Crash
             return null;
+        }
+    }
+
+    public static async Task<bool> IsBlackAsync(string path, CancellationToken token)
+    {
+        // Written Beside The Thumbnails, The Filter Takes A Plain Name
+        Directory.CreateDirectory(AppInfo.ThumbnailsDirectory);
+        var name = $"black-{Guid.NewGuid():N}.tmp";
+        var sample = Path.Combine(AppInfo.ThumbnailsDirectory, name);
+        try
+        {
+            var result = await FFmpeg.RunAsync(
+                FFmpeg.FFmpegPath,
+                [
+                    "-hide_banner",
+                    "-nostdin",
+                    "-loglevel",
+                    "error",
+                    "-y",
+                    "-sseof",
+                    "-10",
+                    "-skip_frame",
+                    "nokey",
+                    "-i",
+                    path,
+                    "-an",
+                    "-frames:v",
+                    "10",
+                    "-vf",
+                    $"signalstats,metadata=print:key=lavfi.signalstats.YMAX:file={name}",
+                    "-f",
+                    "null",
+                    "-",
+                ],
+                s_timeout,
+                token,
+                workingDirectory: AppInfo.ThumbnailsDirectory
+            );
+            // The Last Keyframes' Brightest Pixel, None Brighter Than Black
+            var peaks =
+                result.Succeeded && File.Exists(sample)
+                    ? (await File.ReadAllLinesAsync(sample, token))
+                        .Where(line =>
+                            line.StartsWith("lavfi.signalstats.YMAX=", StringComparison.Ordinal)
+                        )
+                        .Select(line =>
+                            int.Parse(line[(line.IndexOf('=') + 1)..], CultureInfo.InvariantCulture)
+                        )
+                        .ToList()
+                    : [];
+            return peaks.Count > 0 && peaks.Max() <= BlackLevel;
+        }
+        finally
+        {
+            File.Delete(sample);
         }
     }
 

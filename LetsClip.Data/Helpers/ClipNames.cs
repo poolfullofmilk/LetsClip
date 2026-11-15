@@ -46,6 +46,25 @@ public static partial class ClipNames
             : null;
     }
 
+    public static (string? Game, int? Monitor) SourceFrom(string name)
+    {
+        // A Saved Name Says What It Recorded, Before Its Date
+        if (DateOf(name) is null)
+        {
+            return (null, null);
+        }
+
+        var source = GeneratedName().Match(name).Groups["source"].Value;
+        if (source is AppInfo.DisplayName or "Monitor")
+        {
+            return (null, null);
+        }
+
+        return MonitorName().Match(source) is { Success: true } monitor
+            ? (null, int.Parse(monitor.Groups["number"].Value, CultureInfo.InvariantCulture))
+            : (source, null);
+    }
+
     public static string? FileSafe(string? title)
     {
         // A Typed Title As A File Name, Refused Characters Dropped
@@ -68,8 +87,11 @@ public static partial class ClipNames
             : cleaned;
     }
 
-    [GeneratedRegex(@"^\S.* (?<stamp>\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2})( \(\d+\))?$")]
+    [GeneratedRegex(@"^(?<source>\S.*) (?<stamp>\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2})( \(\d+\))?$")]
     private static partial Regex GeneratedName();
+
+    [GeneratedRegex(@"^Monitor (?<number>\d{1,2})$")]
+    private static partial Regex MonitorName();
 
     [GeneratedRegex(@"^(CON|PRN|AUX|NUL|COM[0-9¹²³]|LPT[0-9¹²³])(\.|$)", RegexOptions.IgnoreCase)]
     private static partial Regex ReservedName();
@@ -93,6 +115,14 @@ public static partial class ClipNames
             && DateOf("2026-11-04 22-43-05") is null
             && DateOf("Ace Clutch") is null
             && DateOf("LetsClip 2026-13-04 22-43-05") is null
+            && SourceFrom("Overwatch 2026-11-04 22-43-05") == ("Overwatch", null)
+            && SourceFrom("Tom Clancy's Rainbow Six Siege 2026-11-04 22-43-05 (2)")
+                == ("Tom Clancy's Rainbow Six Siege", null)
+            && SourceFrom("Monitor 2 2026-11-04 22-43-05") == (null, 2)
+            && SourceFrom("Monitor 2026-11-04 22-43-05") == (null, null)
+            && SourceFrom("LetsClip 2026-11-04 22-43-05") == (null, null)
+            && SourceFrom("Ace Clutch") == (null, null)
+            && SourceFrom("Overwatch 2026-13-04 22-43-05") == (null, null)
             && FileSafe(" Ace: 1v5? ") == "Ace 1v5"
             && FileSafe("Clutch...") == "Clutch"
             && FileSafe("<>|") is null

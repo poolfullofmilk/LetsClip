@@ -9,7 +9,7 @@
             <ChoiceSelect T="DiscordPlan"
                           Value="Plan"
                           ValueChanged="SetPlan"
-                          ToStringFunc="PlanLabel"
+                          ToStringFunc="SizeBudget.NameOf"
                           Disabled="@(IsExporting || Busy || !AnyPlanChanges)"
                           RelativeWidth="@DropdownWidth.Adaptive"
                           aria-label="Fit for Discord">
@@ -18,13 +18,20 @@
                     <MudSelectItem T="DiscordPlan"
                                    Value="plan"
                                    Disabled="@(!Changes(plan))">
-                        <ItemLabel Text="@PlanLabel(plan)"
-                                   Detail="@PlanDetail(plan)" />
+                        <ItemLabel Text="@SizeBudget.NameOf(plan)"
+                                   Detail="@SizeBudget.LimitTextOf(plan)" />
                     </MudSelectItem>
                 }
             </ChoiceSelect>
         </MudElement>
     </SettingRow>
+    @if (CanCrop)
+    {
+        <SettingRow Title="Vertical"
+                    Switch="IsVertical"
+                    SwitchChanged="VerticalChanged"
+                    SwitchDisabled="@(IsExporting || Busy)" />
+    }
     @if (Media.HasSeparateTracks)
     {
         <SettingRow Title="Game Audio">
@@ -96,7 +103,7 @@
             <MudText Typo="Typo.caption"
                      Align="Align.Center"
                      Class="mud-text-secondary">
-                Another clip is exporting
+                Another clip is exporting, this one waits its turn
             </MudText>
         }
         else if (Budget?.Verdict == BudgetVerdict.Soft)

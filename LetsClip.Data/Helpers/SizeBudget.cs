@@ -50,6 +50,22 @@ public static class SizeBudget
         };
     }
 
+    public static string NameOf(DiscordPlan plan)
+    {
+        return plan switch
+        {
+            DiscordPlan.Free => "Free",
+            DiscordPlan.NitroBasic => "Nitro Basic",
+            DiscordPlan.Nitro => "Nitro",
+            _ => "Off",
+        };
+    }
+
+    public static string? LimitTextOf(DiscordPlan plan)
+    {
+        return LimitOf(plan) is { } limit ? Formatter.FormatSize((long)(limit * 1_000_000)) : null;
+    }
+
     public static bool KeepsClip(DiscordPlan plan, double seconds, double bytesPerSecond)
     {
         // Off, Or Already Small Enough, Is An Exact Copy

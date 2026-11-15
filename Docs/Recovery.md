@@ -45,6 +45,13 @@ The owner's rule: consistent on every kind of system, and anything that can fix 
 | A cut clip's kept original cannot be recycled with it | The clip still goes, its original waits for Delete Kept Originals | The clip leaves the list |
 | The clips folder sits at a drive's root | Disk Space skips the system folders it cannot read | Disk Space shows |
 | Removing the Run value, Uninstall entry or shortcuts throws | Logged, the uninstall goes on (`StartupRegistration.Remove` catches everything, like `Apply`) | The uninstall's message |
+| A capture dies within 5 s of a display change | It starts again after 0.5 s instead of the usual wait (`s_displayGrace`), since a mode change kills it and the next try works | Recording back within about a second |
+| A session ends during Record (a restart, a lost encoder, Exit) | The recording stops and saves what it holds (`FinishRecordingOf`), its segments pinned until saved; Exit waits up to two minutes | The clip, then recording as before |
+| The clips drive fills during Record | The health check stops and saves it before the drive could no longer hold it plus 1 GB (`RecordingNeedsStop`) | The recording as a clip |
+| LetsClip dies while a long recording joins its segments | `join-video.ts` and `join-audio.ts` are named like the cache's own files, so the next start's cleanup takes them with the segments | Nothing |
+| A hardware export misses its limit twice | A third try along the line of the first two (`NextBitrate`), then the next encoder | The export, a little later |
+| A clip comes out black, a game hiding its picture | Said whatever Notifications says (`WarnIfBlackAsync`), logged | `Clip Is Black` with its fix |
+| A clip renamed or moved in Explorer loses its details | Details whose clip left are adopted by size and write time (`Adopt`), else the game comes from the name | The clip with its name, trim and game |
 
 ## Reliability Research And Tests
 

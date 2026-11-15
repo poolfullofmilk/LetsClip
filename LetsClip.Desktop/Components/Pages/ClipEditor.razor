@@ -100,6 +100,24 @@ else
                             <MudElement HtmlTag="canvas"
                                         Class="player-frozen"
                                         aria-hidden="true" />
+                            @if (_crop is { } crop && _ready)
+                            {
+                                @* Vertical Crop Frame *@
+                                <MudElement HtmlTag="div"
+                                            Class="crop-box">
+                                    <MudElement HtmlTag="div"
+                                                Class="crop-row"
+                                                Style="@($"--crop:{Exact(crop)}")">
+                                        <MudElement HtmlTag="div"
+                                                    Class="crop-shade" />
+                                        <MudElement HtmlTag="div"
+                                                    Class="crop-frame"
+                                                    aria-label="Vertical Crop" />
+                                        <MudElement HtmlTag="div"
+                                                    Class="crop-shade" />
+                                    </MudElement>
+                                </MudElement>
+                            }
                             @if (_volumeShown > 0)
                             {
                                 @* Volume Overlay *@
@@ -200,10 +218,13 @@ else
                                                 HtmlTag="div"
                                                 Class="timeline-playhead"
                                                 Style="left:0" />
+                                    <MudElement HtmlTag="div"
+                                                Class="timeline-zoom"
+                                                Style="@ZoomStyle" />
                                     @* Start Handle *@
                                     <MudElement HtmlTag="div"
                                                 Class="timeline-handle"
-                                                Style="@($"left:{Percent(_range.Start)}")"
+                                                Style="@HandleStyle(_range.Start)"
                                                 role="slider"
                                                 tabindex="0"
                                                 data-handle="start"
@@ -216,7 +237,7 @@ else
                                     @* End Handle *@
                                     <MudElement HtmlTag="div"
                                                 Class="timeline-handle"
-                                                Style="@($"left:{Percent(_range.End)}")"
+                                                Style="@HandleStyle(_range.End)"
                                                 role="slider"
                                                 tabindex="0"
                                                 data-handle="end"
@@ -247,6 +268,8 @@ else
                                  Cutting="_cutting"
                                  Busy="_swapping"
                                  Range="_range"
+                                 Crop="_crop"
+                                 VerticalChanged="SetVertical"
                                  Media="media">
                         <SettingRow Title="Name">
                             @* Clip Name Field *@

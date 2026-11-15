@@ -339,3 +339,14 @@ The owner picked fixes 1, 2, 3, 5, 6 and 7 of the Performance Sweep and the card
 - Saves in the sandbox, monitor capture: 0.6 and 0.7 s from press to file (segment waits 529 to 608 ms, remux 94 to 110 ms, no probe), against 1.1 to 2.8 s for the owner's three saves that afternoon with the probe.
 - The settle delay: Frame Rate 60 to 30 and back 1.2 s apart restarted nothing; 60 to 30 alone restarted 2.0 s later, and back to 60 the same.
 - Live, the sandbox recording the first monitor at 1080p60: video FFmpeg 176 MB private, 118 MB in RAM, 1087 handles; audio FFmpeg 33 MB, 142 handles.
+
+## Picks Round, 15 November 2026, Evening
+
+- Window GPU route soak, two hours on the 9070 XT (driver 32.0.32015.7029): three GPU route captures at 2560 x 1440 and one CPU route capture of a stress window cycling every 13.6 s through a minimise and restore, 40 random resizes 25 ms apart, a hide and show, 1 x 1, 1600 x 900 and a move, about 21,000 resizes. All four ran 119.8 to 120.2 minutes, ended with code 0 and wrote 335,105 to 336,205 frames each, no warning, error, dropped or duplicated frame. CPU: 5.3 to 5.5% of a core and 156 MB private on the GPU route, 38.0% and 141 MB on the CPU route.
+- Timeline strip by one seek per cell: a 10 minute clip in 0.53 s against 1.15 s decoding every keyframe, and a clip whose video ends early still filled every cell.
+- Limiter: a loud mix's peak from +3.0 to -0.4 dBFS, quiet sound within 0.001 dB.
+- Steam voice chat with its game: game 440 Hz at -43.03 dB, voice app 660 Hz at -43.04 dB, the unplayed 880 Hz band at -70.6 dB.
+- A 1700 s recording (1700 video, 1701 audio segments) saved through the join in 2.3 s, probed 1700 s, 702 live replay segments kept.
+- Black check: a black clip 16, a normal clip 253, black at 24 or under.
+- Vertical exports from the 110 MB 1440p clip, 30 s: Off 29.3 MB (30.8 shown), Free 18.5 MB, both 810 x 1440 HEVC 60 FPS 30.000 s, crop placement by PSNR 40.5 dB (centred) and 32.0 dB (at 0.8) against 5.8 to 6.4 dB elsewhere, 4.5 to 5.0 s each.
+- The in-game toast over a top most full screen window recorded as a game: 217 lit samples in the top band after the save, none before.

@@ -13,6 +13,10 @@ public static class ClipSaver
     public const int DiskFullCode = unchecked((int)0x80070070);
     private const long DiskMargin = 50_000_000;
 
+    // Past This, The Concat Line Nears Windows' 32,767 Characters
+    private const int MostSegments = 1600;
+    private const int JoinBuffer = 4 * 1024 * 1024;
+
     internal static long? FreeBytes(string folder)
     {
         try
@@ -40,7 +44,8 @@ public static class ClipSaver
         string? game,
         int? monitor,
         bool separateTracks,
-        ClipLibrary library
+        ClipLibrary library,
+        double? deleteBefore = null
     )
     {
         var clipsFolder = FolderFor(library.Folder);
@@ -53,8 +58,19 @@ public static class ClipSaver
         }
 
         var temporary = ClipLibrary.PartialPathIn(clipsFolder);
+        List<string> joined = [];
         try
         {
+            // A Long Recording Joins Its Segments First, Lines Stay Short
+            var joins = video.Count + audio.Count > MostSegments;
+            var videoInput = joins
+                ? await JoinAsync(video, sessionFolder, "video", deleteBefore, joined)
+                : ConcatOf(video);
+            var audioSource =
+                audio.Count == 0 ? ""
+                : joins ? await JoinAsync(audio, sessionFolder, "audio", deleteBefore, joined)
+                : ConcatOf(audio);
+
             // Stream Copy To The Press, The Replay Start Becomes Zero
             IReadOnlyList<string> audioInput =
                 audio.Count > 0
@@ -63,7 +79,7 @@ public static class ClipSaver
                         "-itsoffset",
                         FFmpeg.Seconds(-from),
                         "-i",
-                        ConcatOf(audio),
+                        audioSource,
                         "-map",
                         "0:v",
                         "-map",
@@ -84,7 +100,7 @@ public static class ClipSaver
                 "-itsoffset",
                 FFmpeg.Seconds(videoOffset - from),
                 "-i",
-                ConcatOf(video),
+                videoInput,
                 .. audioInput,
                 "-c",
                 "copy",
@@ -100,7 +116,7 @@ public static class ClipSaver
             var result = await FFmpeg.RunAsync(
                 FFmpeg.FFmpegPath,
                 arguments,
-                s_timeout,
+                s_timeout + TimeSpan.FromMinutes(needed / 5_000_000_000.0),
                 CancellationToken.None,
                 workingDirectory: sessionFolder
             );
@@ -138,9 +154,58 @@ public static class ClipSaver
         }
         finally
         {
-            // Only This Save's Own Unfinished File, Never Anything Else
+            // Only This Save's Own Unfinished Files, Never Anything Else
             await FFmpeg.DeleteOutputAsync(temporary);
+            foreach (var file in joined)
+            {
+                File.Delete(file);
+            }
         }
+    }
+
+    private static async Task<string> JoinAsync(
+        IReadOnlyList<Segment> segments,
+        string folder,
+        string kind,
+        double? deleteBefore,
+        List<string> joined
+    )
+    {
+        // Byte For Byte What Concat Reads, Cleaned With The Cache
+        var target = Path.Combine(folder, $"join-{kind}.ts");
+        joined.Add(target);
+        await using var output = new FileStream(
+            target,
+            FileMode.Create,
+            FileAccess.Write,
+            FileShare.None,
+            JoinBuffer,
+            FileOptions.Asynchronous | FileOptions.SequentialScan
+        );
+        foreach (var segment in segments)
+        {
+            await using (
+                var input = new FileStream(
+                    segment.Path,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.ReadWrite | FileShare.Delete,
+                    JoinBuffer,
+                    FileOptions.Asynchronous | FileOptions.SequentialScan
+                )
+            )
+            {
+                await input.CopyToAsync(output);
+            }
+
+            // Joined And Older Than The Replay, Kept Once On Disk
+            if (segment.End < deleteBefore)
+            {
+                File.Delete(segment.Path);
+            }
+        }
+
+        return Path.GetFileName(target);
     }
 
     private static bool WroteVideo(string progress)

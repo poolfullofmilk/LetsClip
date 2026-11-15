@@ -431,7 +431,7 @@ public partial class MainWindow : Window
 
         // Still Hidden Later, The Page Goes, Never During An Export
         await Task.Delay(s_releaseDelay);
-        while (visibility == _visibility && _controller.Exports.Running is not null)
+        while (visibility == _visibility && _controller.Exports.IsBusy)
         {
             await Task.Delay(TimeSpan.FromMinutes(1));
         }
