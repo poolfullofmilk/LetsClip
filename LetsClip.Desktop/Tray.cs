@@ -20,6 +20,7 @@ namespace LetsClip.Desktop;
 public sealed class Tray
 {
     private const int BalloonMilliseconds = 4000;
+    private const string RecordingNotSaved = "Recording Not Saved";
 
     // Looked For This Often, And Whenever The Window Opens
     private static readonly TimeSpan s_updateCheckPeriod = TimeSpan.FromHours(6);
@@ -84,6 +85,11 @@ public sealed class Tray
         // A Chime At The Press, A Falling One On Failure
         controller.Recorder.SaveStarted += () => Chime(failed: false);
         controller.SaveFailed += () => Chime(failed: true);
+        controller.Recorder.RecordingNotSaved += error =>
+        {
+            Chime(failed: true);
+            _window.Dispatcher.InvokeAsync(() => ShowBalloon(RecordingNotSaved, error));
+        };
         controller.Recorder.ClipSaved += clip =>
             _window.Dispatcher.InvokeAsync(() => NotifySaved(clip));
 
@@ -151,7 +157,23 @@ public sealed class Tray
         ExitNow();
     }
 
-    public void ExitNow()
+    public bool EndSession()
+    {
+        // Windows Waits Only For A Recording's Save
+        if (_controller.RecordingSince is null && !_controller.Recorder.Status.IsSaving)
+        {
+            Clips.FinishDeletes();
+            ExitNow();
+            return false;
+        }
+
+        var named = _messages.BlockShutdown("Saving the recording");
+        s_logger.Info($"Held The Session's End To Save A Recording, Reason Shown {named}");
+        _ = ExitAsync();
+        return true;
+    }
+
+    private void ExitNow()
     {
         // A Window Open At Shutdown Is Remembered Too
         if (_window.IsVisible)
@@ -273,7 +295,7 @@ public sealed class Tray
             return;
         }
 
-        // Hidden A While, Nothing Saving Or Exporting
+        // Hidden A While, No Save, Export Or Manual Recording
         while (!_window.IsExiting)
         {
             if (
@@ -281,6 +303,7 @@ public sealed class Tray
                 && idle >= s_idleBeforeUpdate
                 && !_controller.Exports.IsBusy
                 && !_controller.Recorder.Status.IsSaving
+                && _controller.RecordingSince is null
             )
             {
                 s_logger.Info(
@@ -353,7 +376,7 @@ public sealed class Tray
         var outcome = await Task.Run(_controller.StopRecordingAsync);
         if (outcome.Error is { } error)
         {
-            await _window.Dispatcher.InvokeAsync(() => ShowBalloon("Recording Not Saved", error));
+            await _window.Dispatcher.InvokeAsync(() => ShowBalloon(RecordingNotSaved, error));
         }
     }
 

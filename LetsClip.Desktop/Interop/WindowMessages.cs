@@ -41,6 +41,12 @@ public sealed partial class WindowMessages : Forms.NativeWindow, IDisposable
         return _hotkeyRegistered;
     }
 
+    public bool BlockShutdown(string reason)
+    {
+        // Shown On Windows' Shutdown Screen Beside Shut Down Anyway
+        return ShutdownBlockReasonCreate(Handle, reason);
+    }
+
     public void UnregisterHotkey()
     {
         if (_hotkeyRegistered)
@@ -93,6 +99,10 @@ public sealed partial class WindowMessages : Forms.NativeWindow, IDisposable
         public uint DataLength;
         public byte Data;
     }
+
+    [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool ShutdownBlockReasonCreate(nint window, string reason);
 
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

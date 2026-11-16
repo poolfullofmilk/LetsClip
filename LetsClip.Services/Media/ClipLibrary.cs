@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Globalization;
@@ -45,6 +46,10 @@ public sealed class ClipLibrary : IDisposable
     private const string ZoomMark = ".zoom-";
     private const string ZoomWaveMark = ".zoomwave-";
     private const string WaveSize = "1600x64";
+
+    // Decoded Before A Zoomed Window, An Exact Seek Shifts
+    private const double WaveLead = 2;
+
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
 
     // Where Details Lived Before They Moved Beside The Clips
@@ -53,6 +58,7 @@ public sealed class ClipLibrary : IDisposable
         "Clips"
     );
     private static readonly TimeSpan s_debounce = TimeSpan.FromMilliseconds(600);
+    private static readonly TimeSpan s_timeTolerance = TimeSpan.FromSeconds(2);
 
     // A Lost Watcher Or Missing Drive Is Tried Again
     private static readonly TimeSpan s_rewatch = TimeSpan.FromSeconds(15);
@@ -187,24 +193,12 @@ public sealed class ClipLibrary : IDisposable
         {
             try
             {
+                // One Bad Clip Keeps A Plain Tile, Others Go On
                 foreach (var clip in missing.TakeWhile(_ => !_closing.IsCancellationRequested))
                 {
-                    try
+                    if (await ThumbnailAsync(clip.Path, clip.Duration) is { } picture)
                     {
-                        if (await ThumbnailAsync(clip.Path, clip.Duration) is { } picture)
-                        {
-                            PictureMade?.Invoke(clip.Path, picture);
-                        }
-                    }
-                    catch (Exception exception)
-                        when (exception
-                                is IOException
-                                    or UnauthorizedAccessException
-                                    or TimeoutException
-                        )
-                    {
-                        // One Bad Clip Keeps A Plain Tile, Others Go On
-                        s_logger.Warn($"Failed To Make A Thumbnail {exception.GetType().Name}");
+                        PictureMade?.Invoke(clip.Path, picture);
                     }
                 }
             }
@@ -556,12 +550,20 @@ public sealed class ClipLibrary : IDisposable
                 )
             )
             {
-                var buffer = new byte[CopyBuffer];
-                int read;
-                while ((read = await input.ReadAsync(buffer)) > 0)
+                // One Rented Buffer, A Folder Move Copies Many Files
+                var buffer = ArrayPool<byte>.Shared.Rent(CopyBuffer);
+                try
                 {
-                    await output.WriteAsync(buffer.AsMemory(0, read));
-                    moved(read);
+                    int read;
+                    while ((read = await input.ReadAsync(buffer)) > 0)
+                    {
+                        await output.WriteAsync(buffer.AsMemory(0, read));
+                        moved(read);
+                    }
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(buffer);
                 }
             }
 
@@ -769,7 +771,7 @@ public sealed class ClipLibrary : IDisposable
                 "mp4",
                 output,
             ],
-            TimeSpan.FromMinutes(2),
+            FFmpeg.CopyLimit(new FileInfo(source).Length),
             token
         );
         return result.Succeeded ? await MediaProbe.ProbeAsync(output, token) : null;
@@ -797,7 +799,7 @@ public sealed class ClipLibrary : IDisposable
         }
     }
 
-    private static async Task ReplaceWhileBusyAsync(Action replace)
+    internal static async Task ReplaceWhileBusyAsync(Action replace)
     {
         for (var attempt = 1; ; attempt++)
         {
@@ -954,15 +956,7 @@ public sealed class ClipLibrary : IDisposable
         }
 
         // The File Is Already Replaced, A Picture Only Decorates It
-        try
-        {
-            await ThumbnailAsync(path, duration);
-        }
-        catch (Exception exception)
-            when (exception is IOException or TimeoutException or Win32Exception)
-        {
-            s_logger.Warn($"Failed To Make A Thumbnail {exception.GetType().Name}");
-        }
+        await ThumbnailAsync(path, duration);
     }
 
     public static bool CanWriteTo(string folder)
@@ -1094,10 +1088,10 @@ public sealed class ClipLibrary : IDisposable
         }
 
         // Each Run Writes Its Own Temporary File
-        Directory.CreateDirectory(AppInfo.ThumbnailsDirectory);
         var temporary = $"{target}.{Guid.NewGuid():N}.tmp.jpg";
         try
         {
+            Directory.CreateDirectory(AppInfo.ThumbnailsDirectory);
             var result = await FFmpeg.RunAsync(
                 FFmpeg.FFmpegPath,
                 ["-hide_banner", "-nostdin", "-loglevel", "error", "-y", .. arguments, temporary],
@@ -1112,6 +1106,18 @@ public sealed class ClipLibrary : IDisposable
             File.Move(temporary, target, overwrite: true);
             DeleteOlderPictures(target);
             return target;
+        }
+        catch (Exception exception)
+            when (exception
+                    is IOException
+                        or UnauthorizedAccessException
+                        or TimeoutException
+                        or Win32Exception
+            )
+        {
+            // A Picture Only Decorates, Its Clip Shows Without It
+            s_logger.Warn($"Failed To Make A Picture {exception.GetType().Name}");
+            return null;
         }
         finally
         {
@@ -1128,16 +1134,18 @@ public sealed class ClipLibrary : IDisposable
     {
         // White On Black, The Page Lays It Over The Strip
         var (from, to) = window is { } zoomed ? (zoomed.Start, zoomed.End) : (0, duration);
+
+        // A Late Window Seeks Just Before, The Trim Stays Exact
+        var seek = from > WaveLead ? from - WaveLead : 0;
+        IReadOnlyList<string> input = seek > 0 ? ["-ss", FFmpeg.Seconds(seek)] : [];
         return RenderAsync(
             PicturePathOf(path, window is { } part ? WindowSuffix(ZoomWaveMark, part) : WaveSuffix),
             [
+                .. input,
                 "-i",
                 path,
                 "-filter_complex",
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"[0:a:0]atrim={FFmpeg.Seconds(from)}:{FFmpeg.Seconds(to)},showwavespic=s={WaveSize}:colors=white:scale=sqrt:draw=full:filter=peak"
-                ),
+                $"[0:a:0]atrim={FFmpeg.Seconds(from - seek)}:{FFmpeg.Seconds(to - seek)},showwavespic=s={WaveSize}:colors=white:scale=sqrt:draw=full:filter=peak",
                 "-frames:v",
                 "1",
                 "-q:v",
@@ -1288,8 +1296,11 @@ public sealed class ClipLibrary : IDisposable
     {
         // Renamed Or Moved Outside LetsClip, Size And Time Find Details
         if (
-            orphans is null
-            || !orphans.Value.TryRemove((file.Length, file.LastWriteTimeUtc), out var source)
+            orphans?.Value.Keys.FirstOrDefault(left =>
+                left.Size == file.Length && IsSameTime(left.Written, file.LastWriteTimeUtc)
+            )
+                is not { Size: > 0 } key
+            || !orphans.Value.TryRemove(key, out var source)
             || ReadJson(source) is not { } stored
         )
         {
@@ -1370,13 +1381,34 @@ public sealed class ClipLibrary : IDisposable
     private static ClipMetadata? ReadMetadata(FileInfo file)
     {
         // Another File Under The Same Name Is Probed Again
-        return
-            ReadStored(file.FullName) is { } metadata
-            && metadata.FileSize == file.Length
-            && metadata.FileWriteTimeUtc == file.LastWriteTimeUtc
-            && metadata.Duration > 0
-            ? metadata
-            : null;
+        if (
+            ReadStored(file.FullName) is not { Duration: > 0 } metadata
+            || metadata.FileSize != file.Length
+            || !IsSameTime(metadata.FileWriteTimeUtc, file.LastWriteTimeUtc)
+        )
+        {
+            return null;
+        }
+
+        // From A Coarser Drive, Stamped Anew For Exact Reads
+        if (metadata.FileWriteTimeUtc != file.LastWriteTimeUtc)
+        {
+            lock (s_metadataGate)
+            {
+                if (ReadStored(file.FullName) is { } current)
+                {
+                    WriteMetadata(file.FullName, current);
+                }
+            }
+        }
+
+        return metadata;
+    }
+
+    private static bool IsSameTime(DateTime stored, DateTime written)
+    {
+        // exFAT Keeps 10 ms, FAT32 And Zip Files Two Seconds
+        return (stored - written).Duration() <= s_timeTolerance;
     }
 
     private static ClipMetadata? ReadStored(string path)

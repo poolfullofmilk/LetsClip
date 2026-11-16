@@ -124,6 +124,12 @@ public sealed class ExportRunner
             s_logger.Warn("Failed To Export, It Stopped Answering");
             outcome = outcome with { Problem = "Export stopped answering, nothing was kept" };
         }
+        catch (Exception exception)
+        {
+            // Whatever Else Ends It Clears The Chip And Says Why
+            s_logger.Warn($"Failed To Export {exception.GetType().Name}");
+            outcome = outcome with { Problem = "Export could not run, reinstall LetsClip" };
+        }
         finally
         {
             _cancel.Dispose();

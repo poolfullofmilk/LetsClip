@@ -2,12 +2,17 @@ using System.Globalization;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
 using LetsClip.Services.Media;
+using NLog;
 
 namespace LetsClip.Services.Capture;
 
 public static class ClipSaver
 {
-    private static readonly TimeSpan s_timeout = TimeSpan.FromMinutes(2);
+    private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
+
+    // A Scanner Holding The File Lets Go In A Moment
+    private const int RemuxAttempts = 2;
+    private static readonly TimeSpan s_retryWait = TimeSpan.FromSeconds(1);
 
     // Windows' Own Disk Full Code, Whoever Runs Out First
     public const int DiskFullCode = unchecked((int)0x80070070);
@@ -113,24 +118,43 @@ public static class ClipSaver
                 "mp4",
                 temporary,
             ];
-            var result = await FFmpeg.RunAsync(
-                FFmpeg.FFmpegPath,
-                arguments,
-                s_timeout + TimeSpan.FromMinutes(needed / 5_000_000_000.0),
-                CancellationToken.None,
-                workingDirectory: sessionFolder
-            );
-            // The Remux Reports Its Own End, No Second Read
-            if (!result.Succeeded || !WroteVideo(result.Output))
+
+            // Tried Again From The Same Inputs, Joined Ones Exist Once
+            for (var attempt = 1; ; attempt++)
             {
-                throw new IOException($"Failed To Write The Clip, {result.LastError}");
+                try
+                {
+                    var result = await FFmpeg.RunAsync(
+                        FFmpeg.FFmpegPath,
+                        arguments,
+                        FFmpeg.CopyLimit(needed),
+                        CancellationToken.None,
+                        workingDirectory: sessionFolder
+                    );
+                    // The Remux Reports Its Own End, No Second Read
+                    if (!result.Succeeded || !WroteVideo(result.Output))
+                    {
+                        throw new IOException($"Failed To Write The Clip, {result.LastError}");
+                    }
+
+                    break;
+                }
+                catch (Exception exception)
+                    when (attempt < RemuxAttempts
+                        && (exception is IOException || (joins && exception is TimeoutException))
+                    )
+                {
+                    s_logger.Info($"Saving Again After {exception.GetType().Name}");
+                    await Task.Delay(s_retryWait);
+                }
             }
 
+            // A Blocked Rename Waits, Never A Second Remux
             var finalPath = UniquePath(
                 clipsFolder,
                 ClipNames.For(ClipNames.SourceOf(game, monitor), recordedAt)
             );
-            File.Move(temporary, finalPath);
+            await ClipLibrary.ReplaceWhileBusyAsync(() => File.Move(temporary, finalPath));
             // Keeps The Capture Rate, Game And Monitor, Thumbnails Come Later
             ClipLibrary.WriteMetadata(
                 finalPath,
@@ -158,7 +182,7 @@ public static class ClipSaver
             await FFmpeg.DeleteOutputAsync(temporary);
             foreach (var file in joined)
             {
-                File.Delete(file);
+                await FFmpeg.DeleteOutputAsync(file);
             }
         }
     }

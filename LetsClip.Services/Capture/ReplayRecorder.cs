@@ -104,6 +104,9 @@ public sealed class ReplayRecorder : IDisposable
 
     public event Action<CaptureFailure>? Failed;
 
+    // A Recording Ended By Itself And Was Not Saved
+    public event Action<string>? RecordingNotSaved;
+
     public CaptureStatus Status { get; private set; }
 
     // Set While A Recording Runs Until Stopped
@@ -511,7 +514,7 @@ public sealed class ReplayRecorder : IDisposable
                 waited.Cancel();
             }
 
-            if (!standby.HasEnded && await SwapAsync(current, standby))
+            if (!standby.HasEnded && await SwapAsync(current, standby, isUpgrade: true))
             {
                 return true;
             }
@@ -525,7 +528,11 @@ public sealed class ReplayRecorder : IDisposable
         return false;
     }
 
-    private async Task<bool> SwapAsync(CaptureSession current, CaptureSession standby)
+    private async Task<bool> SwapAsync(
+        CaptureSession current,
+        CaptureSession standby,
+        bool isUpgrade = false
+    )
     {
         // Whole Replay Ready, So The Change Costs No History
         await _transition.WaitAsync();
@@ -536,6 +543,15 @@ public sealed class ReplayRecorder : IDisposable
             {
                 if (_session != current)
                 {
+                    return false;
+                }
+
+                // A Recording Started Meanwhile Keeps Its Session, Upgrades Wait
+                if (isUpgrade && _manual?.Session == current)
+                {
+                    s_logger.Info(
+                        $"Stayed On {current.Encoder.Name}, A Recording Runs Until Stopped"
+                    );
                     return false;
                 }
 
@@ -714,7 +730,8 @@ public sealed class ReplayRecorder : IDisposable
             manual = _manual;
             if (manual is null)
             {
-                return new SaveOutcome(null, "Nothing is being recorded until stopped");
+                // Already Stopped Elsewhere, Nothing To Save Or Say
+                return new SaveOutcome(null, null);
             }
 
             _manual = null;
@@ -785,7 +802,16 @@ public sealed class ReplayRecorder : IDisposable
 
         if (ends)
         {
-            _ = StopRecordingAsync();
+            _ = EndRecordingAsync();
+        }
+    }
+
+    private async Task EndRecordingAsync()
+    {
+        // Nobody Pressed Stop, A Failed Save Says So Itself
+        if ((await StopRecordingAsync()).Error is { } error)
+        {
+            RecordingNotSaved?.Invoke(error);
         }
     }
 
@@ -887,37 +913,22 @@ public sealed class ReplayRecorder : IDisposable
             videoOffset == 0 && kept - wanted > CaptureSession.SegmentSeconds ? kept : wanted;
 
         // Exactly The Replay Length, Or All Of A Younger Session
-        Task<ClipInfo> SaveClipAsync()
-        {
-            return ClipSaver.SaveAsync(
-                video,
-                audio,
-                start,
-                to,
-                videoOffset,
-                session.Folder,
-                recordedAt,
-                session.Options.FrameRate,
-                session.Size,
-                session.Options.GameName,
-                monitor,
-                session.Options.SeparatesMicrophone && audio.Count > 0,
-                _library,
-                deleteBefore
-            );
-        }
-
-        try
-        {
-            return await SaveClipAsync();
-        }
-        catch (IOException exception) when (exception.HResult != ClipSaver.DiskFullCode)
-        {
-            // A Scanner Holding The File Lets Go In A Moment
-            s_logger.Info($"Saving Again After {exception.GetType().Name}");
-            await Task.Delay(TimeSpan.FromSeconds(1));
-            return await SaveClipAsync();
-        }
+        return await ClipSaver.SaveAsync(
+            video,
+            audio,
+            start,
+            to,
+            videoOffset,
+            session.Folder,
+            recordedAt,
+            session.Options.FrameRate,
+            session.Size,
+            session.Options.GameName,
+            monitor,
+            session.Options.SeparatesMicrophone && audio.Count > 0,
+            _library,
+            deleteBefore
+        );
     }
 
     // Windows Says A Write Hit A Full Disk Either Way
@@ -995,7 +1006,7 @@ public sealed class ReplayRecorder : IDisposable
 
         if (_healthTicks % 10 == 0 && RecordingNeedsStop(session))
         {
-            _ = StopRecordingAsync();
+            _ = EndRecordingAsync();
         }
 
         if (++_healthTicks % 10 == 0 && FreeBytes(session.Folder) < StopFreeBytes)

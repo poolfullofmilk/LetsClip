@@ -12,6 +12,9 @@ public static partial class ClipNames
     // Long Enough To Read, Short Enough For Any Folder
     private const int MaximumNameLength = 120;
 
+    // Read Once, Windows Builds A New Array Each Ask
+    private static readonly char[] s_refused = Path.GetInvalidFileNameChars();
+
     static ClipNames()
     {
         Debug.Assert(SelfTestPasses());
@@ -69,9 +72,7 @@ public static partial class ClipNames
     {
         // A Typed Title As A File Name, Refused Characters Dropped
         var cleaned = string.Concat(
-                (title ?? "").Where(character =>
-                    !Path.GetInvalidFileNameChars().Contains(character)
-                )
+                (title ?? "").Where(character => !s_refused.Contains(character))
             )
             .Trim()
             .TrimEnd('.');

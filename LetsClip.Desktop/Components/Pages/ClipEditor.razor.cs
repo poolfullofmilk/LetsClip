@@ -173,11 +173,26 @@ public partial class ClipEditor : IAsyncDisposable
         }
 
         var path = Path.Combine(Controller.Settings.ClipsDirectory, fileName);
-        // One Probe Reads The Streams And Every Packet
+        // The Streams, Then Every Packet If Its Listing Ends
         var clip = await Task.Run(() => Controller.Library.GetAsync(path, token), token);
-        var media = clip is null
-            ? null
-            : await Task.Run(() => MediaProbe.ProbeAsync(path, token, withPackets: true), token);
+        MediaInfo? media = null;
+        try
+        {
+            media = clip is null
+                ? null
+                : await Task.Run(
+                    () => MediaProbe.ProbeAsync(path, token, withPackets: true),
+                    token
+                );
+        }
+        catch (Exception exception) when (exception is TimeoutException or Win32Exception)
+        {
+            // An Unreadable Clip Says So, The Page Never Throws
+            s_logger.Warn($"Failed To Open {fileName} {exception.GetType().Name}");
+            Snackbar.Add("The clip could not be read, it may be in use", Severity.Warning);
+            Back();
+            return;
+        }
 
         // Another Clip Opened Meanwhile, This Result Belongs To Nobody
         if (token.IsCancellationRequested)
@@ -442,7 +457,8 @@ public partial class ClipEditor : IAsyncDisposable
         var window = new TrimRange(start, end);
         try
         {
-            var strip = await Task.Run(
+            // The Strip And The Outline Are Made Side By Side
+            var making = Task.Run(
                 () => ClipLibrary.EnsureStripAsync(path, duration, token, window),
                 token
             );
@@ -453,6 +469,7 @@ public partial class ClipEditor : IAsyncDisposable
                         token
                     )
                     : null;
+            var strip = await making;
             if (zoom == _zooms && strip is not null && !string.IsNullOrEmpty(_strip.Id))
             {
                 await JavaScript.CallAsync(
@@ -465,8 +482,7 @@ public partial class ClipEditor : IAsyncDisposable
                 );
             }
         }
-        catch (Exception exception)
-            when (exception is OperationCanceledException or TimeoutException or Win32Exception)
+        catch (OperationCanceledException)
         {
             // The Stretched Whole Clip Strip Stays
         }
@@ -783,6 +799,10 @@ public partial class ClipEditor : IAsyncDisposable
         {
             var replacedPath = await Task.Run(replace);
             replaced = true;
+            if (_path is { } changed)
+            {
+                Clips.Replaced(changed);
+            }
 
             // A Rename Opens The Clip Under Its New Name
             if (Path.GetFileName(replacedPath) is var name && name != _loadedName)

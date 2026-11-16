@@ -23,11 +23,8 @@ public sealed record ExportProgress(string Phase, double Fraction);
 
 public sealed class ExportException(string message) : Exception(message);
 
-public sealed record DiscordCopy(ExportRequest? Request, string? Problem)
-{
-    // Neither Means The Clip Itself Already Fits
-    public bool CopiesClip => Request is null && Problem is null;
-}
+// Neither Means The Clip Itself Already Fits
+public sealed record DiscordCopy(ExportRequest? Request, string? Problem);
 
 public static class ClipExporter
 {

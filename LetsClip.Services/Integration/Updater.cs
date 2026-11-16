@@ -223,6 +223,12 @@ public static class Updater
                 }
             }
 
+            // Signed Is Not Tagged, An Older Exe Is Refused
+            if (!IsSameVersion(VersionOf(partialPath), release.Version))
+            {
+                throw new InvalidDataException($"Wrong Version Inside {release.Tag}");
+            }
+
             // Only A Complete Download Gets The Real Name
             File.Move(partialPath, targetPath, overwrite: true);
             s_logger.Info(
@@ -256,6 +262,15 @@ public static class Updater
         );
     }
 
+    private static bool IsSameVersion(Version file, Version tag)
+    {
+        // 2.0.14.0 Against 2.0.14 Or 2.1, Missing Parts Zero
+        return file.Major == tag.Major
+            && file.Minor == tag.Minor
+            && Math.Max(file.Build, 0) == Math.Max(tag.Build, 0)
+            && Math.Max(file.Revision, 0) == Math.Max(tag.Revision, 0);
+    }
+
     private static bool SelfTestPasses()
     {
         // A Known Signature Holds, A Changed Byte Fails
@@ -265,6 +280,10 @@ public static class Updater
             && !IsSigned(new MemoryStream("LetsClap"u8.ToArray()), signed)
             && !IsSigned(new MemoryStream("LetsClip"u8.ToArray()), null)
             && !IsSigned(new MemoryStream("LetsClip"u8.ToArray()), "not a signature")
+            && IsSameVersion(new Version(2, 0, 14, 0), new Version(2, 0, 14))
+            && IsSameVersion(new Version(2, 1, 0, 0), new Version(2, 1))
+            && !IsSameVersion(new Version(2, 0, 13, 0), new Version(2, 0, 14))
+            && !IsSameVersion(new Version(2, 0, 14, 0), new Version(2, 1))
             && IsVersioned(@"C:\Downloads\LetsClip_v2.1.exe")
             && !IsVersioned(@"C:\Programs\LetsClip\LetsClip.exe")
             && !IsVersioned(@"C:\Programs\LetsClip\LetsClip_v2.1.exe.download");

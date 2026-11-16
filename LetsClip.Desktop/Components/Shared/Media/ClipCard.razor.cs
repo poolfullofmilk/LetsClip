@@ -80,6 +80,12 @@ public partial class ClipCard
         (IsNew ? "New, " : "")
         + string.Join(", ", Facts.Select(fact => $"{fact.Label} {fact.Value}"));
 
+    private bool Changes(DiscordPlan plan)
+    {
+        // A Plan The Clip Fits Would Only Copy It
+        return Clip.SizeBytes > SizeBudget.LimitOf(plan) * 1_000_000;
+    }
+
     private object Shown => (Clip, IsNew, Query, Time, CardStyle, Exporting, MakingPicture);
 
     protected override void OnAfterRender(bool firstRender)

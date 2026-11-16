@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
 using LetsClip.Data.Helpers;
+using LetsClip.Data.ViewModels;
 using LetsClip.Desktop.Components;
 using LetsClip.Desktop.Components.Pages;
 using LetsClip.Desktop.Interop;
@@ -84,7 +85,6 @@ public partial class MainWindow : Window
         {
             if (!IsVisible)
             {
-                RememberPlacement();
                 MarkClipsSeen();
             }
 
@@ -107,24 +107,31 @@ public partial class MainWindow : Window
 
     public void RememberPlacement()
     {
-        // Never The Full Screen Player, Never Before A First Show
-        if (
-            WindowStyle == WindowStyle.None
-            || new WindowInteropHelper(this).Handle == 0
-            || WindowPlacement.Read(this) is not { } bounds
-            || bounds == _controller.Settings.Window
-        )
+        if (Placement() is { } bounds && bounds != _controller.Settings.Window)
         {
-            return;
+            _controller.UpdateSettings(settings => settings with { Window = bounds });
         }
+    }
 
-        _controller.UpdateSettings(settings => settings with { Window = bounds });
+    private WindowBounds? Placement()
+    {
+        // Never The Full Screen Player, Never Before A First Show
+        return WindowStyle == WindowStyle.None || new WindowInteropHelper(this).Handle == 0
+            ? null
+            : WindowPlacement.Read(this);
     }
 
     private void MarkClipsSeen()
     {
-        // Clips Saved From Now On Read As New
-        _controller.UpdateSettings(settings => settings with { ClipsSeenAt = DateTimeOffset.Now });
+        // One Write, Its Place And Later Clips Read New
+        var bounds = Placement();
+        _controller.UpdateSettings(settings =>
+            settings with
+            {
+                Window = bounds ?? settings.Window,
+                ClipsSeenAt = DateTimeOffset.Now,
+            }
+        );
     }
 
     public void ShowFromTray()

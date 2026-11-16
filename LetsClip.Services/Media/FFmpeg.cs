@@ -126,7 +126,8 @@ public static partial class FFmpeg
         TimeSpan timeout,
         CancellationToken token,
         Action<string>? errorLine = null,
-        string? workingDirectory = null
+        string? workingDirectory = null,
+        Action<string>? outputLine = null
     )
     {
         using var process = Start(executable, arguments, false, workingDirectory);
@@ -136,7 +137,17 @@ public static partial class FFmpeg
 
         // Both Pipes Drain Together, Only The Last Error Line Kept
         string? lastError = null;
-        var outputTask = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
+
+        // A Long Listing Reads Line By Line, Never Held Whole
+        var outputTask = outputLine is null
+            ? process.StandardOutput.ReadToEndAsync(CancellationToken.None)
+            : ReadOutputAsync();
+        async Task<string> ReadOutputAsync()
+        {
+            await ReadLinesAsync(process.StandardOutput, outputLine);
+            return "";
+        }
+
         var errorTask = ReadLinesAsync(
             process.StandardError,
             line =>
@@ -225,6 +236,12 @@ public static partial class FFmpeg
         {
             // Already Disposed, Or Windows Refused While It Was Exiting
         }
+    }
+
+    public static TimeSpan CopyLimit(long bytes)
+    {
+        // Two Minutes, Plus One Per 500 MB Copied
+        return TimeSpan.FromMinutes(2 + (bytes / 500_000_000.0));
     }
 
     public static string Seconds(double value)

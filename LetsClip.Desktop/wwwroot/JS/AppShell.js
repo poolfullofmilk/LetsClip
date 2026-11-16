@@ -267,6 +267,8 @@ window.letsClip = (() => {
         setEdge(range, "end", end);
         paint(range);
         if (range.start !== start || range.end !== end) commit(range);
+        // Read Before The Seek, Which Hides Data Already There
+        const hadData = video.readyState >= 2;
         video.currentTime = range.start + inside;
         setVolume(volume, muted);
         const failed = () => {
@@ -282,7 +284,7 @@ window.letsClip = (() => {
         };
         video.addEventListener("error", failed, { signal });
         video.addEventListener("loadeddata", loaded, { signal, once: true });
-        if (video.readyState >= 2) loaded();
+        if (hadData || video.readyState >= 2) loaded();
         if (video.error) failed();
         video.addEventListener("click", toggle, { signal });
         video.addEventListener("dblclick", fullScreen, { signal });
@@ -426,6 +428,8 @@ window.letsClip = (() => {
         if (copyWhole !== undefined && end - start >= duration() - step / 2) return file;
         const soundPerSecond = Number(copyAudio);
         const { times, totals, keys } = state.packets;
+        // No Packet List, Its Share Like ClipExporter.CopyBytes
+        if (!times.length) return Math.min(file, Math.floor((file * (end - start)) / duration()));
         const seek = Math.max(0, start - 0.001);
         const stop = seek + (end - start);
         let first = 0;

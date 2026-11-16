@@ -207,7 +207,7 @@ public partial class App : Application
         MainWindow = _window;
         Tray = new Tray(_window, controller, shell);
         WatchSystem(controller);
-        SessionEnding += (_, _) => Tray.ExitNow();
+        SessionEnding += (_, ending) => ending.Cancel = Tray.EndSession();
         ThreadPool.RegisterWaitForSingleObject(
             _showSignal!,
             (_, _) => Dispatcher.InvokeAsync(_window.ShowFromTray),

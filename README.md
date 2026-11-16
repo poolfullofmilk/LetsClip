@@ -23,10 +23,10 @@
 - Each clip's picture shows the moment just before you saved it
 - Rest the pointer on a clip to preview it
 - Copy any clip as a file and paste it straight into Discord, or drag its card into Discord or a folder
-- Copy a clip sized for your Discord plan straight from its card, and copy its last export again any time
+- Copy a clip sized for your Discord plan straight from its card, with the plans it already fits greyed out, and copy its last export again any time
 - Deleting a clip can be undone for a moment, then it goes to the Recycle Bin
 - Changing the clips folder moves every clip with its details, with a progress bar
-- Each clip's details sit beside it, so moving or renaming clips in Explorer keeps their names, trims and games
+- Each clip's details sit beside it, so moving or renaming clips in Explorer, to a USB drive or out of a backup, keeps their names, trims and games
 - A different sound tells you when a press saved nothing, and no notification ever plays a Windows sound over your game
 - A problem, like keys another app already uses or an almost full drive, shows as a small chip next to where you fix it
 - Spamming the key saves one clip, not a pile of copies
@@ -34,7 +34,7 @@
 - A game always goes before an app you added, so a browser left open never takes its place
 - Change the replay length while it records, nothing is lost
 - Remembers where you left its window and how loud you play clips
-- Starts with Windows in the tray, updates itself in the background with signed updates, shows what changed and recovers from problems on its own, even a crash
+- Starts with Windows in the tray, updates itself in the background with signed updates, never in the middle of a recording you started, shows what changed and recovers from problems on its own, even a crash
 - Uninstalls from Windows' own Apps list, and your clips stay
 
 ## Quick start

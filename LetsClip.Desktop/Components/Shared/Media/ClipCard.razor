@@ -98,12 +98,13 @@
                     @* Copy For Discord Menu *@
                     <MudMenu StartIcon="@Icons.Material.Rounded.Movie"
                              Label="Copy for Discord"
-                             Disabled="Exporting"
+                             Disabled="@(Exporting || !s_plans.Any(Changes))"
                              Dense>
                         @foreach (var plan in s_plans)
                         {
                             @* Discord Plan Item *@
-                            <MudMenuItem OnClick="() => CopyForDiscord.InvokeAsync(plan)">
+                            <MudMenuItem Disabled="@(!Changes(plan))"
+                                         OnClick="() => CopyForDiscord.InvokeAsync(plan)">
                                 <ItemLabel Text="@SizeBudget.NameOf(plan)"
                                            Detail="@SizeBudget.LimitTextOf(plan)" />
                             </MudMenuItem>

@@ -492,6 +492,14 @@ public partial class Clips : IDisposable
     }
     #endregion
 
+    public static void Replaced(string path)
+    {
+        // Its Old Picture Is Gone Until The Next List
+        s_clips = s_clips
+            ?.Select(clip => clip.Path == path ? clip with { ThumbnailPath = null } : clip)
+            .ToList();
+    }
+
     public static string EditorOf(string path)
     {
         return $"{Route}/{Uri.EscapeDataString(Path.GetFileName(path))}";
