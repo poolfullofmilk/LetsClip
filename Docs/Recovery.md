@@ -131,3 +131,15 @@ A cloud session read the whole of v2.0.14 and listed fifteen fixes, the work lap
 - Simulated by sending `WM_QUERYENDSESSION` to every window of the sandbox while it recorded a test window with Record running, a clip deleted a moment before: v2.0.14 answered yes on all 15 windows, was gone 0.2 s later, lost the 17 s recording and left the deleted clip on disk. Now WPF's own window answered no, the log read `Held The Session's End To Save A Recording, Reason Shown True`, the 16.6 s recording was saved with its sound (933 frames), the deleted clip went to the Recycle Bin and the process was gone 0.6 s after the question. With nothing recording until stopped every window answered yes and it was gone in 0.2 s, as before.
 - Known gap: someone who cancels the shutdown on Windows' screen finds LetsClip closed after its save. Left so, since Windows gives the app that answered no nothing further to go by.
 - For the owner to try for real, a session cannot shut its own PC down: Record, then Shut Down and then Sign Out. Does the screen name `Saving the recording`, does Windows go on by itself once LetsClip has exited, and what do Shut Down Anyway and Cancel do.
+
+## Memory Replay, 17 November 2026
+
+| Case | What Happens |
+|---|---|
+| A segment pipe is not there when FFmpeg opens it | FFmpeg ends the session with an error and capture starts again; eight pipes wait ahead, so only a LetsClip stalled for seconds can miss one |
+| LetsClip stalls a moment | 8 MB of pipe buffer per segment, about two seconds at the highest capture rate, before FFmpeg waits on a write |
+| Spilling a segment fails | It stays in memory and the warning is logged; a nearly full disk stops the session as before |
+| A save's remux fails | Tried again from the same segments, still pinned in memory or on disk |
+| A loudness measurement fails | The export keeps the sound as recorded |
+
+The older row about LetsClip dying while a long recording joins its segments no longer applies: nothing is joined since this round.

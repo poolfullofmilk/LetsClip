@@ -151,3 +151,11 @@ How fifteen fixes written elsewhere were verified on the gaming PC, each tool th
 - Encoder floors and quality at low bitrates: a throwaway shell sweep encodes 20 s and 12 s Overwatch cuts with the export's own AMF arguments at each size, frame rate and bitrate, records the bitrate it really wrote and scores `xpsnr` and `ssim` against the source with the encode upscaled to 1080p. Comparing frame rates this way does not work: a 30 FPS encode scored against the source decimated by `fps=30` still reads low at 800 kbps, its frames misaligned.
 - A dialog closes by its X only, so a sweep that opens About must press `[aria-label='Close']` before the next state, or every later shot sits under its scrim.
 - The sandbox's details keep the frame rate its first listing read: after changing the probe, fix or delete that clip's JSON in `.Details` before comparing.
+- A sandbox records whatever game is running: on 17 November 2026 the owner started Overwatch while a sandbox ran with GamesOnly and it began recording his game. Check for a running game before every start, and add it to `RemovedGames` (its key is the exe name in lower case without dashes or underscores, `GameScanner.NormalizeProcessKey`, `overwatch`). While he plays, keep tests off the graphics card's encoder: no exports or encoder sweeps, since a second AMF session once hung.
+- With the window on the zoomed second monitor (page zoom 0.9), `Input.dispatchMouseEvent` coordinates and a screenshot's `clip` are the CSS rect times that zoom (`1600 / innerWidth` after emulating 1600 wide), and an emulated size is lost when the CDP connection closes, so a later script reading `innerWidth` sees the real window.
+
+## Round 3, 17 November 2026
+
+- The sweep's probe now also faults any box that scrolls sideways inside (`overflow-x` auto or scroll with content wider than the box).
+- With the second monitor off the sandbox sat on the first under the black overlay; CDP clicks there need no zoom factor (that was the second monitor's 0.9).
+- The exporter was checked without the UI by a throwaway file based app referencing the Services project (`#:project`), with `JsonSerializerIsReflectionEnabledByDefault` set and the FFmpeg folder copied beside it.

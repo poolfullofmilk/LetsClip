@@ -280,7 +280,12 @@ public partial class ClipEditor : IAsyncDisposable
         _waveUrl = null;
         if (loaded.Media.HasAudio)
         {
-            _ = LoadWaveAsync(loaded.Path, loaded.Media.Duration, loaded.Token);
+            _ = LoadWaveAsync(
+                loaded.Path,
+                loaded.Media.Duration,
+                loaded.Media.HasSeparateTracks,
+                loaded.Token
+            );
         }
         _savedTitle = loaded.Clip.CustomTitle;
         (_titleText, _swapping, _playError, _paused) = (
@@ -400,10 +405,18 @@ public partial class ClipEditor : IAsyncDisposable
         SaveNow();
     }
 
-    private async Task LoadWaveAsync(string path, double duration, CancellationToken token)
+    private async Task LoadWaveAsync(
+        string path,
+        double duration,
+        bool separate,
+        CancellationToken token
+    )
     {
         // A Missing Outline Leaves The Plain Strip
-        var wave = await Task.Run(() => ClipLibrary.EnsureWaveAsync(path, duration, token), token);
+        var wave = await Task.Run(
+            () => ClipLibrary.EnsureWaveAsync(path, duration, separate, token),
+            token
+        );
         if (!token.IsCancellationRequested)
         {
             _waveUrl = wave is null ? null : DesktopShell.ThumbnailUrl(wave);
@@ -469,6 +482,7 @@ public partial class ClipEditor : IAsyncDisposable
         var zoom = ++_zooms;
         var (duration, token) = (_duration, _lifetime?.Token ?? CancellationToken.None);
         var window = new TrimRange(start, end);
+        var separate = _media?.HasSeparateTracks == true;
         try
         {
             // The Strip And The Outline Are Made Side By Side
@@ -479,7 +493,7 @@ public partial class ClipEditor : IAsyncDisposable
             var wave =
                 _media?.HasAudio == true
                     ? await Task.Run(
-                        () => ClipLibrary.EnsureWaveAsync(path, duration, token, window),
+                        () => ClipLibrary.EnsureWaveAsync(path, duration, separate, token, window),
                         token
                     )
                     : null;

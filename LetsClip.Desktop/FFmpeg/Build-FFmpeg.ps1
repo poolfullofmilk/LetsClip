@@ -9,7 +9,7 @@ $msysUrl = 'https://github.com/msys2/msys2-installer/releases/download/2026-09-2
 $msysHash = 'AD336CCCFDA47758B5E15CDA993FBBA421115CB0B126697DAEF1EE4DFE37209F'
 $sourceUrl = 'https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz'
 $sourceHash = '8C3850283EB25FA026482078A04051E0BE17347B09EF81A0849BEC15A96E002E'
-$name = 'ffmpeg-9.0.2-letsclip-1'
+$name = 'ffmpeg-9.0.2-letsclip-2'
 
 function Get-Pinned([string]$url, [string]$path, [string]$hash) {
     if (-not (Test-Path $path)) { Invoke-WebRequest $url -OutFile $path }
@@ -27,7 +27,7 @@ if (-not (Test-Path (Join-Path $msys 'usr\bin\bash.exe'))) {
 
 $source = Join-Path $Work 'ffmpeg-9.0.2.tar.xz'
 Get-Pinned $sourceUrl $source $sourceHash
-Copy-Item (Join-Path $PSScriptRoot 'scale_d3d11.patch') $Work -Force
+Copy-Item (Join-Path $PSScriptRoot '*.patch') $Work -Force
 
 # Bash Ignores The Carriage Returns Of This CRLF File
 $env:MSYSTEM = 'MINGW64'
@@ -36,24 +36,24 @@ $script = @"
 set -euo pipefail
 pacman-key --init > /dev/null 2>&1 || true
 pacman-key --populate msys2 > /dev/null 2>&1 || true
-pacman -Sy --noconfirm --needed make diffutils patch nasm mingw-w64-x86_64-gcc mingw-w64-x86_64-pkgconf mingw-w64-x86_64-x264 mingw-w64-x86_64-dav1d mingw-w64-x86_64-zlib mingw-w64-x86_64-libvpl mingw-w64-x86_64-amf-headers mingw-w64-x86_64-ffnvcodec-headers
+pacman -Sy --noconfirm --needed make diffutils patch nasm mingw-w64-x86_64-gcc mingw-w64-x86_64-pkgconf mingw-w64-x86_64-x264 mingw-w64-x86_64-dav1d mingw-w64-x86_64-opus mingw-w64-x86_64-zlib mingw-w64-x86_64-libvpl mingw-w64-x86_64-amf-headers mingw-w64-x86_64-ffnvcodec-headers
 # x264 Pulls In MSYS2's FFmpeg, Whose Static Libraries Would Link
 pacman -Rdd --noconfirm mingw-w64-x86_64-ffmpeg mingw-w64-x86_64-ffms2 > /dev/null 2>&1 || true
 cd "`$(cygpath -u '$Work')"
 rm -rf ffmpeg-9.0.2 stage
 tar xf ffmpeg-9.0.2.tar.xz
 cd ffmpeg-9.0.2
-sed 's/\r$//' ../scale_d3d11.patch | patch -p1
+for patch in ../*.patch; do sed 's/\r$//' "`$patch" | patch -p1; done
 ./configure --prefix=/ --arch=x86_64 --target-os=mingw32 \
   --pkg-config-flags=--static --ld=g++ --extra-ldflags='-static -static-libgcc -static-libstdc++' \
   --enable-gpl --enable-shared --disable-static \
   --disable-debug --disable-doc --disable-ffplay --disable-network --disable-autodetect \
   --enable-w32threads --enable-d3d11va --enable-dxva2 --enable-amf --enable-ffnvcodec --enable-nvenc \
-  --enable-libvpl --enable-libx264 --enable-libdav1d --enable-zlib \
-  --disable-encoders --enable-encoder=libx264,h264_amf,hevc_amf,h264_nvenc,hevc_nvenc,h264_qsv,hevc_qsv,aac,mjpeg,wrapped_avframe,rawvideo,pcm_f32le,pcm_s16le \
+  --enable-libvpl --enable-libx264 --enable-libdav1d --enable-libopus --enable-zlib \
+  --disable-encoders --enable-encoder=libx264,h264_amf,hevc_amf,h264_nvenc,hevc_nvenc,h264_qsv,hevc_qsv,aac,libopus,mjpeg,wrapped_avframe,rawvideo,pcm_f32le,pcm_s16le \
   --disable-decoders --enable-decoder=h264,hevc,libdav1d,vp8,vp9,mpeg4,mpeg2video,mjpeg,aac,aac_latm,mp3,mp3float,opus,vorbis,flac,ac3,eac3,alac,pcm_f32le,pcm_f64le,pcm_s16le,pcm_s24le,pcm_s32le,pcm_u8,rawvideo,wrapped_avframe \
-  --disable-muxers --enable-muxer=mp4,mpegts,segment,null,image2,pcm_f32le \
-  --disable-demuxers --enable-demuxer=mov,mpegts,concat,pcm_f32le \
+  --disable-muxers --enable-muxer=mp4,mpegts,segment,ogg,null,image2,pcm_f32le \
+  --disable-demuxers --enable-demuxer=mov,mpegts,concat,ogg,pcm_f32le \
   --disable-protocols --enable-protocol=file,pipe,concat \
   --disable-devices --enable-indev=lavfi \
   --disable-hwaccels

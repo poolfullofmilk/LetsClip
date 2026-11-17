@@ -16,7 +16,7 @@ The build and publish notes, the screenshots every release takes, how LetsClip i
 - Releases are made by hand, the shared way, once the owner said publish. The release body is the exe's signature and nothing else, the exe the only asset (Signed Updates below). Never publish a version already out under the same tag: installs only take a higher version. Every shown version reads like its tag, `v2.0.10` (`AppInfo.VersionText`).
 - From PowerShell, `gh release create` takes the body as `--notes-file`: PowerShell drops an empty `--notes ""` argument, which once shifted the exe into the tag position.
 - After a release: `releases/latest` must redirect to the new tag, the asset's `digest` must match the local exe and the body must verify. Delete the previous release only once the owner's install updated, or wait a minute before restarting one: a check right after the delete once came back empty.
-- The FFmpeg build is a pre-release of its own, `ffmpeg-9.0.2-letsclip-1`, with `ffmpeg-9.0.2-letsclip-1.zip` as its asset. `releases/latest` never lists a pre-release, so no install sees it. It is never deleted with an app release: `Get-FFmpeg.ps1` downloads it, for every build and for CI.
+- The FFmpeg build is a pre-release of its own, `ffmpeg-9.0.2-letsclip-2` since v2.0.17 (`-1` before), with its zip as its asset. `releases/latest` never lists a pre-release, so no install sees it. It is never deleted with an app release: `Get-FFmpeg.ps1` downloads it, for every build and for CI.
 
 ## Install, Update, Uninstall
 

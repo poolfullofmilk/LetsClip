@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO.Pipes;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
 using LetsClip.Services.Media;
@@ -17,10 +18,6 @@ public static class ClipSaver
     // Windows' Own Disk Full Code, Whoever Runs Out First
     public const int DiskFullCode = unchecked((int)0x80070070);
     private const long DiskMargin = 50_000_000;
-
-    // Past This, The Concat Line Nears Windows' 32,767 Characters
-    private const int MostSegments = 1600;
-    private const int JoinBuffer = 4 * 1024 * 1024;
 
     internal static long? FreeBytes(string folder)
     {
@@ -42,15 +39,13 @@ public static class ClipSaver
         double from,
         double to,
         double videoOffset,
-        string sessionFolder,
         DateTimeOffset recordedAt,
         int frameRate,
         (int Width, int Height) size,
         string? game,
         int? monitor,
         bool separateTracks,
-        ClipLibrary library,
-        double? deleteBefore = null
+        ClipLibrary library
     )
     {
         var clipsFolder = FolderFor(library.Folder);
@@ -63,86 +58,27 @@ public static class ClipSaver
         }
 
         var temporary = ClipLibrary.PartialPathIn(clipsFolder);
-        List<string> joined = [];
         try
         {
-            // A Long Recording Joins Its Segments First, Lines Stay Short
-            var joins = video.Count + audio.Count > MostSegments;
-            var videoInput = joins
-                ? await JoinAsync(video, sessionFolder, "video", deleteBefore, joined)
-                : ConcatOf(video);
-            var audioSource =
-                audio.Count == 0 ? ""
-                : joins ? await JoinAsync(audio, sessionFolder, "audio", deleteBefore, joined)
-                : ConcatOf(audio);
-
-            // Stream Copy To The Press, The Replay Start Becomes Zero
-            IReadOnlyList<string> audioInput =
-                audio.Count > 0
-                    ?
-                    [
-                        "-itsoffset",
-                        FFmpeg.Seconds(-from),
-                        "-i",
-                        audioSource,
-                        "-map",
-                        "0:v",
-                        "-map",
-                        "1:a",
-                    ]
-                    : ["-map", "0:v"];
-            List<string> arguments =
-            [
-                "-hide_banner",
-                "-nostdin",
-                "-loglevel",
-                "error",
-                "-nostats",
-                "-progress",
-                "pipe:1",
-                "-y",
-                "-copyts",
-                "-itsoffset",
-                FFmpeg.Seconds(videoOffset - from),
-                "-i",
-                videoInput,
-                .. audioInput,
-                "-c",
-                "copy",
-                .. separateTracks ? TrackNames() : [],
-                "-to",
-                FFmpeg.Seconds(to - from),
-                "-movflags",
-                "+faststart",
-                "-f",
-                "mp4",
-                temporary,
-            ];
-
-            // Tried Again From The Same Inputs, Joined Ones Exist Once
+            // Tried Again From The Same Segments, Still In The Cache
             for (var attempt = 1; ; attempt++)
             {
                 try
                 {
-                    var result = await FFmpeg.RunAsync(
-                        FFmpeg.FFmpegPath,
-                        arguments,
-                        FFmpeg.CopyLimit(needed),
-                        CancellationToken.None,
-                        workingDirectory: sessionFolder
+                    await RemuxAsync(
+                        video,
+                        audio,
+                        from,
+                        to,
+                        videoOffset,
+                        separateTracks,
+                        needed,
+                        temporary
                     );
-                    // The Remux Reports Its Own End, No Second Read
-                    if (!result.Succeeded || !WroteVideo(result.Output))
-                    {
-                        throw new IOException($"Failed To Write The Clip, {result.LastError}");
-                    }
-
                     break;
                 }
                 catch (Exception exception)
-                    when (attempt < RemuxAttempts
-                        && (exception is IOException || (joins && exception is TimeoutException))
-                    )
+                    when (attempt < RemuxAttempts && exception is IOException or TimeoutException)
                 {
                     s_logger.Info($"Saving Again After {exception.GetType().Name}");
                     await Task.Delay(s_retryWait);
@@ -178,58 +114,123 @@ public static class ClipSaver
         }
         finally
         {
-            // Only This Save's Own Unfinished Files, Never Anything Else
+            // Only This Save's Own Unfinished File, Never Anything Else
             await FFmpeg.DeleteOutputAsync(temporary);
-            foreach (var file in joined)
-            {
-                await FFmpeg.DeleteOutputAsync(file);
-            }
         }
     }
 
-    private static async Task<string> JoinAsync(
-        IReadOnlyList<Segment> segments,
-        string folder,
-        string kind,
-        double? deleteBefore,
-        List<string> joined
+    private static async Task RemuxAsync(
+        IReadOnlyList<Segment> video,
+        IReadOnlyList<Segment> audio,
+        double from,
+        double to,
+        double videoOffset,
+        bool separateTracks,
+        long needed,
+        string temporary
     )
     {
-        // Byte For Byte What Concat Reads, Cleaned With The Cache
-        var target = Path.Combine(folder, $"join-{kind}.ts");
-        joined.Add(target);
-        await using var output = new FileStream(
-            target,
-            FileMode.Create,
-            FileAccess.Write,
-            FileShare.None,
-            JoinBuffer,
-            FileOptions.Asynchronous | FileOptions.SequentialScan
-        );
-        foreach (var segment in segments)
+        // Each Stream Reads Through A Pipe, No Line Lists Segments
+        var name = $"LetsClip-{Guid.NewGuid():N}";
+        using var feeding = new CancellationTokenSource();
+        List<Task> feeders = [FeedAsync($"{name}-video", video, feeding.Token)];
+        IReadOnlyList<string> audioInput = ["-map", "0:v"];
+        if (audio.Count > 0)
         {
-            await using (
-                var input = new FileStream(
-                    segment.Path,
-                    FileMode.Open,
-                    FileAccess.Read,
-                    FileShare.ReadWrite | FileShare.Delete,
-                    JoinBuffer,
-                    FileOptions.Asynchronous | FileOptions.SequentialScan
-                )
-            )
-            {
-                await input.CopyToAsync(output);
-            }
-
-            // Joined And Older Than The Replay, Kept Once On Disk
-            if (segment.End < deleteBefore)
-            {
-                File.Delete(segment.Path);
-            }
+            feeders.Add(FeedAsync($"{name}-audio", audio, feeding.Token));
+            audioInput =
+            [
+                "-itsoffset",
+                FFmpeg.Seconds(-from),
+                "-f",
+                "mpegts",
+                "-i",
+                $"//./pipe/{name}-audio",
+                "-map",
+                "0:v",
+                "-map",
+                "1:a",
+            ];
         }
 
-        return Path.GetFileName(target);
+        try
+        {
+            // Stream Copy To The Press, The Replay Start Becomes Zero
+            var result = await FFmpeg.RunAsync(
+                FFmpeg.FFmpegPath,
+                [
+                    "-hide_banner",
+                    "-nostdin",
+                    "-loglevel",
+                    "error",
+                    "-nostats",
+                    "-progress",
+                    "pipe:1",
+                    "-y",
+                    "-copyts",
+                    "-itsoffset",
+                    FFmpeg.Seconds(videoOffset - from),
+                    "-f",
+                    "mpegts",
+                    "-i",
+                    $"//./pipe/{name}-video",
+                    .. audioInput,
+                    "-c",
+                    "copy",
+                    .. separateTracks ? TrackNames() : [],
+                    "-to",
+                    FFmpeg.Seconds(to - from),
+                    "-movflags",
+                    "+faststart",
+                    "-f",
+                    "mp4",
+                    temporary,
+                ],
+                FFmpeg.CopyLimit(needed),
+                CancellationToken.None
+            );
+
+            // The Remux Reports Its Own End, No Second Read
+            if (!result.Succeeded || !WroteVideo(result.Output))
+            {
+                throw new IOException($"Failed To Write The Clip, {result.LastError}");
+            }
+        }
+        finally
+        {
+            await feeding.CancelAsync();
+            await Task.WhenAll(feeders);
+        }
+    }
+
+    private static async Task FeedAsync(
+        string pipeName,
+        IReadOnlyList<Segment> segments,
+        CancellationToken token
+    )
+    {
+        // Segments In Order, From Memory Or Their Spilled Files
+        await using var pipe = new NamedPipeServerStream(
+            pipeName,
+            PipeDirection.Out,
+            1,
+            PipeTransmissionMode.Byte,
+            PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly | PipeOptions.FirstPipeInstance,
+            0,
+            1 << 20
+        );
+        try
+        {
+            await pipe.WaitForConnectionAsync(token);
+            foreach (var segment in segments)
+            {
+                await segment.CopyToAsync(pipe, token);
+            }
+        }
+        catch (Exception exception) when (exception is OperationCanceledException or IOException)
+        {
+            // FFmpeg Stopped Reading Early, Its Own Result Says Why
+        }
     }
 
     private static bool WroteVideo(string progress)
@@ -276,24 +277,18 @@ public static class ClipSaver
         return AppInfo.DefaultClipsDirectory;
     }
 
-    public static string UniquePath(string folder, string baseName)
+    public static string UniquePath(string folder, string baseName, string extension = ".mp4")
     {
         // Never Overwrites, The Same Second Gets (2), (3) And On
-        var path = Path.Combine(folder, baseName + ".mp4");
+        var path = Path.Combine(folder, baseName + extension);
         for (var copy = 2; File.Exists(path); copy++)
         {
             path = Path.Combine(
                 folder,
-                string.Create(CultureInfo.InvariantCulture, $"{baseName} ({copy}).mp4")
+                string.Create(CultureInfo.InvariantCulture, $"{baseName} ({copy}){extension}")
             );
         }
 
         return path;
-    }
-
-    private static string ConcatOf(IReadOnlyList<Segment> segments)
-    {
-        return "concat:"
-            + string.Join("|", segments.Select(segment => Path.GetFileName(segment.Path)));
     }
 }

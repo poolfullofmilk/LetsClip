@@ -85,6 +85,11 @@ public partial class Clips : IDisposable
     // A Lone Source Has Nothing To Pick Between
     private static bool OneSource => Games.Count < 2;
 
+    // Video Left Out With Sound Kept, Discord Gets Opus
+    private bool SoundOnly =>
+        !Controller.Settings.ExportVideo
+        && (Controller.Settings.ExportAudio || Controller.Settings.ExportMicrophone);
+
     // Sorted By Time, Clips Sit Under Day, Week Or Month
     private bool IsGrouped => Controller.Settings.ClipSort is ClipSort.Newest or ClipSort.Oldest;
 

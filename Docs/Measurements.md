@@ -387,3 +387,14 @@ Gaming PC, Debug sandbox at 1728 x 908 and 1920 x 1009 on the 240 Hz monitor, 59
 - AAC at low rates, 300 s of a Discord window's sound: 24 kbps mono wrote 23.3 kbps (24.8 with the container), 32 kbps mono 32.2, 32 stereo 32.1, 48 stereo 47.9.
 - Exports, each probed: 10 minutes of 1080p60 for Free 428 x 240 HEVC at 60 FPS, 18.83 MB, 251 kbps, 45 s; for Nitro Basic 960 x 540 at 60 FPS, 47.14 MB, 629 kbps, 44 s; its sound alone for Free a lossless copy of 9.9 MB in 2.5 s; the owner's 1h10m49s Discord window recording's sound for Free 17.0 MB of mono AAC at 32.7 kbps in 42 s.
 - A stream copy with each picture's duration capped at the selection's end: the same frame counts as before on a 60 FPS cut (822), a still window cut (732) and an x264 B frame clip (1214); durations 13.2000 against 13.2005 s, 150.500 against 151.021 s and 20.000 against 20.117 s.
+
+## Round 3, 17 November 2026
+
+| What | Before | After |
+|---|---|---|
+| Window capture, 2560 x 1440 to 1080p60, video FFmpeg | 47.3% of a core, 214 MB, 2301 handles (CPU route, spare device) | 5.5% of a core, 94 MB, 1186 handles (GPU Lanczos) |
+| Scaled picture against the CPU's Lanczos, RGB PSNR | 50.3 dB (stock `gfxcapture`) | 61.4 dB (LetsClip's Lanczos) |
+| Disk written while recording | 3.17 MB/s, about 11 GB an hour | Nothing until a save, or past 1 GB of replay |
+| 7 minute Record saved | 1700 s joined and saved in 2.3 s (16 November) | 425.8 s, 1.18 GB, a gigabyte spilled, saved in 1.8 s |
+| HEVC against H.264 on AMF at capture rates, clean 540p reference | 36.21 / 34.48 / 32.76 dB at 7 / 5 / 3.5 Mbps | 36.60 / 34.98 / 33.41 dB, not shipped |
+| Export loudness of the owner's match | -24.7 LUFS, true peak -6.5 dBFS | -16.3 LUFS, true peaks -1.6 (Opus) and -2.0 dBFS (AAC) |

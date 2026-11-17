@@ -10,7 +10,8 @@ public sealed record MediaInfo(
     string? AudioCodec,
     PacketMap? Packets,
     int AudioTrackCount = 0,
-    bool HasSeparateTracks = false
+    bool HasSeparateTracks = false,
+    string? AudioName = null
 )
 {
     public bool HasVideo => VideoCodec is not null;

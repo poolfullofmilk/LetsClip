@@ -78,14 +78,29 @@ public static partial class Formatter
 
     public static string FormatDay(DateTimeOffset time, DateTime? today = null)
     {
-        // Today And Yesterday By Name, Older Days As 6-11-2026
-        var local = time.ToLocalTime();
-        return ((today ?? DateTime.Today) - local.Date).Days switch
+        // Today, Yesterday, Else The Day And Month, Other Years Named
+        var day = time.ToLocalTime().Date;
+        var now = today ?? DateTime.Today;
+        var ordinal = day.Day % 100 is 11 or 12 or 13
+            ? "th"
+            : (day.Day % 10) switch
+            {
+                1 => "st",
+                2 => "nd",
+                3 => "rd",
+                _ => "th",
+            };
+        return (now - day).Days switch
         {
             0 => "Today",
             1 => "Yesterday",
-            _ => local.ToString("d-M-yyyy", s_invariant),
+            _ => $"{day.Day}{ordinal} of {MonthOf(day, now)}",
         };
+    }
+
+    private static string MonthOf(DateTime day, DateTime today)
+    {
+        return day.ToString(day.Year == today.Year ? "MMMM" : "MMMM yyyy", s_invariant);
     }
 
     public static string FormatGroup(DateTimeOffset time, DateTime today)
@@ -96,7 +111,7 @@ public static partial class Formatter
         return day >= today.AddDays(-1) ? FormatDay(time, today)
             : day >= monday ? "This Week"
             : day >= monday.AddDays(-7) ? "Last Week"
-            : day.ToString("MMMM yyyy", s_invariant);
+            : MonthOf(day, today);
     }
 
     public static string FormatTime(DateTimeOffset time)
@@ -119,6 +134,11 @@ public static partial class Formatter
         return string.Create(CultureInfo.InvariantCulture, $"{rate:0} FPS");
     }
 
+    public static string FormatLines(int lines)
+    {
+        return string.Create(CultureInfo.InvariantCulture, $"{lines}p");
+    }
+
     public static string FormatBitrate(double bitsPerSecond)
     {
         // Whole Kilobits Below A Megabit
@@ -134,15 +154,27 @@ public static partial class Formatter
         var today = new DateTime(2026, 11, 6);
         return FormatDateTime(morning, today) == "Today at 8:05"
             && FormatDateTime(morning.AddHours(-9), today) == "Yesterday at 23:05"
-            && FormatDateTime(evening, today) == "4-11-2026 at 22:43"
-            && FormatDateTime(morning.AddDays(1), today) == "7-11-2026 at 8:05"
+            && FormatDateTime(evening, today) == "4th of November at 22:43"
+            && FormatDateTime(morning.AddDays(1), today) == "7th of November at 8:05"
+            && FormatDay(morning.AddDays(-5), today) == "1st of November"
+            && FormatDay(morning.AddDays(-4), today) == "2nd of November"
+            && FormatDay(morning.AddDays(-3), today) == "3rd of November"
+            && FormatDay(morning.AddDays(5), today) == "11th of November"
+            && FormatDay(morning.AddDays(6), today) == "12th of November"
+            && FormatDay(morning.AddDays(7), today) == "13th of November"
+            && FormatDay(morning.AddDays(15), today) == "21st of November"
+            && FormatDay(morning.AddDays(16), today) == "22nd of November"
+            && FormatDay(morning.AddDays(17), today) == "23rd of November"
+            && FormatDay(morning.AddDays(-6), today) == "31st of October"
+            && FormatDateTime(morning.AddYears(-1), today) == "6th of November 2025 at 8:05"
             && FormatGroup(morning, today) == "Today"
             && FormatGroup(morning.AddDays(-1), today) == "Yesterday"
             && FormatGroup(evening, today) == "This Week"
             && FormatGroup(morning.AddDays(-4), today) == "This Week"
             && FormatGroup(morning.AddDays(-5), today) == "Last Week"
             && FormatGroup(morning.AddDays(-11), today) == "Last Week"
-            && FormatGroup(morning.AddDays(-12), today) == "October 2026"
+            && FormatGroup(morning.AddDays(-12), today) == "October"
+            && FormatGroup(morning.AddMonths(-11), today) == "December 2025"
             && FormatSize(20_000_000) == "20 MB"
             && FormatSize(20_540_000) == $"20{Point}5 MB"
             && FormatSize(2_000_000_000) == "2 GB"

@@ -1,0 +1,218 @@
+/* Game Rows Lead With Their Icon, End On Their Switch */
+.games-table .game-icon {
+    width: 40px;
+    line-height: 0;
+}
+
+/* Square Exe Icons Get The Thumb Radius */
+.games-table .game-icon img {
+    border-radius: var(--radius-thumb);
+}
+
+.games-table .game-switch {
+    width: 64px;
+    text-align: end;
+}
+
+/* A Game's Own Settings Sit Beside Its Switch */
+.games-table .game-settings {
+    width: 1%;
+    white-space: nowrap;
+}
+
+/* A Table's Title Takes The Room Left, Then Dots */
+.title-cell {
+    width: 100%;
+    max-width: 0;
+}
+
+/* The Clip Search Keeps One Width Beside The Header Buttons */
+.clip-search {
+    flex: none !important;
+    width: 240px;
+}
+
+/* A Popover Form Opens Under Its Button, Its List Scrolls */
+.form-popover {
+    width: 280px;
+}
+
+.filter-list {
+    max-height: 280px;
+    padding: 0 12px 8px;
+    overflow-y: auto;
+}
+
+/* Unedited Only Heads The List, The Footer Ends It */
+.filter-option {
+    padding: 4px 12px;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
+
+.popover-footer {
+    border-top: 1px solid var(--mud-palette-lines-default);
+}
+
+/* Each Row's Clip Count Sits Greyed On The Right */
+.form-popover .mud-checkbox > .mud-typography {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Search Matches Read Tonal, With No Padding */
+mark {
+    padding: 0 !important;
+    border-radius: 3px;
+    background-color: var(--tonal-info-hover);
+    color: inherit;
+}
+
+/* Cards Darken In A Faint Blue Ring And Never Move */
+.hover-card {
+    cursor: pointer;
+    transition: background-color var(--quick), box-shadow var(--quick);
+}
+
+    .hover-card:hover {
+        background-color: color-mix(in srgb, var(--mud-palette-black) var(--row-hover-amount), var(--mud-palette-surface));
+        box-shadow: 0 0 0 2px var(--tonal-info-hover), var(--mud-elevation-4);
+    }
+
+/* Five Across On A 2560 Wide Screen At 125% */
+.clip-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 12px;
+}
+
+/* A Day's Header Spans The Row, 24 Px Above */
+.clip-day {
+    grid-column: 1 / -1;
+    margin: 12px 8px -4px;
+}
+
+    .clip-day:first-child {
+        margin-top: 0;
+    }
+
+/* Thumbnails Keep The Clip's Shape, Portrait Ones Fit Inside */
+.clip-thumb {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    background-color: var(--inset-fill);
+}
+
+    .clip-thumb img {
+        width: 100%;
+        height: 100%;
+        display: block;
+    }
+
+        /* Hidden Under Its Preview, Or Its Corners Rim The Video */
+        .clip-thumb:has(> .clip-preview[data-playing]) > img {
+            visibility: hidden;
+            transition: visibility 0s 150ms;
+        }
+
+    /* The Source Top Right, Time And Length Together Bottom Right */
+    .clip-thumb .clip-chips {
+        position: absolute;
+        right: 8px;
+        bottom: 8px;
+        display: flex;
+        gap: 8px;
+    }
+
+    /* New Left, The Source Right, Along The Top */
+    .clip-thumb .clip-top-chips {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        right: 8px;
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+    }
+
+        /* MudBlazor Wraps Each Chip, The Chips Themselves Line Up */
+        .clip-thumb .clip-top-chips > .mud-chip-container {
+            display: contents;
+        }
+
+    .clip-thumb .source-chip {
+        min-width: 0;
+    }
+
+    /* Saved Since LetsClip Was Last Open, In The Accent */
+    .clip-thumb .new-chip {
+        color: var(--mud-palette-info);
+    }
+
+        /* Chips On A Picture: Glass, Wider, The Icon's Shadow */
+        .clip-thumb .mud-chip {
+            padding-inline: var(--picture-chip-padding);
+            background-color: var(--picture-chip-fill) !important;
+            box-shadow: var(--icon-shadow);
+            backdrop-filter: var(--glass-blur);
+        }
+
+    /* A Playing Preview Has The Picture To Itself */
+    .clip-thumb :is(.clip-chips, .clip-top-chips) {
+        transition: opacity var(--fade);
+    }
+
+    .clip-thumb:has(> .clip-preview[data-playing]) :is(.clip-chips, .clip-top-chips) {
+        opacity: 0;
+    }
+
+        /* A Long Source Ends In Dots, Its Line Centred */
+        .clip-thumb .source-chip .mud-chip-content {
+            display: block;
+            align-content: center;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+/* A Hover Preview Plays Over The Picture, Under The Chips */
+.clip-preview {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+    .clip-preview video {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        opacity: 0;
+        transition: opacity var(--fade);
+    }
+
+    .clip-preview[data-playing] video,
+    .clip-preview[data-playing] .clip-preview-bar {
+        opacity: 1;
+    }
+
+/* Where The Chips Were, In Line With Their Edges */
+.clip-preview-bar {
+    position: absolute;
+    right: 8px;
+    bottom: var(--preview-bar-bottom);
+    left: 8px;
+    height: var(--preview-bar-height);
+    overflow: hidden;
+    border-radius: var(--radius-pill);
+    background-color: var(--shade);
+    box-shadow: var(--picture-shadow);
+    opacity: 0;
+    transition: opacity var(--fade);
+}
+
+    .clip-preview-bar > div {
+        height: 100%;
+        background-color: var(--mud-palette-error);
+        transform: scaleX(0);
+        transform-origin: left;
+    }

@@ -193,6 +193,27 @@
                 @Path.GetFileName(result)
             </MudText>
         </SettingRow>
+        @if (_changes.Count > 0)
+        {
+            @* Export Changes *@
+            <MudStack Row
+                      Wrap="Wrap.Wrap"
+                      Justify="Justify.Center"
+                      Spacing="2"
+                      Class="appear pt-2">
+                @foreach (var (icon, text, leftOut) in _changes)
+                {
+                    <MudChip T="string"
+                             Icon="@icon"
+                             IconColor="@(leftOut ? Color.Error : Color.Default)"
+                             Size="Size.Small"
+                             Variant="Variant.Text"
+                             Class="ma-0">
+                        @text
+                    </MudChip>
+                }
+            </MudStack>
+        }
         <MudStack Row
                   AlignItems="AlignItems.Center"
                   Spacing="2"

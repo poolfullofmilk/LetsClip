@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using LetsClip.Data.Enums;
@@ -49,6 +50,13 @@ public static class ClipExporter
         "Too long for this Discord plan, pick a shorter selection";
 
     private const string RejectedMessage = "The exported file did not check out, nothing was kept";
+
+    // Encoded Sound Lands Near Streaming Loudness, Peaks Kept Under
+    private const double TargetLoudness = -14;
+    private const double MostBoost = 10;
+    private const double PeakCeiling = -3;
+    private const double MostLimiting = 6;
+    private const string PeakLimit = "alimiter=limit=0.708:level=0:latency=1";
 
     static ClipExporter()
     {
@@ -177,7 +185,9 @@ public static class ClipExporter
         var limit = SizeBudget.LimitOf(plan) ?? double.MaxValue;
         var cropped = keepsVideo && crop is not null && media.Width > media.Height;
         var copied = CopyBytes(clip.SizeBytes, media, range, track is null ? 0 : 1, keepsVideo);
-        var encodes = cropped || copied > limit * 1e6;
+
+        // Sound Alone Becomes Opus, Which Discord Plays Inline
+        var encodes = cropped || !keepsVideo || copied > limit * 1e6;
         var everyTrack = media.HasSeparateTracks ? track == 0 : track is not null == media.HasAudio;
         if (!encodes && keepsVideo && everyTrack && !range.CutsShort(media.Duration))
         {
@@ -292,10 +302,11 @@ public static class ClipExporter
             ? CropSizeOf(source.Height)
             : (source.Width, source.Height);
 
-        // Off, Or Already Small Enough, Is An Exact Copy
+        // Off, Or Small Enough, Copies Exactly, Sound Alone Only Off
         var copyRate = video ? sourceRate : SizeBudget.AudioBitsPerSecond / 8;
         if (
             !cropped
+            && (video || request.Plan == DiscordPlan.Off)
             && SizeBudget.KeepsClip(request.Plan, duration, copyRate)
             && await CopyAsync(request, track, video, progress, token) is { } copied
         )
@@ -352,6 +363,9 @@ public static class ClipExporter
         }
 
         encoders.Add(VideoEncoders.Software);
+        var gain = track is { } measured
+            ? await LoudnessGainAsync(request, measured, progress, token)
+            : 0;
         var workFolder = CacheFolders.NewFolder();
         var temporary = ClipLibrary.PartialPathIn(request.ExportsFolder);
         var crop = cropped
@@ -370,7 +384,8 @@ public static class ClipExporter
             track,
             crop,
             budget.AudioBitsPerSecond,
-            video
+            video,
+            gain
         );
         try
         {
@@ -429,13 +444,13 @@ public static class ClipExporter
 
                     if (size <= budget.TargetBytes)
                     {
-                        var finalPath = Keep(request, temporary);
+                        var finalPath = Keep(request, temporary, video ? ".mp4" : ".ogg");
                         var codec =
-                            !video ? "AAC"
+                            !video ? "Opus"
                             : encoder.IsHevc ? "HEVC"
                             : "H.264";
                         s_logger.Info(
-                            $"Exported {Path.GetFileName(finalPath)} At {Formatter.FormatSize(size)} As {codec} With {encoder.Name} In {attempts} Attempts And {started.Elapsed.TotalSeconds:0.0} s"
+                            $"Exported {Path.GetFileName(finalPath)} At {Formatter.FormatSize(size)} As {codec}{(video ? $" With {encoder.Name}" : "")}, Sound {gain:+0.0;-0.0;0} dB, In {attempts} Attempts And {started.Elapsed.TotalSeconds:0.0} s"
                         );
                         return finalPath;
                     }
@@ -504,7 +519,7 @@ public static class ClipExporter
                 SizeBudget.LimitOf(request.Plan) is { } limit
                 && new FileInfo(temporary).Length > limit * 1_000_000
                 ? null
-                : Keep(request, temporary);
+                : Keep(request, temporary, video ? ".mp4" : ".m4a");
         }
         finally
         {
@@ -520,15 +535,117 @@ public static class ClipExporter
             : written - asked <= DurationTolerance;
     }
 
-    private static string Keep(ExportRequest request, string temporary)
+    private static string Keep(ExportRequest request, string temporary, string extension)
     {
         // Named Like Its Clip, Never By Its Limit
         var finalPath = ClipSaver.UniquePath(
             request.ExportsFolder,
-            Path.GetFileNameWithoutExtension(request.SourcePath)
+            Path.GetFileNameWithoutExtension(request.SourcePath),
+            extension
         );
         File.Move(temporary, finalPath);
         return finalPath;
+    }
+
+    private static async Task<double> LoudnessGainAsync(
+        ExportRequest request,
+        int track,
+        IProgress<ExportProgress> progress,
+        CancellationToken token
+    )
+    {
+        // EBU R128 Over The Selection, Silence Left Alone
+        progress.Report(new ExportProgress("Measuring Sound", 0));
+        var range = request.Range;
+        double? loudness = null;
+        double? peak = null;
+        var section = "";
+        try
+        {
+            await FFmpeg.RunAsync(
+                FFmpeg.FFmpegPath,
+                [
+                    "-hide_banner",
+                    "-nostdin",
+                    "-nostats",
+                    "-ss",
+                    FFmpeg.Seconds(range.SeekStart),
+                    "-i",
+                    request.SourcePath,
+                    "-t",
+                    FFmpeg.Seconds(range.Length),
+                    "-map",
+                    string.Create(CultureInfo.InvariantCulture, $"0:a:{track}"),
+                    "-af",
+                    "ebur128=peak=true:framelog=quiet",
+                    "-f",
+                    "null",
+                    "-",
+                ],
+                FFmpeg.CopyLimit(new FileInfo(request.SourcePath).Length),
+                token,
+                errorLine: line =>
+                {
+                    // Sections Like True peak: Hold Lines Like Peak: -6.5 dBFS
+                    var trimmed = line.Trim();
+                    if (trimmed.EndsWith(':'))
+                    {
+                        section = trimmed;
+                        return;
+                    }
+
+                    var colon = trimmed.IndexOf(':');
+                    if (
+                        colon <= 0
+                        || !double.TryParse(
+                            trimmed[(colon + 1)..]
+                                .Replace("LUFS", "", StringComparison.Ordinal)
+                                .Replace("dBFS", "", StringComparison.Ordinal),
+                            NumberStyles.Float,
+                            CultureInfo.InvariantCulture,
+                            out var value
+                        )
+                    )
+                    {
+                        return;
+                    }
+
+                    if (
+                        section == "Integrated loudness:"
+                        && trimmed.StartsWith("I:", StringComparison.Ordinal)
+                    )
+                    {
+                        loudness = value;
+                    }
+                    else if (
+                        section == "True peak:"
+                        && trimmed.StartsWith("Peak:", StringComparison.Ordinal)
+                    )
+                    {
+                        peak = value;
+                    }
+                }
+            );
+        }
+        catch (Exception exception) when (exception is TimeoutException or Win32Exception)
+        {
+            // Unmeasured Sound Exports As Recorded, Never A Failed Export
+            s_logger.Info($"Kept The Sound As Recorded, {exception.GetType().Name}");
+            return 0;
+        }
+
+        // Raised Only Until Peaks Would Need 6 dB Of Limiting
+        if (loudness is not (> -60 and < 0))
+        {
+            return 0;
+        }
+
+        var headroom = PeakCeiling - (peak ?? 0) + MostLimiting;
+        var gain = Math.Min(TargetLoudness - loudness.Value, Math.Min(MostBoost, headroom));
+        s_logger.Debug(
+            $"Measured {loudness:0.0} LUFS, Peak {peak:0.0} dBFS, Sound Moves {gain:0.0} dB"
+        );
+        return Math.Round(gain, 1);
     }
 
     private sealed record EncodeJob(
@@ -541,7 +658,8 @@ public static class ClipExporter
         int? AudioTrack,
         string Crop,
         double AudioBitsPerSecond,
-        bool Video
+        bool Video,
+        double Gain
     );
 
     private static async Task EncodeAsync(
@@ -604,11 +722,20 @@ public static class ClipExporter
         {
             // Sound Alone Retries Its Own Bitrate, Else The Budget's
             var sound = job.Video ? job.AudioBitsPerSecond : bitrate;
+            IReadOnlyList<string> codec = job.Video
+                ? ["-c:a", "aac"]
+                : ["-c:a", "libopus", "-vbr", "constrained", "-application", "audio"];
             output.AddRange([
                 "-map",
                 string.Create(CultureInfo.InvariantCulture, $"0:a:{track}"),
-                "-c:a",
-                "aac",
+                "-af",
+                job.Gain > 0
+                    ? string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"volume={job.Gain}dB,{PeakLimit}"
+                    )
+                    : string.Create(CultureInfo.InvariantCulture, $"volume={job.Gain}dB"),
+                .. codec,
                 "-b:a",
                 string.Create(CultureInfo.InvariantCulture, $"{(int)(sound / 1000)}k"),
                 "-ac",
@@ -618,7 +745,12 @@ public static class ClipExporter
             ]);
         }
 
-        output.AddRange(["-movflags", "+faststart", "-f", "mp4", job.Output]);
+        // Sound Alone Goes In Ogg, Discord's Own Voice Message Format
+        output.AddRange(
+            job.Video
+                ? ["-movflags", "+faststart", "-f", "mp4", job.Output]
+                : ["-f", "ogg", job.Output]
+        );
         var label = attempt == 1 ? "" : $"Try {attempt}, ";
         if (!job.Video)
         {

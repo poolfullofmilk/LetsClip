@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Globalization;
 using LetsClip.Data.Enums;
 using LetsClip.Data.Helpers;
@@ -76,6 +77,10 @@ public partial class ExportPanel : IDisposable
     public required IJSRuntime JavaScript { get; set; }
 
     private bool _revealResult;
+
+    // The Shown Export's Changes And Which File They Came From
+    private string? _changesOf;
+    private IReadOnlyList<(string Icon, string Text, bool LeftOut)> _changes = [];
 
     private ExportRunner Exports => Controller.Exports;
 
@@ -285,10 +290,11 @@ public partial class ExportPanel : IDisposable
     private string TooLongText =>
         $"Too long for {SizeBudget.NameOf(Plan)}, which fits about {Formatter.FormatDuration(SizeBudget.LongestSeconds(SizeBudget.LimitOf(Plan) ?? 0, Shape))}, pick a shorter selection{(KeepsVideo && WithAudio ? " or leave out the video" : "")}";
 
-    // A Plan The Selection Fits Would Only Copy, Like Off
+    // A Fitting Plan Copies Like Off, Sound Alone Becomes Opus
     private bool Changes(DiscordPlan plan)
     {
         return SizeBudget.LimitOf(plan) is not { } limit
+            || !KeepsVideo
             || (IsVertical ? VerticalBytes : CopyBytes) > limit * 1_000_000;
     }
 
@@ -422,6 +428,74 @@ public partial class ExportPanel : IDisposable
         {
             _revealResult = false;
             await JavaScript.CallAsync("letsClip.reveal", "exported");
+        }
+
+        // The Shown Export's Changes, Read From Its Own File Once
+        if (ExportedFile != _changesOf)
+        {
+            _changesOf = ExportedFile;
+            MediaInfo? export = null;
+            try
+            {
+                export = _changesOf is { } file
+                    ? await Task.Run(() => MediaProbe.ProbeAsync(file, CancellationToken.None))
+                    : null;
+            }
+            catch (Exception exception) when (exception is TimeoutException or Win32Exception)
+            {
+                // An Unreadable Export Just Shows No Changes
+            }
+
+            _changes = export is null ? [] : [.. ChangesOf(export)];
+            StateHasChanged();
+        }
+    }
+
+    private IEnumerable<(string Icon, string Text, bool LeftOut)> ChangesOf(MediaInfo export)
+    {
+        // What The Export Left Out Or Made Smaller
+        if (!export.HasVideo)
+        {
+            yield return (Icons.Material.Rounded.VideocamOff, "Sound Only", true);
+        }
+        else
+        {
+            var vertical = export.Height > export.Width && Media.Width > Media.Height;
+            if (vertical)
+            {
+                yield return (Icons.Material.Rounded.CropPortrait, "Vertical", false);
+            }
+
+            if (vertical ? export.Height < Media.Height : export.Width < Media.Width)
+            {
+                yield return (
+                    Icons.Material.Rounded.PhotoSizeSelectSmall,
+                    Formatter.FormatResolution(export.Width, export.Height),
+                    false
+                );
+            }
+
+            if (Math.Round(export.FrameRate) < ClipFrameRate)
+            {
+                yield return (
+                    Icons.Material.Rounded.SlowMotionVideo,
+                    Formatter.FormatFrameRate(export.FrameRate),
+                    false
+                );
+            }
+        }
+
+        if (Media.HasAudio && !export.HasAudio)
+        {
+            yield return (Icons.Material.Rounded.VolumeOff, "No Sound", true);
+        }
+        else if (Media.HasSeparateTracks && export.AudioName == AudioTracks.Game)
+        {
+            yield return (Icons.Material.Rounded.MicOff, "No Microphone", true);
+        }
+        else if (Media.HasSeparateTracks && export.AudioName == AudioTracks.Microphone)
+        {
+            yield return (Icons.Material.Rounded.VolumeOff, "No Game Audio", true);
         }
     }
 

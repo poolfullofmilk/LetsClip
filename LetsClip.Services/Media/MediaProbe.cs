@@ -257,7 +257,10 @@ public static class MediaProbe
                 null,
                 tracks.Count,
                 // LetsClip's Own Mix, Game And Microphone, Named In That Order
-                tracks.Select(track => track.Tags?.HandlerName).SequenceEqual(AudioTracks.Separate)
+                tracks
+                    .Select(track => track.Tags?.HandlerName)
+                    .SequenceEqual(AudioTracks.Separate),
+                audio?.Tags?.HandlerName
             ),
             video?.Index,
             audio?.Index,

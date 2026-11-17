@@ -80,12 +80,15 @@
                                          Class="mud-text-secondary" />
                             }
                         </MudTd>
-                        <MudTd>
+                        <MudTd Class="title-cell">
                             <MudText Typo="Typo.body2"
                                      Class="ellipsis">
                                 <MudHighlighter Text="@context.Name"
                                                 HighlightedText="@_search" />
                             </MudText>
+                        </MudTd>
+                        <MudTd Class="game-settings">
+                            <GameSettingsButton Game="context" />
                         </MudTd>
                         <MudTd Class="game-switch">
                             @* Record Switch *@

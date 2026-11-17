@@ -62,40 +62,7 @@ public partial class CaptureSettings : IDisposable
 
     private static string ResolutionLabel(int lines)
     {
-        return $"{lines}p";
-    }
-
-    private static Color ResolutionColor(int lines)
-    {
-        // Heavier Picks Read Amber, The Heaviest Red
-        return lines > 1440 ? Color.Error
-            : lines > 1080 ? Color.Warning
-            : Color.Default;
-    }
-
-    private static Color ReplayColor(int seconds)
-    {
-        // Minutes Of Cache Weigh On The Disk, Ten The Most
-        return seconds >= 600 ? Color.Error
-            : seconds >= 300 ? Color.Warning
-            : Color.Default;
-    }
-
-    private static Color FrameRateColor(int rate)
-    {
-        return rate >= 165 ? Color.Error
-            : rate >= 120 ? Color.Warning
-            : Color.Default;
-    }
-
-    private static Color QualityColor(CaptureQuality quality)
-    {
-        return quality switch
-        {
-            CaptureQuality.Max => Color.Error,
-            CaptureQuality.High => Color.Warning,
-            _ => Color.Default,
-        };
+        return Formatter.FormatLines(lines);
     }
 
     private void OutlineMonitors(bool isOpen)

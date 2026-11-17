@@ -6,15 +6,18 @@
 - Games and Apps Only records just that window, so chats and notifications stay out, and you pick any installed game or app from one list
 - Press the key in a game LetsClip does not know yet and it offers to record that game from then on
 - Recommended marks the best quality for your PC, or record up to your monitor's own resolution and refresh rate
+- Give a game its own resolution, frame rate and quality, like a higher frame rate for one game only
+- The replay waits in memory, so recording all day barely writes to your SSD
 - Records only your game and voice chat (Discord, Vesktop, TeamSpeak, Mumble, Steam), or everything your PC plays, and your microphone at the volume you set with its background noise cleaned out and quiet words brought up
 - Your microphone also gets its own track, so an export can leave out your voice or the game
 - Test your microphone live and hear how it will sound in a clip
 - Turn on Notifications for a small toast over your full screen game when a clip is saved or a game starts recording
 - A clip that comes out black always tells you, with the fix
 - Clips are named after their game and time, and renaming a clip renames its file, so it shares under that name
-- Trim a clip to the exact frame, by dragging, typing or stepping, over a strip with its sound drawn across it that the mouse wheel zooms, and export an exact copy of it, or fit it to Discord's Free, Nitro Basic or Nitro limit as HEVC at the size that looks sharpest
+- Trim a clip to the exact frame, by dragging, typing or stepping, over a strip with the game and your voice drawn across it in their own colours that the mouse wheel zooms, and export an exact copy of it, or fit it to Discord's Free, Nitro Basic or Nitro limit as HEVC at the size that looks sharpest
 - Long selections still fit a Discord plan, at a smaller picture and frame rate the longer they run
-- Leave out the video to share only the sound, like a long voice chat
+- Leave out the video to share only the sound, like a long voice chat, as a file Discord plays right in the chat
+- Exports even out the sound, so a quiet clip is never too quiet in Discord
 - Make a vertical export of any landscape clip for phones, dragging the box to the part you want
 - Exports keep going when you leave the editor and wait their turn, with their progress in the top bar
 - Keep just the trimmed part without losing any quality, and keep the full clip to bring back if you want
@@ -53,7 +56,7 @@
 
 ## Technical details
 - .NET 11, WPF, Blazor and MudBlazor, one self-contained exe
-- Its own slim FFmpeg 9.0.2 build records and exports with your graphics card's encoder (AMD, NVIDIA or Intel) and converts the picture on the card where it can, NAudio captures the audio
+- Its own slim FFmpeg 9.0.2 build records and exports with your graphics card's encoder (AMD, NVIDIA or Intel) and sizes and converts the picture on the card where it can, NAudio captures the audio
 - Discord exports are HEVC, which Discord plays on desktop and web and almost every phone decodes; the card's H.264 takes over where HEVC is missing
 - GPL-3.0, see [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt)
 

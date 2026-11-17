@@ -1,0 +1,393 @@
+/* Rows Under The Player Keep Fixed Heights For The Sizing */
+.editor {
+    /* One 40 Px Line Of Fields And Buttons */
+    --controls-height: 40px;
+    --timeline-height: 72px;
+    /* Cut Start And End Fit 1m59,9s, Icon And Arrows */
+    --trim-field-width: 150px;
+    /* Both Fields, The Clock And Three Icon Buttons */
+    --controls-min-width: calc(2 * var(--trim-field-width) + 240px);
+}
+
+/* The Side Panel Takes What The Clip Or Controls Leave */
+.split.editor {
+    container-type: size;
+    /* The Selection Lines And The Crop Frame Share One Width */
+    --bar-width: round(5px, var(--device-pixel));
+    /* The Height Left For The Clip In A Full Panel */
+    --clip-room: calc(100cqh - 48px - 32px - var(--controls-height) - var(--timeline-height));
+}
+
+    /* Scrolls Like A Page, Scrollbar In The Gutter, Shadows Clear */
+    .split.editor > .side-panel {
+        --side-content: clamp(300px, calc(100cqw - 24px - 48px - max(var(--clip-room) * var(--clip-aspect), var(--controls-min-width))), 480px);
+        width: calc(var(--side-content) + 16px + var(--page-gutter));
+        align-self: stretch;
+        margin: -8px calc(-1 * var(--page-gutter)) calc(-1 * var(--page-bottom)) -16px;
+        padding: 8px calc(var(--page-gutter) - var(--scrollbar-width)) var(--page-bottom) 16px;
+        overflow-y: auto;
+        scrollbar-gutter: stable;
+    }
+
+/* As Tall As Its Clip, Up To The Room Left */
+.player {
+    position: relative;
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    aspect-ratio: var(--clip-aspect);
+    min-height: 96px;
+    max-height: var(--clip-room);
+}
+
+/* A Volume Change Shows Its Level, Then Fades */
+.player-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    border-radius: var(--radius-inner);
+    background-color: color-mix(in srgb, var(--mud-palette-surface) var(--popover-opacity), transparent);
+    backdrop-filter: var(--glass-blur);
+    box-shadow: var(--mud-elevation-4);
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+    translate: -50% -50%;
+    animation: overlay-fade 1.2s ease-in forwards;
+}
+
+@keyframes overlay-fade {
+    0%, 70% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0;
+    }
+}
+
+/* The Clip Lifts On The Theme Shadow, Edge To Edge */
+.player video {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: var(--radius-inner);
+    box-shadow: var(--mud-elevation-4);
+    cursor: pointer;
+    object-fit: cover;
+    animation: fade-in var(--fade);
+}
+
+    /* Full Screen Keeps Play And Seeking, Not Volume */
+    .player video::-webkit-media-controls-mute-button,
+    .player video::-webkit-media-controls-volume-slider {
+        display: none;
+    }
+
+/* Vertical Crop, The 9 By 16 Part An Export Keeps */
+.crop-box {
+    position: absolute;
+    overflow: hidden;
+    border-radius: var(--radius-inner);
+    pointer-events: none;
+}
+
+.crop-row {
+    --crop-width: calc(100% * 9 / 16 / var(--clip-aspect));
+    display: grid;
+    grid-template-columns: calc((100% - var(--crop-width)) * var(--crop)) var(--crop-width) 1fr;
+    height: 100%;
+}
+
+.crop-shade {
+    background-color: var(--shade);
+}
+
+.crop-frame {
+    outline: var(--bar-width) solid var(--grabber);
+    outline-offset: calc(0px - var(--bar-width));
+    cursor: grab;
+    pointer-events: auto;
+    touch-action: none;
+}
+
+/* A Held Frame Covers A File Change, Then Fades */
+.player-frozen {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    border-radius: var(--radius-inner);
+    box-shadow: var(--mud-elevation-4);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--fade);
+    translate: -50% -50%;
+}
+
+    .player-frozen[data-held] {
+        opacity: 1;
+        transition: none;
+    }
+
+.player:has(.player-frozen[data-held]) video {
+    visibility: hidden;
+}
+
+/* The Timeline Lifts Like The Clip, Shadow Outside The Mask */
+.timeline-lift {
+    flex-shrink: 0;
+    border-radius: var(--radius-inner);
+    box-shadow: var(--mud-elevation-4);
+}
+
+/* Thumbnails In A Track, Handles Outside The Kept Part */
+.timeline {
+    /* Whole Screen Pixels, Every Part Snaps Alike At Any Scale */
+    --grip-gap: round(5px, var(--device-pixel));
+    --grip-width: round(3px, var(--device-pixel));
+    --grip-height: round(22px, calc(2 * var(--device-pixel)));
+    --handle-width: calc(2 * var(--grip-gap) + var(--grip-width));
+    height: var(--timeline-height);
+    position: relative;
+    padding: 0 var(--handle-width);
+    border-radius: var(--radius-inner);
+    background-color: var(--inset-fill);
+    user-select: none;
+    /* Rounded Once Over All, Or The Strip Rims Corners */
+    mask-image: linear-gradient(#000 0 0);
+}
+
+.timeline-track {
+    position: relative;
+    height: 100%;
+    touch-action: none;
+    cursor: pointer;
+}
+
+.timeline-strip {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.timeline-shade {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background-color: var(--shade);
+    pointer-events: none;
+}
+
+    /* Shades Stretch Under The Handles Like The Strip */
+    .timeline-shade.before {
+        box-sizing: content-box;
+        margin-left: calc(-1 * var(--handle-width));
+        padding-left: var(--handle-width);
+    }
+
+    .timeline-shade.after {
+        margin-right: calc(-1 * var(--handle-width));
+    }
+
+    /* A Handle At Its End Lies On Frame Colour */
+    .timeline-track[data-at-start] .timeline-shade.before,
+    .timeline-track[data-at-end] .timeline-shade.after {
+        background-color: var(--grabber);
+    }
+
+/* Handles And Bars Form One Frame, Shadowed Out And In */
+.timeline-selection {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    box-sizing: content-box;
+    margin-left: calc(-1 * var(--handle-width));
+    padding: var(--bar-width) var(--handle-width);
+    border-radius: var(--radius-inner);
+    box-shadow: var(--picture-shadow);
+    overflow: hidden;
+    pointer-events: none;
+}
+
+    /* The Kept Part, Rounded Less, Its Spread Paints The Frame */
+    .timeline-selection::before {
+        content: "";
+        position: absolute;
+        inset: var(--bar-width) var(--handle-width);
+        border-radius: var(--radius-thumb);
+        box-shadow: 0 0 0 100px var(--grabber), inset var(--picture-shadow);
+    }
+
+/* Each Handle's Inner Edge On The Frame Is The Time */
+.timeline-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: var(--handle-width);
+    cursor: ew-resize;
+}
+
+    /* The Frame Waits For The First Frame, Grabs Never Ring */
+    .timeline.loading .timeline-selection,
+    .timeline.loading .timeline-handle {
+        visibility: hidden;
+    }
+
+    .timeline-handle[data-grabbed] {
+        outline: none !important;
+    }
+
+    /* Rounded Like The Frame, For The Focus Ring */
+    .timeline-handle[data-handle="start"] {
+        margin-left: calc(-1 * var(--handle-width));
+        border-radius: var(--radius-inner) 0 0 var(--radius-inner);
+    }
+
+    .timeline-handle[data-handle="end"] {
+        border-radius: 0 var(--radius-inner) var(--radius-inner) 0;
+    }
+
+    /* Centred By Layout, A Whole Gap Either Side */
+    .timeline-handle::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        width: var(--grip-width);
+        height: var(--grip-height);
+        margin: auto;
+        border-radius: var(--radius-pill);
+        background-color: var(--grip);
+        box-shadow: var(--picture-shadow);
+    }
+
+/* The Playhead Draws Over The Handles */
+/* A Zoomed Timeline Shows Where Its Window Sits */
+.timeline-zoom {
+    position: absolute;
+    z-index: 1;
+    bottom: 0;
+    height: var(--grip-width);
+    border-radius: var(--radius-pill);
+    background-color: var(--grip);
+    pointer-events: none;
+}
+
+.timeline-playhead {
+    position: absolute;
+    z-index: 1;
+    top: 0;
+    bottom: 0;
+    width: var(--grip-width);
+    margin-left: calc(var(--grip-width) / -2);
+    border-radius: var(--radius-pill);
+    background-color: var(--grip);
+    box-shadow: var(--mud-elevation-1);
+    pointer-events: none;
+}
+
+/* Start And End Left, Transport Centred, Sound Right */
+.player-controls {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    height: var(--controls-height);
+}
+
+    /* Every Group Is A Centred 40 Px Line */
+    .player-controls .control-line {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: var(--controls-height);
+    }
+
+.player-time {
+    margin-inline-end: 8px;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.trim-field {
+    position: relative;
+    width: var(--trim-field-width);
+}
+
+    /* Step Arrows Stacked At The Field's End */
+    .trim-spin {
+        position: absolute;
+        top: 0;
+        right: 6px;
+        bottom: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+        .trim-spin .mud-icon-button {
+            width: 20px;
+            height: 16px;
+            padding: 0;
+            border-radius: var(--radius-thumb);
+        }
+
+    /* The Set Here Icon Makes Room For Them */
+    .trim-field .mud-input-adornment-end {
+        margin-right: 22px;
+    }
+
+    /* Typed Times At Label Size, As Tall As Every Field */
+    .trim-field .mud-input {
+        min-height: var(--controls-height);
+        font-size: var(--mud-typography-body2-size);
+        font-variant-numeric: tabular-nums;
+    }
+
+/* The Volume Slider Opens Above Its Button */
+.volume {
+    position: relative;
+    display: flex;
+}
+
+/* Its Padding Bridges The Gap, Hover Stays */
+.volume-pop {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    z-index: 10;
+    padding-bottom: 8px;
+    visibility: hidden;
+    opacity: 0;
+    translate: -50% 0;
+    transition: opacity var(--quick), visibility var(--quick);
+}
+
+    /* Keyboard Focus Too, A Click Must Not Keep It Open */
+    .volume:is(:hover, :has(:focus-visible)) .volume-pop {
+        visibility: visible;
+        opacity: 1;
+    }
+
+/* The Rotated Slider Keeps 10 Px Clear At Both Ends */
+.volume-paper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 120px;
+}
+
+    /* Turns About Its Centre, Only The Track May Be Tall */
+    .volume-paper .mud-slider {
+        flex: none;
+        width: 100px;
+        height: auto;
+    }

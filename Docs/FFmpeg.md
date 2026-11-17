@@ -31,3 +31,9 @@ LetsClip ships its own FFmpeg since v2.0.10: `LetsClip.Desktop/FFmpeg/Build-FFmp
 | `vpp_amf` and AMF on BGRA D3D11 frames | `gfxcapture` into `vpp_amf=w=1920:h=1080:format=nv12`, with and without `hwmap=derive_device=amf`, and straight into `h264_amf` | `AMFConverter-Init() failed with error 10`, and `SubmitInput() failed with error 18` | Either working is a GPU path for windows; measure colours and sharpness against Lanczos first |
 | The encoder's device on a window | `gfxcapture` with AMF at `-loglevel verbose` | With `d3d11va=spare` beside `capture`, no `Using device capture ... with h264_amf` line: AMF makes its own device, sharing crashed AMD's driver (`Docs/Recovery.md`) | Keep the spare device unless FFmpeg stops handing encoders the filter device |
 | AMD's runtime lines | Any AMF run, standard error | The AMF runtime prints onnxruntime's CPU core lines before anything else; the capture's error reader skips lines not starting with `[` | Nothing, unless a reason ever reads one |
+
+## The Second Build, 17 November 2026
+
+- `ffmpeg-9.0.2-letsclip-2` adds `gfxcapture_lanczos.patch` (a `lanczos` scale mode: the shader `main_ps_lanczos`, its option and the point sampler it needs), `libopus` as an encoder and the Ogg muxer and demuxer. `Build-FFmpeg.ps1` now applies every `.patch` beside it. The shader compiles with `D3DCompile` at `ps_4_0` the way FFmpeg does it, checked before the build with a throwaway reading the header.
+- Built at idle priority with four jobs (`OMP_NUM_THREADS=4`, which `nproc` follows) while the owner played; 11.4 MB zipped, 29 MB unpacked, every DLL importing only Windows' and FFmpeg's own.
+- New checks for later builds: `gfxcapture` with `scale_mode=lanczos` against the CPU's Lanczos on a still photo (61.4 dB today), and a sound only Opus export reading back with its track name.

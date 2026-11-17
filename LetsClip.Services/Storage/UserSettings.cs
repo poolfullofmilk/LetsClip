@@ -19,6 +19,7 @@ public sealed record UserSettings(
     bool GamesOnly = true,
     string[]? RemovedGames = null,
     AddedGame[]? AddedGames = null,
+    GameCapture[]? GameSettings = null,
     bool StartWithWindows = true,
     bool SaveSound = true,
     double SaveSoundVolume = 1,
@@ -156,6 +157,7 @@ public sealed record UserSettings(
             ClipsFolder = ClipsFolder,
             RemovedGames = RemovedGames,
             AddedGames = AddedGames,
+            GameSettings = GameSettings,
             ExportDiscordPlan = ExportDiscordPlan,
             ExportAudio = ExportAudio,
             ExportMicrophone = ExportMicrophone,
@@ -233,6 +235,27 @@ public sealed record UserSettings(
                         !string.IsNullOrWhiteSpace(game?.Key)
                         && !string.IsNullOrWhiteSpace(game.Name)
                     )
+                    .DistinctBy(game => game.Key, StringComparer.OrdinalIgnoreCase)
+                    .ToArray()
+                ?? [],
+            GameSettings =
+                GameSettings
+                    ?.Where(game => !string.IsNullOrWhiteSpace(game?.Key))
+                    .Select(game =>
+                        game with
+                        {
+                            FrameRate = FrameRateChoices.Contains(game.FrameRate ?? 0)
+                                ? game.FrameRate
+                                : null,
+                            Resolution =
+                                game.Resolution >= ResolutionChoices[0] ? game.Resolution : null,
+                            Quality =
+                                game.Quality is { } quality && Enum.IsDefined(quality)
+                                    ? quality
+                                    : null,
+                        }
+                    )
+                    .Where(game => !game.IsDefault)
                     .DistinctBy(game => game.Key, StringComparer.OrdinalIgnoreCase)
                     .ToArray()
                 ?? [],

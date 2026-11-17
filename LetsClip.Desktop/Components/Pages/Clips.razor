@@ -78,7 +78,7 @@
                 <MudPopover Open="_filterOpen"
                             AnchorOrigin="Origin.BottomRight"
                             TransformOrigin="Origin.TopRight"
-                            Class="filter-popover">
+                            Class="form-popover">
                     <MudElement HtmlTag="div"
                                 Class="filter-option">
                         @* Unedited Checkbox *@
@@ -151,7 +151,7 @@
                     <MudStack Row
                               AlignItems="AlignItems.Center"
                               Spacing="4"
-                              Class="filter-footer px-3 py-2">
+                              Class="popover-footer px-3 py-2">
                         @* Reset Button *@
                         <MudButton Variant="Variant.Text"
                                    Color="Color.Error"
@@ -242,6 +242,7 @@
                                   CardStyle="@CardStyle(clip)"
                                   Exporting="@Controller.Exports.IsExporting(clip.Path)"
                                   MakingPicture="@(clip.ThumbnailPath is null && Controller.Library.IsMakingPictures)"
+                                  SoundOnly="@SoundOnly"
                                   Open="() => Open(clip)"
                                   Rename="() => RenameAsync(clip)"
                                   Delete="() => DeleteAsync(clip)"

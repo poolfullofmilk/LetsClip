@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
+using System.IO.Pipes;
+using LetsClip.Data.Helpers;
 using LetsClip.Services.Media;
 using NLog;
 
@@ -21,11 +23,14 @@ public sealed class CaptureSession(
     private const double KeepMarginSeconds = 3;
     private const long CacheByteFloor = 1_500_000_000;
 
+    // A Gigabyte In Memory, A Sixteenth Of Smaller Machines
+    private static readonly long s_memoryBytes = Math.Min(
+        1L << 30,
+        GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / 16
+    );
+
     // Loud Game And Voice Together Stay Under Full Scale
     private const string Limiter = ",alimiter=limit=0.95:level=0";
-
-    // Past 1440p Reading Whole Frames Back Costs Too Much
-    private const int MaximumWholeWindowPixels = 2560 * 1440;
 
     // Rumble Cut, Noise Reduced, Gaps Closed, Quiet Words Raised
     private const string VoiceCleaning =
@@ -40,6 +45,7 @@ public sealed class CaptureSession(
     );
     private int _pins;
     private bool _deleteWhenUnused;
+    private bool _spilled;
 
     public CaptureOptions Options { get; private set; } = options;
 
@@ -141,6 +147,7 @@ public sealed class CaptureSession(
             );
             Audio = new SegmentProcess(
                 "Audio",
+                "aud",
                 AudioArguments(Options),
                 true,
                 Folder,
@@ -152,6 +159,7 @@ public sealed class CaptureSession(
         // Separate Processes, Late Audio Never Holds Back Live Video
         Video = new SegmentProcess(
             "Video",
+            "seg",
             VideoArguments(baseMicroseconds),
             false,
             Folder,
@@ -190,10 +198,9 @@ public sealed class CaptureSession(
 
     public Segment? OpenVideoSegment()
     {
-        // A Still Window's Segment Never Closes, Read It Open
-        var path = Directory.EnumerateFiles(Folder, "seg_*.ts").MaxBy(file => (file.Length, file));
-        return path is not null && new FileInfo(path).Length > 0
-            ? new Segment(path, VideoEnd, double.MaxValue, 0)
+        // A Still Window's Segment Never Closes, Its Bytes So Far
+        return Video?.OpenBytes() is { } bytes
+            ? new Segment(Path.Combine(Folder, "seg_open.ts"), VideoEnd, double.MaxValue, bytes)
             : null;
     }
 
@@ -235,13 +242,37 @@ public sealed class CaptureSession(
         {
             try
             {
-                File.Delete(old.Path);
+                old.Release();
             }
             catch (Exception exception)
                 when (exception is IOException or UnauthorizedAccessException)
             {
                 // A Segment Still Being Read Goes With The Session Folder
                 s_logger.Warn($"Failed To Evict Segment {exception.GetType().Name}");
+            }
+        }
+
+        // Past The Memory Budget The Oldest Wait On Disk
+        foreach (var spill in process.Segments.OverMemory(s_memoryBytes))
+        {
+            try
+            {
+                spill.Spill();
+            }
+            catch (Exception exception)
+                when (exception is IOException or UnauthorizedAccessException)
+            {
+                // Kept In Memory, A Full Disk Stops The Session Soon
+                s_logger.Warn($"Failed To Move A Segment To Disk {exception.GetType().Name}");
+                continue;
+            }
+
+            if (!_spilled)
+            {
+                _spilled = true;
+                s_logger.Info(
+                    $"Moved The Oldest Segments To Disk, Past {Formatter.FormatSize(s_memoryBytes)} In Memory"
+                );
             }
         }
 
@@ -264,18 +295,11 @@ public sealed class CaptureSession(
         var rotation = isWindow ? 0 : monitor.Rotation;
         var rotated = rotation is 90 or 270;
 
-        // The GPU Blurs A Smaller Size, So The CPU Scales
-        var readsWhole =
-            !Encoder.GpuFrames
-            && MonitorCatalog.ClientSizeOf(Options.GameWindow) is { } client
-            && client.Width * client.Height <= MaximumWholeWindowPixels;
-        var sized = readsWhole
-            ? ""
-            : string.Create(CultureInfo.InvariantCulture, $":width={width}:height={height}");
+        // LetsClip's Own Lanczos Sizes The Window On The GPU
         var source = isWindow
             ? string.Create(
                 CultureInfo.InvariantCulture,
-                $"gfxcapture=hwnd={Options.GameWindow}:max_framerate={rate}:capture_cursor=1{sized}:resize_mode=scale_aspect"
+                $"gfxcapture=hwnd={Options.GameWindow}:max_framerate={rate}:capture_cursor=1:width={width}:height={height}:resize_mode=scale_aspect:scale_mode=lanczos"
             )
             : string.Create(
                 CultureInfo.InvariantCulture,
@@ -350,17 +374,18 @@ public sealed class CaptureSession(
             );
         }
 
-        // The Encoder Makes Its Own Device, Sharing Crashed AMD
-        string[] spareDevice = isWindow
-            ?
-            [
-                "-init_hw_device",
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"d3d11va=spare:{monitor.AdapterIndex}"
-                ),
-            ]
-            : [];
+        // Off The GPU Route The Encoder Never Shares Its Device
+        string[] spareDevice =
+            isWindow && Encoder.IsHardware && !Encoder.GpuFrames && !Encoder.IsQuickSync
+                ?
+                [
+                    "-init_hw_device",
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"d3d11va=spare:{monitor.AdapterIndex}"
+                    ),
+                ]
+                : [];
 
         return
         [
@@ -406,7 +431,7 @@ public sealed class CaptureSession(
             // Encoders Skip The Colour Description, Written Into The Bitstream
             "-bsf:v",
             "h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1:video_full_range_flag=0",
-            .. SegmentArguments("seg", flushPackets: isWindow),
+            .. SegmentArguments(flushPackets: isWindow),
         ];
     }
 
@@ -477,13 +502,13 @@ public sealed class CaptureSession(
             // Sample Zero Is Media Time One, Shifted On The Output
             "-output_ts_offset",
             LeadSeconds.ToString(CultureInfo.InvariantCulture),
-            .. SegmentArguments("aud"),
+            .. SegmentArguments(),
         ];
     }
 
-    private static List<string> SegmentArguments(string prefix, bool flushPackets = false)
+    private static List<string> SegmentArguments(bool flushPackets = false)
     {
-        // Media Clock Timestamps, Each Finished File Listed On Standard Output
+        // Media Clock Timestamps, Each Finished Segment Listed On Standard Output
         return
         [
             "-copyts",
@@ -501,7 +526,6 @@ public sealed class CaptureSession(
             "csv",
             "-reset_timestamps",
             "0",
-            $"{prefix}_%06d.ts",
         ];
     }
 
@@ -521,13 +545,23 @@ public sealed class CaptureSession(
 
     public sealed class SegmentProcess
     {
+        // Pipes Wait Ahead, FFmpeg Opens The Next One At Once
+        private const int WaitingPipes = 8;
+
+        // Seconds Of Video Fit, A Busy Moment Never Blocks FFmpeg
+        private const int PipeBuffer = 8 << 20;
+
         private readonly TaskCompletionSource _firstSegment = new(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
         private readonly TaskCompletionSource _exited = new(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
+        private readonly Lock _pipeGate = new();
+        private readonly Queue<NamedPipeServerStream> _waiting = new();
+        private readonly Dictionary<int, TaskCompletionSource<byte[]>> _received = [];
         private readonly string _name;
+        private readonly string _prefix;
         private readonly string _folder;
         private readonly Action<SegmentProcess, Segment> _added;
         private readonly Task _readers;
@@ -535,9 +569,15 @@ public sealed class CaptureSession(
         private string? _lastWarning;
         private int _warningRepeats;
         private long _lastFrameTimestamp;
+        private int _nextPipe;
+        private int _lastLength = 1 << 16;
+        private bool _stopped;
+        private int _connecting = -1;
+        private MemoryStream? _receiving;
 
         public SegmentProcess(
             string name,
+            string prefix,
             IReadOnlyList<string> arguments,
             bool takesInput,
             string folder,
@@ -545,9 +585,35 @@ public sealed class CaptureSession(
         )
         {
             _name = name;
+            _prefix = prefix;
             _folder = folder;
             _added = added;
-            Process = FFmpeg.Start(FFmpeg.FFmpegPath, arguments, takesInput, folder);
+
+            // Each Segment Lands In Memory Through Its Own Pipe
+            OpenPipes(WaitingPipes);
+            try
+            {
+                Process = FFmpeg.Start(
+                    FFmpeg.FFmpegPath,
+                    [.. arguments, $"//./pipe/{PipeName("%06d")}"],
+                    takesInput,
+                    folder
+                );
+            }
+            catch
+            {
+                ClosePipes();
+                throw;
+            }
+
+            // Read In Order On Its Own Thread, Never The Pool
+            new Thread(ReceiveSegments)
+            {
+                IsBackground = true,
+                Name = $"{name} Segments",
+                Priority = ThreadPriority.AboveNormal,
+            }.Start();
+
             try
             {
                 // Above Normal Keeps Capture Smooth Under A Busy CPU
@@ -590,46 +656,217 @@ public sealed class CaptureSession(
         {
             // The Exit Code Is Read And Pipes Drain Before Disposal
             FFmpeg.Kill(Process);
+            ClosePipes();
             if (_exited.Task.Wait(5000) && _readers.Wait(2000))
             {
                 Process.Dispose();
             }
         }
 
-        private async Task ReadSegmentsAsync()
+        private void ClosePipes()
         {
-            // Each Finished Segment Arrives As name,start,end
-            await FFmpeg.ReadLinesAsync(
-                Process.StandardOutput,
-                line =>
+            // Waiting Pipes Close, A Pending Wait Gets A Visitor
+            int connecting;
+            lock (_pipeGate)
+            {
+                _stopped = true;
+                connecting = _connecting;
+                while (_waiting.TryDequeue(out var server))
                 {
-                    var parts = line.Split(',');
-                    if (
-                        parts.Length != 3
-                        || !double.TryParse(
-                            parts[1],
-                            NumberStyles.Float,
-                            CultureInfo.InvariantCulture,
-                            out var start
+                    server.Dispose();
+                }
+            }
+
+            if (connecting < 0)
+            {
+                return;
+            }
+
+            try
+            {
+                using var visitor = new NamedPipeClientStream(
+                    ".",
+                    PipeName(connecting.ToString("000000", CultureInfo.InvariantCulture)),
+                    PipeDirection.Out
+                );
+                visitor.Connect(1000);
+            }
+            catch (Exception exception) when (exception is IOException or TimeoutException)
+            {
+                // Already Connected Or Gone, The Read Ends Either Way
+            }
+        }
+
+        public byte[]? OpenBytes()
+        {
+            // What Arrived So Far Of The Segment Being Written
+            if (Volatile.Read(ref _receiving) is not { } receiving)
+            {
+                return null;
+            }
+
+            lock (receiving)
+            {
+                return receiving.Length > 0 ? receiving.ToArray() : null;
+            }
+        }
+
+        private string PipeName(string number)
+        {
+            return $"LetsClip-{Path.GetFileName(_folder)}-{_prefix}_{number}.ts";
+        }
+
+        private void OpenPipes(int upTo)
+        {
+            lock (_pipeGate)
+            {
+                for (; _nextPipe < upTo && !_stopped; _nextPipe++)
+                {
+                    // Only This User, And Never A Name Someone Took First
+                    _waiting.Enqueue(
+                        new NamedPipeServerStream(
+                            PipeName(_nextPipe.ToString("000000", CultureInfo.InvariantCulture)),
+                            PipeDirection.In,
+                            1,
+                            PipeTransmissionMode.Byte,
+                            PipeOptions.CurrentUserOnly | PipeOptions.FirstPipeInstance,
+                            PipeBuffer,
+                            0
                         )
-                        || !double.TryParse(
-                            parts[2],
-                            NumberStyles.Float,
-                            CultureInfo.InvariantCulture,
-                            out var end
-                        )
-                    )
+                    );
+                }
+            }
+        }
+
+        private TaskCompletionSource<byte[]> ReceivedOf(int number)
+        {
+            lock (_pipeGate)
+            {
+                if (!_received.TryGetValue(number, out var received))
+                {
+                    received = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                    _received[number] = received;
+                }
+
+                return received;
+            }
+        }
+
+        private void ReceiveSegments()
+        {
+            // Segment After Segment, Blocking Reads On This Thread Alone
+            for (var number = 0; ; number++)
+            {
+                NamedPipeServerStream? server;
+                lock (_pipeGate)
+                {
+                    if (_stopped || !_waiting.TryDequeue(out server))
                     {
                         return;
                     }
 
-                    var path = Path.Combine(_folder, parts[0]);
-                    var bytes = File.Exists(path) ? new FileInfo(path).Length : 0;
-                    _added(this, new Segment(path, start, end, bytes));
-                    Interlocked.Exchange(ref _lastSegmentTimestamp, Stopwatch.GetTimestamp());
-                    _firstSegment.TrySetResult();
+                    _connecting = number;
                 }
-            );
+
+                OpenPipes(number + 1 + WaitingPipes);
+                using (server)
+                {
+                    ReceivedOf(number).TrySetResult(Receive(server));
+                }
+            }
+        }
+
+        private byte[] Receive(NamedPipeServerStream server)
+        {
+            try
+            {
+                server.WaitForConnection();
+                lock (_pipeGate)
+                {
+                    _connecting = -1;
+                    if (_stopped)
+                    {
+                        return [];
+                    }
+                }
+
+                var receiving = new MemoryStream(Volatile.Read(ref _lastLength) * 5 / 4);
+                Volatile.Write(ref _receiving, receiving);
+                var chunk = new byte[1 << 16];
+                int read;
+                while ((read = server.Read(chunk)) > 0)
+                {
+                    lock (receiving)
+                    {
+                        receiving.Write(chunk, 0, read);
+                    }
+                }
+
+                // Closed, So Nothing Here Is Open Any More
+                Interlocked.CompareExchange(ref _receiving, null, receiving);
+                Volatile.Write(ref _lastLength, Math.Max((int)receiving.Length, 1 << 16));
+                return receiving.ToArray();
+            }
+            catch (Exception exception) when (exception is IOException or ObjectDisposedException)
+            {
+                // Stopped Or Broken, An Empty Segment Is Never Kept
+                return [];
+            }
+        }
+
+        private async Task ReadSegmentsAsync()
+        {
+            // Each Finished Segment Arrives As name,start,end
+            while (await Process.StandardOutput.ReadLineAsync() is { } line)
+            {
+                var parts = line.Split(',');
+                var digits = parts[0].LastIndexOf('_') + 1;
+                if (
+                    parts.Length != 3
+                    || !parts[0].EndsWith(".ts", StringComparison.Ordinal)
+                    || !int.TryParse(
+                        parts[0].AsSpan(digits, parts[0].Length - digits - 3),
+                        NumberStyles.None,
+                        CultureInfo.InvariantCulture,
+                        out var number
+                    )
+                    || !double.TryParse(
+                        parts[1],
+                        NumberStyles.Float,
+                        CultureInfo.InvariantCulture,
+                        out var start
+                    )
+                    || !double.TryParse(
+                        parts[2],
+                        NumberStyles.Float,
+                        CultureInfo.InvariantCulture,
+                        out var end
+                    )
+                )
+                {
+                    continue;
+                }
+
+                // Listed Once Closed, Its Bytes Are In Or Arriving
+                var received = await ReceivedOf(number).Task;
+                lock (_pipeGate)
+                {
+                    _received.Remove(number);
+                }
+
+                if (received.Length == 0)
+                {
+                    continue;
+                }
+
+                var path = Path.Combine(
+                    _folder,
+                    $"{_prefix}_{number.ToString("000000", CultureInfo.InvariantCulture)}.ts"
+                );
+                _added(this, new Segment(path, start, end, received));
+                Interlocked.Exchange(ref _lastSegmentTimestamp, Stopwatch.GetTimestamp());
+                _firstSegment.TrySetResult();
+            }
         }
 
         private async Task ReadErrorsAsync()

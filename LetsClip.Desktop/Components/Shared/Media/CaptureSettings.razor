@@ -41,7 +41,7 @@
 <SettingRow Title="Replay Length">
     @* Replay Length Select *@
     <FieldDetail Class="fixed-width"
-                 Color="@ReplayColor(Controller.Settings.ReplaySeconds)">
+                 Color="@CostColors.Replay(Controller.Settings.ReplaySeconds)">
         <ChoiceSelect T="int"
                       Value="Controller.Settings.ReplaySeconds"
                       ValueChanged="SetReplay"
@@ -52,7 +52,7 @@
                 <MudSelectItem T="int"
                                Value="seconds">
                     <ItemLabel Text="@ReplayLabel(seconds)"
-                               Color="@ReplayColor(seconds)" />
+                               Color="@CostColors.Replay(seconds)" />
                 </MudSelectItem>
             }
         </ChoiceSelect>
@@ -63,7 +63,7 @@
 <SettingRow Title="Resolution">
     @* Resolution Select *@
     <FieldDetail Class="fixed-width"
-                 Color="@ResolutionColor(Controller.Resolution)"
+                 Color="@CostColors.Resolution(Controller.Resolution)"
                  Detail="@RecommendedText(Controller.Resolution == Controller.RecommendedResolution)">
         <ChoiceSelect T="int"
                       Value="Controller.Resolution"
@@ -75,7 +75,7 @@
                 <MudSelectItem T="int"
                                Value="lines">
                     <ItemLabel Text="@ResolutionLabel(lines)"
-                               Color="@ResolutionColor(lines)"
+                               Color="@CostColors.Resolution(lines)"
                                Detail="@RecommendedText(lines == Controller.RecommendedResolution)" />
                 </MudSelectItem>
             }
@@ -87,7 +87,7 @@
 <SettingRow Title="Frame Rate">
     @* Frame Rate Select *@
     <FieldDetail Class="fixed-width"
-                 Color="@FrameRateColor(Controller.FrameRate)"
+                 Color="@CostColors.FrameRate(Controller.FrameRate)"
                  Detail="@RecommendedText(Controller.FrameRate == Controller.RecommendedFrameRate)">
         <ChoiceSelect T="int"
                       Value="Controller.FrameRate"
@@ -99,7 +99,7 @@
                 <MudSelectItem T="int"
                                Value="rate">
                     <ItemLabel Text="@FrameRateLabel(rate)"
-                               Color="@FrameRateColor(rate)"
+                               Color="@CostColors.FrameRate(rate)"
                                Detail="@RecommendedText(rate == Controller.RecommendedFrameRate)" />
                 </MudSelectItem>
             }
@@ -111,7 +111,7 @@
 <SettingRow Title="Quality">
     @* Quality Select *@
     <FieldDetail Class="fixed-width"
-                 Color="@QualityColor(Controller.Settings.Quality)"
+                 Color="@CostColors.Quality(Controller.Settings.Quality)"
                  Detail="@RecommendedText(Controller.Settings.Quality == CaptureController.RecommendedQuality)">
         <ChoiceSelect T="CaptureQuality"
                       Value="Controller.Settings.Quality"
@@ -123,7 +123,7 @@
                 <MudSelectItem T="CaptureQuality"
                                Value="quality">
                     <ItemLabel Text="@quality.ToString()"
-                               Color="@QualityColor(quality)"
+                               Color="@CostColors.Quality(quality)"
                                Detail="@RecommendedText(quality == CaptureController.RecommendedQuality)" />
                 </MudSelectItem>
             }

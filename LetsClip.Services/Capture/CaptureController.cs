@@ -321,6 +321,30 @@ public sealed class CaptureController : IDisposable
         ];
     }
 
+    public GameCapture? GameSettingsOf(string? key)
+    {
+        return Settings.GameSettings?.FirstOrDefault(game =>
+            string.Equals(game.Key, key, StringComparison.OrdinalIgnoreCase)
+        );
+    }
+
+    public void SetGameSettings(GameCapture picked)
+    {
+        // Picks Back At Default Leave No Entry Behind
+        UpdateSettings(settings =>
+            settings with
+            {
+                GameSettings =
+                [
+                    .. (settings.GameSettings ?? []).Where(game =>
+                        !string.Equals(game.Key, picked.Key, StringComparison.OrdinalIgnoreCase)
+                    ),
+                    .. picked.IsDefault ? [] : new[] { picked },
+                ],
+            }
+        );
+    }
+
     public void SetRecorded(IReadOnlyCollection<AddedGame> games, bool recorded)
     {
         // Listed Ones Switch, Apps Join The List, In One Write
@@ -650,12 +674,15 @@ public sealed class CaptureController : IDisposable
             && AudioMixer.CanRecordProcesses
                 ? Games.GameProcessId
                 : 0;
+
+        // A Game's Own Picks Go Before The Settings Page's
+        var own = window != 0 ? GameSettingsOf(Games.GameKey) : null;
         return new CaptureOptions(
             shown,
             settings.ReplaySeconds,
-            FrameRate,
-            settings.Resolution,
-            settings.Quality,
+            FrameRateChoices.Where(rate => rate <= (own?.FrameRate ?? settings.FrameRate)).Max(),
+            own?.Resolution ?? settings.Resolution,
+            own?.Quality ?? settings.Quality,
             settings.SystemAudio ? settings.SystemAudioDeviceId : null,
             settings.Microphone ? settings.MicrophoneDeviceId : null,
             settings.Microphone && settings.NoiseCancellation,

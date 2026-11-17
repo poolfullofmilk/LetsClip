@@ -65,6 +65,8 @@ public sealed partial class GameWatcher : IDisposable
 
     public string? GameName { get; private set; }
 
+    public string? GameKey { get; private set; }
+
     // Zero While No Game Is Found
     public int GameProcessId
     {
@@ -421,6 +423,7 @@ public sealed partial class GameWatcher : IDisposable
                     _game = found.Process;
                     _isGame = next.IsInstalledGame;
                     GameName = next.Name;
+                    GameKey = next.Key;
                 }
 
                 s_logger.Info(
@@ -517,6 +520,7 @@ public sealed partial class GameWatcher : IDisposable
             _game?.Dispose();
             _game = null;
             GameName = null;
+            GameKey = null;
         }
     }
 

@@ -38,6 +38,10 @@ public partial class ClipCard
     [Parameter]
     public bool MakingPicture { get; set; }
 
+    // Video Off, Discord Exports Keep The Sound Alone
+    [Parameter]
+    public bool SoundOnly { get; set; }
+
     [Parameter]
     public EventCallback Open { get; set; }
 
@@ -82,11 +86,12 @@ public partial class ClipCard
 
     private bool Changes(DiscordPlan plan)
     {
-        // A Plan The Clip Fits Would Only Copy It
-        return Clip.SizeBytes > SizeBudget.LimitOf(plan) * 1_000_000;
+        // A Fitting Plan Only Copies, Sound Alone Becomes Opus
+        return SoundOnly || Clip.SizeBytes > SizeBudget.LimitOf(plan) * 1_000_000;
     }
 
-    private object Shown => (Clip, IsNew, Query, Time, CardStyle, Exporting, MakingPicture);
+    private object Shown =>
+        (Clip, IsNew, Query, Time, CardStyle, Exporting, MakingPicture, SoundOnly);
 
     protected override void OnAfterRender(bool firstRender)
     {

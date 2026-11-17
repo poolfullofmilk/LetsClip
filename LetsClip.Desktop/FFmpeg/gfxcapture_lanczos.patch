@@ -1,0 +1,76 @@
+--- a/libavfilter/vsrc_gfxcapture.c
++++ b/libavfilter/vsrc_gfxcapture.c
+@@ -66,6 +66,7 @@
+     { "point",           "use point scaling",                 0,                      AV_OPT_TYPE_CONST,      { .i64 = GFX_SCALE_POINT },         0, 0, FLAGS, .unit = "scale_mode" },
+     { "bilinear",        "use bilinear scaling",              0,                      AV_OPT_TYPE_CONST,      { .i64 = GFX_SCALE_BILINEAR },      0, 0, FLAGS, .unit = "scale_mode" },
+     { "bicubic",         "use bicubic scaling",               0,                      AV_OPT_TYPE_CONST,      { .i64 = GFX_SCALE_BICUBIC },       0, 0, FLAGS, .unit = "scale_mode" },
++    { "lanczos",         "use lanczos scaling",               0,                      AV_OPT_TYPE_CONST,      { .i64 = GFX_SCALE_LANCZOS },       0, 0, FLAGS, .unit = "scale_mode" },
+     { "output_fmt",      "desired output format",             OFFSET(out_fmt),        AV_OPT_TYPE_INT,        { .i64 = AV_PIX_FMT_BGRA },   0, INT_MAX, FLAGS, .unit = "output_fmt" },
+     { "8bit",            "output default 8 Bit format",       0,                      AV_OPT_TYPE_CONST,      { .i64 = AV_PIX_FMT_BGRA },         0, 0, FLAGS, .unit = "output_fmt" },
+     { "bgra",            "output 8 Bit BGRA",                 0,                      AV_OPT_TYPE_CONST,      { .i64 = AV_PIX_FMT_BGRA },         0, 0, FLAGS, .unit = "output_fmt" },
+--- a/libavfilter/vsrc_gfxcapture.h
++++ b/libavfilter/vsrc_gfxcapture.h
+@@ -36,6 +36,7 @@
+     GFX_SCALE_POINT = 0,
+     GFX_SCALE_BILINEAR,
+     GFX_SCALE_BICUBIC,
++    GFX_SCALE_LANCZOS,
+     GFX_SCALE_NB
+ };
+ 
+--- a/libavfilter/vsrc_gfxcapture_shader.h
++++ b/libavfilter/vsrc_gfxcapture_shader.h
+@@ -119,6 +119,41 @@
+             return main_ps(i);
+         return fix_color(texBicubic(t0, s0, i.uv));
+     }
++
++    float lanczos2(float x) {
++        x = abs(x);
++        if (x < 1e-5)
++            return 1.0;
++        if (x >= 2.0)
++            return 0.0;
++        float px = 3.14159265 * x;
++        return 2.0 * sin(px) * sin(px * 0.5) / (px * px);
++    }
++
++    float4 main_ps_lanczos(VSOut i) : SV_Target {
++        if (all(tS == dS))
++            return main_ps(i);
++        float2 size;
++        t0.GetDimensions(size.x, size.y);
++        float2 centre = i.uv * size - 0.5;
++        float2 stretch = clamp(tS / dS, 1.0, 8.0);
++        float2 reach = 2.0 * stretch;
++        int2 lo = int2(round(uvMin * size));
++        int2 hi = int2(round(uvMax * size)) - 1;
++        int2 first = max(int2(ceil(centre - reach)), lo);
++        int2 last = min(int2(floor(centre + reach)), hi);
++        float4 sum = float4(0.0, 0.0, 0.0, 0.0);
++        float total = 0.0;
++        [loop] for (int y = first.y; y <= last.y; y++) {
++            float wy = lanczos2((y - centre.y) / stretch.y);
++            [loop] for (int x = first.x; x <= last.x; x++) {
++                float w = wy * lanczos2((x - centre.x) / stretch.x);
++                sum += w * t0.Load(int3(x, y, 0));
++                total += w;
++            }
++        }
++        return fix_color(saturate(sum / total));
++    }
+ );
+ 
+ #undef HLSL_SHADER
+--- a/libavfilter/vsrc_gfxcapture_winrt.cpp
++++ b/libavfilter/vsrc_gfxcapture_winrt.cpp
+@@ -1165,6 +1165,9 @@
+     if (cctx->resize_mode == GFX_RESIZE_CROP || cctx->scale_mode == GFX_SCALE_POINT) {
+         ps_entry = "main_ps";
+         sampler_desc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
++    } else if (cctx->scale_mode == GFX_SCALE_LANCZOS) {
++        ps_entry = "main_ps_lanczos";
++        sampler_desc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
+     }
+ 
+     hr = ctx->fn.D3DCompile(render_shader_src, sizeof(render_shader_src) - 1, NULL, NULL, NULL, ps_entry, "ps_4_0", flags, 0, &ps_blob, &err_blob);
