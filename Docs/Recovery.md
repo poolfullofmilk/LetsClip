@@ -60,6 +60,9 @@ The owner's rule: consistent on every kind of system, and anything that can fix 
 | A clip cannot be probed when it is opened (ffprobe hangs or cannot start) | The editor goes back to Clips (`ClipEditor.LoadAsync`), where the page threw before | `The clip could not be read, it may be in use` |
 | A strip, waveform or thumbnail cannot be made | Logged once, the clip shows without it (`ClipLibrary.RenderAsync`) | A plain strip or tile, its spinner gone |
 | An export cannot start (FFmpeg missing or blocked) | It ends like any failed export, both events raised (`ExportRunner`'s last catch); the app bar read `Exporting 0%` for good before | `Export could not run, reinstall LetsClip` |
+| A still window's last frame outlasts a stream copy's selection (Save Cut, an Off export) | Each picture's duration is capped at the selection's end (`setts` in `ClipLibrary.CopyRangeAsync`); a cut to 1h9m17s came out 1h10m49s before, and an Off export of it failed its length check | A clip or export exactly as long as its selection |
+| A sound only export ends before its selection, the picture having held its last frame past the sound | Accepted, a shorter sound is not a lost part (`ClipExporter.LengthHolds`); a video export must still match within 0.25 s | The export |
+| AMF's HEVC cannot start at a small export size (under 384 x 216, a portrait 240 x 428) | The 12 frame test fails and the card's H.264 takes it, then x264 (`VideoEncoders.WorksAsync`) | The export |
 | An update's exe is not the version its tag names | Refused after the signature check (`Updater.IsSameVersion`), like a bad signature | `The download could not be verified` |
 
 ## Reliability Research And Tests

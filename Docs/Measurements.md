@@ -374,3 +374,16 @@ Gaming PC (7800X3D, RX 9070 XT with AMF, NVMe) unless a line says the laptop (i5
 - Exports on AMF, each on its first try: Free 18.31 MB in 13.6 s and Nitro Basic 46.17 MB in 13.3 s from a 212 MB minute, Vertical with Off 59.85 MB in 5.9 s, a one track copy 210.95 MB in 0.3 s, Nitro 852.5 MB from six minutes in 78 s; Copy for Discord (Free) from a card 17.8 MB in 7.4 s.
 - A late attach: `readyState` read 1 after the seek in 100 of 100 tries; 5 of 5 clips stuck with the attach held back 0.8 s, none after the fix.
 - The sweep: 33 screens and sizes clean, twice, with a recording running.
+
+## Scrolling, Encoder Floors And Small Exports, 17 November 2026
+
+Gaming PC, Debug sandbox at 1728 x 908 and 1920 x 1009 on the 240 Hz monitor, 59 clips (four copies of the owner's Overwatch clips among them), and AMF on the RX 9070 XT.
+
+- Scrolling Clips, 14 wheel ticks 400 ms apart: before, with the pointer over the cards, a 100 ms frame in three of five runs and 15 to 42 hover previews started; with it on the scrollbar none of either in four runs. After the preview fix, over the cards: 0 previews, worst frame 33 ms, 10 to 14 doubled frames at 240 Hz per run against 5 to 8 off the cards; with the cards' hover fade switched off 3 to 9, within the spread, so the fade stays.
+- Hover preview left 260 to 300 ms after resting: 6 of 48 tries left a black tile before, 0 after.
+- Header bar shadow, brightness under the bar with content scrolled: 34.9 flat before (no shadow at all), 25.6 at the edge rising to 34.9 over about 20 px after `mask-clip: no-clip`.
+- Shadow falloff under a card on the 32 page: the old panel drop fades out within about 23 px, the new two layer one over about 40 px, both 23 to 24 at the edge.
+- AMF HEVC floors, asked 30 to 800 kbps, written bitrate at the floor: a 12 s fight at 48 Mbps 720p60 595, 540p60 382, 540p30 268, 360p60 205, 360p30 144, 360p15 98, 240p60 109, 240p30 78, 240p15 58 kbps; a calmer 20 s Overwatch cut at 22 Mbps about half (720p60 285, 540p60 187, 360p60 108, 240p60 63, 240p30 51, 240p15 43). At 60 FPS the larger size scored higher XPSNR at every bitrate it could land (the fight at about 320 kbps: 360p 20.0, 240p 19.9; the cut at 544 kbps: 720p 24.7, 540p 24.4). `hevc_amf` does not start at 320 x 180, 256 x 144, 240 x 428 or 216 x 384; 384 x 216 and 428 x 240 work, and `h264_amf` starts at 256 x 144.
+- AAC at low rates, 300 s of a Discord window's sound: 24 kbps mono wrote 23.3 kbps (24.8 with the container), 32 kbps mono 32.2, 32 stereo 32.1, 48 stereo 47.9.
+- Exports, each probed: 10 minutes of 1080p60 for Free 428 x 240 HEVC at 60 FPS, 18.83 MB, 251 kbps, 45 s; for Nitro Basic 960 x 540 at 60 FPS, 47.14 MB, 629 kbps, 44 s; its sound alone for Free a lossless copy of 9.9 MB in 2.5 s; the owner's 1h10m49s Discord window recording's sound for Free 17.0 MB of mono AAC at 32.7 kbps in 42 s.
+- A stream copy with each picture's duration capped at the selection's end: the same frame counts as before on a 60 FPS cut (822), a still window cut (732) and an x264 B frame clip (1214); durations 13.2000 against 13.2005 s, 150.500 against 151.021 s and 20.000 against 20.117 s.
