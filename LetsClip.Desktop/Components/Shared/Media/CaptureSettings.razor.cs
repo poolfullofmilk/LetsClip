@@ -19,6 +19,9 @@ public partial class CaptureSettings : IDisposable
     [Inject]
     public required ISnackbar Snackbar { get; set; }
 
+    // Games Pick Their Monitor, A Lone Monitor Offers No Choice
+    private bool MonitorDisabled => Controller.Settings.GamesOnly || Controller.Monitors.Count < 2;
+
     protected override void OnInitialized()
     {
         Controller.Changed += OnChanged;

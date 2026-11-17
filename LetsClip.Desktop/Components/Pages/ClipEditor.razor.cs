@@ -116,6 +116,20 @@ public partial class ClipEditor : IAsyncDisposable
     // A Cut Or Restore Swapping The File Locks Every Edit
     private bool Editable => _ready && !_swapping;
 
+    // The Crop Box Shows While The Export Keeps A Picture
+    private bool ShowsCrop =>
+        _ready
+        && _media is { } media
+        && ClipExporter.KeepsVideo(
+            media,
+            Controller.Settings.ExportVideo,
+            Controller.Settings.ExportAudio,
+            Controller.Settings.ExportMicrophone
+        );
+
+    // A Clip Without Sound Has No Volume To Change
+    private bool Audible => Editable && _media?.HasAudio == true;
+
     private string PlayTip => _paused ? "Play" : "Pause";
 
     protected override void OnInitialized()
@@ -495,6 +509,12 @@ public partial class ClipEditor : IAsyncDisposable
         _crop = Math.Clamp(center, 0, 1);
         SaveCrop();
         StateHasChanged();
+    }
+
+    private void OnStreamsChanged()
+    {
+        // A Crop Box Shown Again Is Placed Again
+        _placeCrop = _crop is not null;
     }
 
     private void SetVertical(bool vertical)

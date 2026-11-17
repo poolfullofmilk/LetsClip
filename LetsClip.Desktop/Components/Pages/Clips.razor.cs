@@ -78,6 +78,13 @@ public partial class Clips : IDisposable
 
     private static int UneditedCount => s_clips?.Count(clip => !clip.IsEdited) ?? 0;
 
+    // A Tick Must Change The Cards, Unticking Always Can
+    private bool UneditedDisabled =>
+        !_draftUnedited && UneditedCount is var count && (count == 0 || count == s_clips?.Count);
+
+    // A Lone Source Has Nothing To Pick Between
+    private static bool OneSource => Games.Count < 2;
+
     // Sorted By Time, Clips Sit Under Day, Week Or Month
     private bool IsGrouped => Controller.Settings.ClipSort is ClipSort.Newest or ClipSort.Oldest;
 
@@ -390,6 +397,7 @@ public partial class Clips : IDisposable
             plan,
             settings.ExportAudio,
             settings.ExportMicrophone,
+            settings.ExportVideo,
             settings.ExportsDirectory,
             metadata?.Crop
         );

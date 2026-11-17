@@ -98,7 +98,8 @@ trackDevicePixel();
             const fill = bar.appendChild(document.createElement("div"));
             holder.append(video, bar);
             Object.assign(entry, { video, bar });
-            video.addEventListener("playing", () => (holder.dataset.playing = ""), { once: true });
+            // Left Before It Played, The Picture Stays
+            video.addEventListener("playing", () => previewed === entry && (holder.dataset.playing = ""), { once: true });
             video.play().catch(() => {});
             const follow = () => {
                 if (previewed !== entry) return;
@@ -111,14 +112,20 @@ trackDevicePixel();
     };
 
     // Anywhere On The Card, Never On Its Buttons
-    document.addEventListener("pointerover", (event) => {
+    let pointer = null;
+    const hover = (event) => {
+        // Cards Scrolling Under A Still Pointer Start Nothing, Saving Frames
+        const moved = pointer?.x !== event.clientX || pointer?.y !== event.clientY;
+        pointer = { x: event.clientX, y: event.clientY };
         const target = event.target instanceof Element ? event.target : null;
         const card = target && !target.closest("button") ? target.closest(".hover-card") : null;
         const holder = card?.querySelector(".clip-preview") ?? null;
         if (holder === (previewed?.holder ?? null)) return;
         stopPreview();
-        if (holder && !matchMedia("(prefers-reduced-motion: reduce)").matches) startPreview(holder);
-    });
+        if (holder && moved && !matchMedia("(prefers-reduced-motion: reduce)").matches) startPreview(holder);
+    };
+    document.addEventListener("pointerover", hover);
+    document.addEventListener("pointermove", hover);
 
     // Opening It, Leaving Or Hiding The Window Ends One
     document.addEventListener("pointerdown", stopPreview);
@@ -422,14 +429,15 @@ window.letsClip = (() => {
     };
 
     // Weighed Like SizeBudget.CopyBytes: From The Keyframe Before The Seek
-    const copyBytes = (start, end, { copyAudio, copyFile, copyWhole }) => {
+    const copyBytes = (start, end, { copyAudio, copyFile, copyWhole, copyVideo }) => {
         // The Whole Clip With Every Track Is The File Itself
         const file = Number(copyFile);
         if (copyWhole !== undefined && end - start >= duration() - step / 2) return file;
         const soundPerSecond = Number(copyAudio);
+        const video = copyVideo !== undefined;
         const { times, totals, keys } = state.packets;
-        // No Packet List, Its Share Like ClipExporter.CopyBytes
-        if (!times.length) return Math.min(file, Math.floor((file * (end - start)) / duration()));
+        // No Packet List, A Share Like ClipExporter.CopyBytes
+        if (!times.length) return Math.min(file, Math.floor(video ? (file * (end - start)) / duration() : (end - start) * 16000));
         const seek = Math.max(0, start - 0.001);
         const stop = seek + (end - start);
         let first = 0;
@@ -449,7 +457,8 @@ window.letsClip = (() => {
         const lead = times.length ? Math.max(0, seek - times[first]) : 0;
         const sound = Math.round((end - start + lead) * soundPerSecond);
         // 12 Index Bytes A Packet, Never More Than The Clip
-        return Math.min(file, totals[low] - totals[first] + 12 * (low - first) + sound + 1000);
+        const pictures = video ? totals[low] - totals[first] + 12 * (low - first) : 0;
+        return Math.min(file, pictures + sound + 1000);
     };
 
     // Its Own Text Node, Which Blazor Keeps Writing To

@@ -39,9 +39,10 @@ public static class AppTheme
     private const string LineStrong = "rgba(255,255,255, 0.15)";
     private const string LineFaint = "rgba(255,255,255, 0.10)";
 
-    // Two Depths, A Very Slight Lift And A Panel Drop
-    private const string SlightShadow = "0 1px 9px rgba(0,0,0, 0.16)";
-    private const string PanelShadow = "0 8px 24px -10px rgba(0,0,0, 0.6)";
+    // Two Depths, Each A Contact Shadow Under A Wide One
+    private const string SlightShadow = "0 1px 3px rgba(0,0,0, 0.08), 0 3px 12px rgba(0,0,0, 0.12)";
+    private const string PanelShadow =
+        "0 2px 6px -2px rgba(0,0,0, 0.18), 0 12px 40px -14px rgba(0,0,0, 0.5)";
 
     public static readonly MudTheme Custom = new()
     {

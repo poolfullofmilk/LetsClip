@@ -13,10 +13,12 @@
 - A clip that comes out black always tells you, with the fix
 - Clips are named after their game and time, and renaming a clip renames its file, so it shares under that name
 - Trim a clip to the exact frame, by dragging, typing or stepping, over a strip with its sound drawn across it that the mouse wheel zooms, and export an exact copy of it, or fit it to Discord's Free, Nitro Basic or Nitro limit as HEVC at the size that looks sharpest
+- Long selections still fit a Discord plan, at a smaller picture and frame rate the longer they run
+- Leave out the video to share only the sound, like a long voice chat
 - Make a vertical export of any landscape clip for phones, dragging the box to the part you want
 - Exports keep going when you leave the editor and wait their turn, with their progress in the top bar
 - Keep just the trimmed part without losing any quality, and keep the full clip to bring back if you want
-- The length, size and bitrate shown before an export are what the file comes out as, and a selection too long for a Discord plan tells you how long it can be
+- The length, size and bitrate shown before an export are what the file comes out as
 - Clips sit under Today, Yesterday, This Week, Last Week and then each month, each tagged with its game, app or monitor, with its resolution, bitrate and size in its menu
 - Search, rename and sort clips, and filter them by game, app or monitor, each with its count, or to the ones you have not edited yet
 - Clips saved since you last opened LetsClip are marked New

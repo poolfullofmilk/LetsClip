@@ -7,7 +7,9 @@ public sealed record ExportBudget(
     long TargetBytes,
     double VideoBitsPerSecond,
     BudgetVerdict Verdict,
-    int Lines = SizeBudget.FullLines
+    int Lines = SizeBudget.FullLines,
+    double FrameRate = 60,
+    double AudioBitsPerSecond = SizeBudget.AudioBitsPerSecond
 )
 {
     // Where Encodes Land, Measured 86 To 95% Of The Limit

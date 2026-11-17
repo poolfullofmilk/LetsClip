@@ -7,6 +7,7 @@ using LetsClip.Desktop.Components.Shared.Dialogs;
 using LetsClip.Desktop.Interop;
 using LetsClip.Services.Capture;
 using LetsClip.Services.Media;
+using LetsClip.Services.Storage;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using MudBlazor;
@@ -58,6 +59,10 @@ public partial class ExportPanel : IDisposable
     [Parameter]
     public EventCallback<bool> VerticalChanged { get; set; }
 
+    // Video, Game Audio Or Microphone Kept Or Left Out
+    [Parameter]
+    public EventCallback StreamsChanged { get; set; }
+
     [Inject]
     public required CaptureController Controller { get; set; }
 
@@ -86,7 +91,15 @@ public partial class ExportPanel : IDisposable
     // Only A Landscape Clip Has A 9 By 16 Part
     private bool CanCrop => Media.Width > Media.Height;
 
-    private bool IsVertical => Crop is not null && CanCrop;
+    private bool IsVertical => Crop is not null && CanCrop && KeepsVideo;
+
+    private bool KeepsVideo =>
+        ClipExporter.KeepsVideo(
+            Media,
+            Controller.Settings.ExportVideo,
+            Controller.Settings.ExportAudio,
+            Controller.Settings.ExportMicrophone
+        );
 
     // The Frame An Export Starts From, Cropped Or Whole
     private (int Width, int Height) Frame =>
@@ -102,7 +115,7 @@ public partial class ExportPanel : IDisposable
         {
             // Budgeted At Full Size, The Budget Then Picks The Lines
             var (width, height) = ClipExporter.OutputSize(Frame.Width, Frame.Height);
-            return new(Range.Length, width, height, FrameRate, WithAudio);
+            return new(Range.Length, width, height, FrameRate, WithAudio, KeepsVideo);
         }
     }
 
@@ -122,8 +135,8 @@ public partial class ExportPanel : IDisposable
 
     private double ClipBitsPerSecond => Clip.SizeBytes * 8 / Media.Duration;
 
-    // A Copy's Packets, Weighed Once Per Range And Sound
-    private readonly Dictionary<int, long> _copies = [];
+    // A Copy's Packets, Weighed Once Per Range, Sound And Picture
+    private readonly Dictionary<(int Tracks, bool Video), long> _copies = [];
     private TrimRange? _copiedRange;
 
     // One Picked Track, What A Plan Weighs Against Its Limit
@@ -132,22 +145,22 @@ public partial class ExportPanel : IDisposable
     private bool CopiesFile(int tracks)
     {
         // The Whole Clip With Every Track Is The File Itself
-        return tracks == Media.AudioTrackCount;
+        return KeepsVideo && tracks == Media.AudioTrackCount;
     }
 
     private long CopyBytesOf(int tracks)
     {
-        // Weighed From The Packets Once Per Range And Track Count
+        // Weighed From The Packets Once Per Range And Streams
         if (_copiedRange != Range)
         {
             _copiedRange = Range;
             _copies.Clear();
         }
 
-        if (!_copies.TryGetValue(tracks, out var bytes))
+        if (!_copies.TryGetValue((tracks, KeepsVideo), out var bytes))
         {
-            bytes = ClipExporter.CopyBytes(Clip.SizeBytes, Media, Range, tracks);
-            _copies[tracks] = bytes;
+            bytes = ClipExporter.CopyBytes(Clip.SizeBytes, Media, Range, tracks, KeepsVideo);
+            _copies[(tracks, KeepsVideo)] = bytes;
         }
 
         return bytes;
@@ -176,7 +189,9 @@ public partial class ExportPanel : IDisposable
 
     // Off With Its Sound Kept, An Export Just Copies
     private bool OnlyCopies =>
-        KeepsClip && (Media.HasSeparateTracks ? Track == 0 : WithAudio == Media.HasAudio);
+        KeepsClip
+        && KeepsVideo
+        && (Media.HasSeparateTracks ? Track == 0 : WithAudio == Media.HasAudio);
 
     // Once Exported, The Same Selection Reads Again
     private string ExportText =>
@@ -218,15 +233,21 @@ public partial class ExportPanel : IDisposable
 
     private string ClipResolutionText => Formatter.FormatResolution(Media.Width, Media.Height);
 
+    // Sound Alone Has No Picture To Size
     private string ExportResolutionText =>
-        IsTooLong
-            ? ClipResolutionText
-            : Formatter.FormatResolution(OutputSize.Width, OutputSize.Height);
+        IsTooLong ? ClipResolutionText
+        : !KeepsVideo ? NoneText
+        : Formatter.FormatResolution(OutputSize.Width, OutputSize.Height);
 
     private string ClipFrameRateText => Formatter.FormatFrameRate(ClipFrameRate);
 
+    // A Long Selection's Budget Can Lower The Frame Rate
     private string ExportFrameRateText =>
-        IsTooLong ? ClipFrameRateText : Formatter.FormatFrameRate(FrameRate);
+        IsTooLong ? ClipFrameRateText
+        : !KeepsVideo ? NoneText
+        : Formatter.FormatFrameRate(Math.Min(FrameRate, Budget?.FrameRate ?? FrameRate));
+
+    private const string NoneText = "None";
 
     private string ClipBitrateText => Formatter.FormatBitrate(ClipBitsPerSecond);
 
@@ -246,16 +267,23 @@ public partial class ExportPanel : IDisposable
         : Budget is null ? Formatter.FormatBitrate(CopyBitsPerSecond)
         : Formatter.FormatBitrate(ExportBytes * 8 / Range.Length);
 
-    // The Whole Clip's Rate, Less Each Sound Track Left Out
+    // The Whole Clip's Rate, Less Each Stream Left Out
     private double CopyBitsPerSecond =>
-        ClipBitsPerSecond
-        - ((Media.AudioTrackCount - CopiedTracks) * (Media.Packets?.AudioBytesPerSecond ?? 0) * 8);
+        !KeepsVideo
+            ? SoundBitsPerSecond * CopiedTracks
+            : ClipBitsPerSecond - ((Media.AudioTrackCount - CopiedTracks) * SoundBitsPerSecond);
+
+    // One Track's Measured Sound, The Usual Rate Unmeasured
+    private double SoundBitsPerSecond =>
+        Media.Packets is { } packets
+            ? packets.AudioBytesPerSecond * 8
+            : SizeBudget.AudioBitsPerSecond;
 
     private bool IsTooLong => Budget?.Verdict == BudgetVerdict.TooSmall;
 
-    // Names The Longest Selection The Plan Fits
+    // Names What The Plan Fits And How To Fit More
     private string TooLongText =>
-        $"Too long for {SizeBudget.NameOf(Plan)}, which fits about {Formatter.FormatDuration(SizeBudget.LongestSeconds(SizeBudget.LimitOf(Plan) ?? 0, Shape))}, pick a shorter selection";
+        $"Too long for {SizeBudget.NameOf(Plan)}, which fits about {Formatter.FormatDuration(SizeBudget.LongestSeconds(SizeBudget.LimitOf(Plan) ?? 0, Shape))}, pick a shorter selection{(KeepsVideo && WithAudio ? " or leave out the video" : "")}";
 
     // A Plan The Selection Fits Would Only Copy, Like Off
     private bool Changes(DiscordPlan plan)
@@ -269,20 +297,40 @@ public partial class ExportPanel : IDisposable
         Controller.UpdateSettings(settings => settings with { ExportDiscordPlan = plan });
     }
 
-    private void ToggleAudio()
+    private async Task SetStreamsAsync(Func<UserSettings, UserSettings> change)
     {
-        Controller.UpdateSettings(settings => settings with { ExportAudio = !KeepsGame });
+        // Remembered, And The Player's Crop Box Follows
+        Controller.UpdateSettings(change);
+        await StreamsChanged.InvokeAsync();
     }
 
-    private void ToggleMicrophone()
+    private Task ToggleAudio() =>
+        SetStreamsAsync(settings => settings with { ExportAudio = !KeepsGame });
+
+    // Leaving Out The Video Needs Sound To Keep
+    private bool VideoLocked => IsExporting || Busy || (KeepsVideo && !WithAudio);
+
+    private bool SoundLocked(bool game)
     {
-        Controller.UpdateSettings(settings =>
-            settings with
-            {
-                ExportMicrophone = !KeepsMicrophone,
-            }
-        );
+        // Without Video, The Last Sound Track Stays
+        return IsExporting
+            || Busy
+            || (
+                !KeepsVideo
+                && ClipExporter.TrackOf(
+                    Media,
+                    game ? !KeepsGame : KeepsGame,
+                    game ? KeepsMicrophone : !KeepsMicrophone
+                )
+                    is null
+            );
     }
+
+    private Task ToggleVideo() =>
+        SetStreamsAsync(settings => settings with { ExportVideo = !KeepsVideo });
+
+    private Task ToggleMicrophone() =>
+        SetStreamsAsync(settings => settings with { ExportMicrophone = !KeepsMicrophone });
 
     private async Task SaveCutAsync()
     {
@@ -346,7 +394,7 @@ public partial class ExportPanel : IDisposable
 
         // Read Before A Rename Replaces This Panel
         var (cut, title, keepOriginal) = (IsCut, ExportText, !Controller.Settings.DeleteOriginals);
-        var (range, plan, frameRate, track) = (Range, Plan, FrameRate, Track);
+        var (range, plan, frameRate, track, video) = (Range, Plan, FrameRate, Track, KeepsVideo);
         var crop = IsVertical ? Crop : null;
         var folder = Controller.Settings.ExportsDirectory;
         if (await SettledPath() is not { } path || (cut && !await ConfirmCutAsync(title)))
@@ -355,7 +403,16 @@ public partial class ExportPanel : IDisposable
         }
 
         // Runs On Past Leaving, The App Bar Shows It
-        var request = new ExportRequest(path, range, plan, frameRate, track, folder, Crop: crop);
+        var request = new ExportRequest(
+            path,
+            range,
+            plan,
+            frameRate,
+            track,
+            folder,
+            Crop: crop,
+            Video: video
+        );
         _ = Exports.RunAsync(request, cut, keepOriginal);
     }
 

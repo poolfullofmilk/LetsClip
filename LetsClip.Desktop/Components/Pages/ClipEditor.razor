@@ -100,7 +100,7 @@ else
                             <MudElement HtmlTag="canvas"
                                         Class="player-frozen"
                                         aria-hidden="true" />
-                            @if (_crop is { } crop && _ready)
+                            @if (_crop is { } crop && ShowsCrop)
                             {
                                 @* Vertical Crop Frame *@
                                 <MudElement HtmlTag="div"
@@ -169,7 +169,7 @@ else
                                             OnClick="TogglePlayAsync" />
                                 @* Mute Button *@
                                 <VolumeButton Text="@MuteTip"
-                                              Disabled="@(!Editable)"
+                                              Disabled="@(!Audible)"
                                               OnClick="ToggleMuteAsync"
                                               Value="@(_muted ? 0 : _volume)"
                                               ValueChanged="SetVolumeAsync" />
@@ -270,6 +270,7 @@ else
                                  Range="_range"
                                  Crop="_crop"
                                  VerticalChanged="SetVertical"
+                                 StreamsChanged="OnStreamsChanged"
                                  Media="media">
                         <SettingRow Title="Name">
                             @* Clip Name Field *@

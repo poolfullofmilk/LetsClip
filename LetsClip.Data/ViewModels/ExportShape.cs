@@ -5,5 +5,6 @@ public readonly record struct ExportShape(
     int Width,
     int Height,
     double FrameRate,
-    bool HasAudio
+    bool HasAudio,
+    bool HasVideo = true
 );

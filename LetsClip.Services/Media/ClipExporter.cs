@@ -16,7 +16,8 @@ public sealed record ExportRequest(
     int? AudioTrack,
     string ExportsFolder,
     bool CopyWhenDone = false,
-    double? Crop = null
+    double? Crop = null,
+    bool Video = true
 );
 
 public sealed record ExportProgress(string Phase, double Fraction);
@@ -126,19 +127,35 @@ public static class ClipExporter
             : null;
     }
 
-    public static long CopyBytes(long clipBytes, MediaInfo media, TrimRange range, int tracks)
+    public static bool KeepsVideo(MediaInfo media, bool video, bool game, bool microphone)
+    {
+        // Without Sound Kept, The Video Stays, Never Nothing
+        return video || TrackOf(media, game, microphone) is null;
+    }
+
+    public static long CopyBytes(
+        long clipBytes,
+        MediaInfo media,
+        TrimRange range,
+        int tracks,
+        bool video = true
+    )
     {
         // The Whole Clip Is The File, A Part Never More
-        if (!range.CutsShort(media.Duration) && tracks == media.AudioTrackCount)
+        if (video && !range.CutsShort(media.Duration) && tracks == media.AudioTrackCount)
         {
             return clipBytes;
         }
 
+        // Without Packets, A Share Of The File Or Usual Sound
+        var estimate = video
+            ? clipBytes * range.Length / media.Duration
+            : tracks * range.Length * SizeBudget.AudioBitsPerSecond / 8;
         return Math.Min(
             clipBytes,
             media.Packets is { } packets
-                ? SizeBudget.CopyBytes(packets, range, tracks)
-                : (long)(clipBytes * range.Length / media.Duration)
+                ? SizeBudget.CopyBytes(packets, range, tracks, video)
+                : (long)estimate
         );
     }
 
@@ -149,18 +166,20 @@ public static class ClipExporter
         DiscordPlan plan,
         bool game,
         bool microphone,
+        bool video,
         string folder,
         double? crop
     )
     {
         // The Editor's Plan Rules, Pressed From A Card, Crop Included
         var track = TrackOf(media, game, microphone);
+        var keepsVideo = KeepsVideo(media, video, game, microphone);
         var limit = SizeBudget.LimitOf(plan) ?? double.MaxValue;
-        var cropped = crop is not null && media.Width > media.Height;
-        var encodes =
-            cropped || CopyBytes(clip.SizeBytes, media, range, track is null ? 0 : 1) > limit * 1e6;
+        var cropped = keepsVideo && crop is not null && media.Width > media.Height;
+        var copied = CopyBytes(clip.SizeBytes, media, range, track is null ? 0 : 1, keepsVideo);
+        var encodes = cropped || copied > limit * 1e6;
         var everyTrack = media.HasSeparateTracks ? track == 0 : track is not null == media.HasAudio;
-        if (!encodes && everyTrack && !range.CutsShort(media.Duration))
+        if (!encodes && keepsVideo && everyTrack && !range.CutsShort(media.Duration))
         {
             return new(null, null);
         }
@@ -170,7 +189,14 @@ public static class ClipExporter
             ? CropSizeOf(media.Height)
             : (media.Width, media.Height);
         var (width, height) = OutputSize(frameWidth, frameHeight);
-        var shape = new ExportShape(range.Length, width, height, frameRate, track is not null);
+        var shape = new ExportShape(
+            range.Length,
+            width,
+            height,
+            frameRate,
+            track is not null,
+            keepsVideo
+        );
         if (encodes && SizeBudget.Plan(limit, shape).Verdict == BudgetVerdict.TooSmall)
         {
             return new(
@@ -188,7 +214,8 @@ public static class ClipExporter
                 track,
                 folder,
                 CopyWhenDone: true,
-                Crop: cropped ? crop : null
+                Crop: cropped ? crop : null,
+                Video: keepsVideo
             ),
             null
         );
@@ -256,21 +283,25 @@ public static class ClipExporter
         Directory.CreateDirectory(request.ExportsFolder);
         var started = Stopwatch.StartNew();
 
+        // Video Off Keeps The Sound Alone, Never Nothing
+        var video = request.Video || !withAudio;
+
         // A Vertical Crop Always Encodes, Only The Part It Keeps
-        var cropped = request.Crop is not null && source.Width > source.Height;
+        var cropped = video && request.Crop is not null && source.Width > source.Height;
         var (frameWidth, frameHeight) = cropped
             ? CropSizeOf(source.Height)
             : (source.Width, source.Height);
 
         // Off, Or Already Small Enough, Is An Exact Copy
+        var copyRate = video ? sourceRate : SizeBudget.AudioBitsPerSecond / 8;
         if (
             !cropped
-            && SizeBudget.KeepsClip(request.Plan, duration, sourceRate)
-            && await CopyAsync(request, track, progress, token) is { } copied
+            && SizeBudget.KeepsClip(request.Plan, duration, copyRate)
+            && await CopyAsync(request, track, video, progress, token) is { } copied
         )
         {
             s_logger.Info(
-                $"Exported {Path.GetFileName(copied)} Losslessly At {Formatter.FormatSize(new FileInfo(copied).Length)} In {started.Elapsed.TotalSeconds:0.0} s"
+                $"Exported {Path.GetFileName(copied)} Losslessly At {Formatter.FormatSize(new FileInfo(copied).Length)}{(video ? "" : ", Sound Only,")} In {started.Elapsed.TotalSeconds:0.0} s"
             );
             return copied;
         }
@@ -280,24 +311,34 @@ public static class ClipExporter
             SizeBudget.LimitOf(request.Plan)
             ?? VerticalBytes(sourceBytes, source.Duration, source, duration) / 1e6;
         var (fullWidth, fullHeight) = OutputSize(frameWidth, frameHeight);
-        var frameRate = request.FrameRate;
-        var clip = new ExportShape(duration, fullWidth, fullHeight, frameRate, withAudio);
+        var clip = new ExportShape(
+            duration,
+            fullWidth,
+            fullHeight,
+            request.FrameRate,
+            withAudio,
+            video
+        );
         var budget = SizeBudget.Plan(limit, clip);
         var (width, height) = OutputSize(frameWidth, frameHeight, budget.Lines);
+        var frameRate = Math.Min(request.FrameRate, budget.FrameRate);
+        var shown = video
+            ? $"At {width} × {height}, {frameRate} FPS, {(withAudio ? $"With {budget.AudioBitsPerSecond / 1000:0} kbps Audio" : "Without Audio")}"
+            : $"As Sound Only At {budget.AudioBitsPerSecond / 1000:0} kbps";
         s_logger.Info(
-            $"Exporting {Path.GetFileName(request.SourcePath)} From {Formatter.FormatDuration(request.Range.Start)} To {Formatter.FormatDuration(request.Range.End)} At {width} × {height}, {frameRate} FPS, {(withAudio ? "With Audio" : "Without Audio")}, Aiming Under {Formatter.FormatSize((long)(limit * 1_000_000))}, {budget.Verdict}"
+            $"Exporting {Path.GetFileName(request.SourcePath)} From {Formatter.FormatDuration(request.Range.Start)} To {Formatter.FormatDuration(request.Range.End)} {shown}, Aiming Under {Formatter.FormatSize((long)(limit * 1_000_000))}, {budget.Verdict}"
         );
         if (budget.Verdict == BudgetVerdict.TooSmall)
         {
             throw new ExportException(TooSmallMessage);
         }
 
-        // HEVC On The Graphics Card, Then Its H.264, x264 Last
+        // HEVC On The Card, Then Its H.264, x264 Last
+        var encoders = new List<VideoEncoder>();
         var hardware = VideoEncoders
             .Candidates()
-            .Where(candidate => candidate.IsHardware && !candidate.GpuFrames)
+            .Where(candidate => video && candidate.IsHardware && !candidate.GpuFrames)
             .ToList();
-        var encoders = new List<VideoEncoder>();
         foreach (var family in new[] { hardware.Select(VideoEncoders.HevcOf), hardware })
         {
             foreach (var candidate in family)
@@ -327,14 +368,19 @@ public static class ClipExporter
             height,
             frameRate,
             track,
-            crop
+            crop,
+            budget.AudioBitsPerSecond,
+            video
         );
         try
         {
             var attempts = 0;
             foreach (var encoder in encoders)
             {
-                var bitrate = budget.VideoBitsPerSecond * (encoder.IsHardware ? HardwareAim : 1);
+                // Sound Alone Retries On Its Own Bitrate
+                var bitrate = !video
+                    ? budget.AudioBitsPerSecond
+                    : budget.VideoBitsPerSecond * (encoder.IsHardware ? HardwareAim : 1);
                 List<(double Bitrate, long Size)> tries = [];
                 var restarted = false;
                 for (var attempt = 1; attempt <= AttemptsPerEncoder; attempt++)
@@ -364,10 +410,11 @@ public static class ClipExporter
                     var size = new FileInfo(temporary).Length;
                     var output = await MediaProbe.ProbeAsync(temporary, token);
                     if (
-                        output is not { HasVideo: true }
-                        || output.VideoCodec != (encoder.IsHevc ? "hevc" : "h264")
-                        || output.PixelFormat != "yuv420p"
-                        || Math.Abs(output.Duration - duration) > DurationTolerance
+                        output is null
+                        || output.HasVideo != video
+                        || (video && output.VideoCodec != (encoder.IsHevc ? "hevc" : "h264"))
+                        || (video && output.PixelFormat != "yuv420p")
+                        || !LengthHolds(output.Duration, duration, video)
                         || output.HasAudio != withAudio
                     )
                     {
@@ -383,8 +430,12 @@ public static class ClipExporter
                     if (size <= budget.TargetBytes)
                     {
                         var finalPath = Keep(request, temporary);
+                        var codec =
+                            !video ? "AAC"
+                            : encoder.IsHevc ? "HEVC"
+                            : "H.264";
                         s_logger.Info(
-                            $"Exported {Path.GetFileName(finalPath)} At {Formatter.FormatSize(size)} As {(encoder.IsHevc ? "HEVC" : "H.264")} With {encoder.Name} In {attempts} Attempts And {started.Elapsed.TotalSeconds:0.0} s"
+                            $"Exported {Path.GetFileName(finalPath)} At {Formatter.FormatSize(size)} As {codec} With {encoder.Name} In {attempts} Attempts And {started.Elapsed.TotalSeconds:0.0} s"
                         );
                         return finalPath;
                     }
@@ -411,6 +462,7 @@ public static class ClipExporter
     private static async Task<string?> CopyAsync(
         ExportRequest request,
         int? track,
+        bool video,
         IProgress<ExportProgress> progress,
         CancellationToken token
     )
@@ -421,24 +473,26 @@ public static class ClipExporter
         var temporary = ClipLibrary.PartialPathIn(request.ExportsFolder);
         try
         {
+            List<string> streams = video ? ["-map", "0:v:0"] : [];
+            if (track is { } index)
+            {
+                streams.AddRange([
+                    "-map",
+                    string.Create(CultureInfo.InvariantCulture, $"0:a:{index}"),
+                ]);
+            }
+
             var output = await ClipLibrary.CopyRangeAsync(
                 request.SourcePath,
                 range,
-                track is { } index
-                    ?
-                    [
-                        "-map",
-                        "0:v:0",
-                        "-map",
-                        string.Create(CultureInfo.InvariantCulture, $"0:a:{index}"),
-                    ]
-                    : ["-map", "0:v:0"],
+                streams,
                 temporary,
                 token
             );
             if (
-                output is not { HasVideo: true }
-                || Math.Abs(output.Duration - range.Length) > DurationTolerance
+                output is null
+                || output.HasVideo != video
+                || !LengthHolds(output.Duration, range.Length, video)
                 || output.HasAudio != (track is not null)
             )
             {
@@ -456,6 +510,14 @@ public static class ClipExporter
         {
             await FFmpeg.DeleteOutputAsync(temporary);
         }
+    }
+
+    private static bool LengthHolds(double written, double asked, bool video)
+    {
+        // Sound Alone May End Before A Window's Held Last Frame
+        return video
+            ? Math.Abs(written - asked) <= DurationTolerance
+            : written - asked <= DurationTolerance;
     }
 
     private static string Keep(ExportRequest request, string temporary)
@@ -477,7 +539,9 @@ public static class ClipExporter
         int Height,
         double FrameRate,
         int? AudioTrack,
-        string Crop
+        string Crop,
+        double AudioBitsPerSecond,
+        bool Video
     );
 
     private static async Task EncodeAsync(
@@ -514,6 +578,9 @@ public static class ClipExporter
             job.Request.SourcePath,
             "-t",
             FFmpeg.Seconds(range.Length),
+        ];
+        List<string> picture =
+        [
             "-map",
             "0:v:0",
             "-vf",
@@ -535,15 +602,17 @@ public static class ClipExporter
         List<string> output = [];
         if (job.AudioTrack is { } track)
         {
+            // Sound Alone Retries Its Own Bitrate, Else The Budget's
+            var sound = job.Video ? job.AudioBitsPerSecond : bitrate;
             output.AddRange([
                 "-map",
                 string.Create(CultureInfo.InvariantCulture, $"0:a:{track}"),
                 "-c:a",
                 "aac",
                 "-b:a",
-                "128k",
+                string.Create(CultureInfo.InvariantCulture, $"{(int)(sound / 1000)}k"),
                 "-ac",
-                "2",
+                sound < SizeBudget.StereoBitsPerSecond ? "1" : "2",
                 "-ar",
                 "48000",
             ]);
@@ -551,10 +620,25 @@ public static class ClipExporter
 
         output.AddRange(["-movflags", "+faststart", "-f", "mp4", job.Output]);
         var label = attempt == 1 ? "" : $"Try {attempt}, ";
+        if (!job.Video)
+        {
+            // AAC Lands Its Bitrate In One Pass
+            await RunPassAsync(
+                [.. input, .. output],
+                range.Length,
+                $"{label}Encoding",
+                0,
+                1,
+                progress,
+                token
+            );
+            return;
+        }
+
         if (encoder.IsHardware)
         {
             await RunPassAsync(
-                [.. input, .. output],
+                [.. input, .. picture, .. output],
                 range.Length,
                 $"{label}Encoding on {encoder.Name}",
                 0,
@@ -569,7 +653,18 @@ public static class ClipExporter
         // Two Passes Of x264 Land A Bitrate Accurately
         var passLog = Path.Combine(job.WorkFolder, "export-pass");
         await RunPassAsync(
-            [.. input, "-passlogfile", passLog, "-pass", "1", "-an", "-f", "null", "NUL"],
+            [
+                .. input,
+                .. picture,
+                "-passlogfile",
+                passLog,
+                "-pass",
+                "1",
+                "-an",
+                "-f",
+                "null",
+                "NUL",
+            ],
             range.Length,
             $"{label}Analysing",
             0,
@@ -578,7 +673,7 @@ public static class ClipExporter
             token
         );
         await RunPassAsync(
-            [.. input, "-passlogfile", passLog, "-pass", "2", .. output],
+            [.. input, .. picture, "-passlogfile", passLog, "-pass", "2", .. output],
             range.Length,
             $"{label}Encoding",
             0.5,

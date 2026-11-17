@@ -765,6 +765,9 @@ public sealed class ClipLibrary : IDisposable
                 .. streams,
                 "-c",
                 "copy",
+                // A Still Window's Held Last Frame Ends At The Selection
+                "-bsf:v",
+                $"setts=duration=min(DURATION\\,max(1\\,{FFmpeg.Seconds(range.Length)}/TB-PTS))",
                 "-movflags",
                 "+faststart",
                 "-f",

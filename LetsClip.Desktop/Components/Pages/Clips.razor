@@ -88,6 +88,7 @@
                                      Color="Color.Info"
                                      CheckedIcon="@Icons.Material.Rounded.CheckBox"
                                      UncheckedIcon="@Icons.Material.Rounded.CheckBoxOutlineBlank"
+                                     Disabled="@UneditedDisabled"
                                      Dense>
                             <MudStack Row
                                       AlignItems="AlignItems.Center"
@@ -114,6 +115,7 @@
                                       ClearIcon="@Icons.Material.Rounded.Clear"
                                       Variant="Variant.Outlined"
                                       Margin="Margin.Dense"
+                                      Disabled="@OneSource"
                                       aria-label="Search Sources"
                                       Class="my-0" />
                     </MudElement>
@@ -128,7 +130,7 @@
                                          Color="Color.Info"
                                          CheckedIcon="@Icons.Material.Rounded.CheckBox"
                                          UncheckedIcon="@Icons.Material.Rounded.CheckBoxOutlineBlank"
-                                         Disabled="@(Games.Count < 2)"
+                                         Disabled="@OneSource"
                                          Dense>
                                 <MudStack Row
                                           AlignItems="AlignItems.Center"

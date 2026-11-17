@@ -30,8 +30,17 @@
         <SettingRow Title="Vertical"
                     Switch="IsVertical"
                     SwitchChanged="VerticalChanged"
-                    SwitchDisabled="@(IsExporting || Busy)" />
+                    SwitchDisabled="@(IsExporting || Busy || !KeepsVideo)" />
     }
+    <SettingRow Title="Video">
+        @* Video Button *@
+        <IconButton Icon="@(KeepsVideo ? Icons.Material.Rounded.Videocam : Icons.Material.Rounded.VideocamOff)"
+                    Text="@(KeepsVideo ? "Leave Out Video" : "Keep Video")"
+                    Color="@(KeepsVideo ? Color.Default : Color.Error)"
+                    Filled
+                    Disabled="@VideoLocked"
+                    OnClick="ToggleVideo" />
+    </SettingRow>
     @if (Media.HasSeparateTracks)
     {
         <SettingRow Title="Game Audio">
@@ -40,7 +49,7 @@
                         Text="@(KeepsGame ? "Mute Game Audio" : "Unmute Game Audio")"
                         Color="@(KeepsGame ? Color.Default : Color.Error)"
                         Filled
-                        Disabled="@(IsExporting || Busy)"
+                        Disabled="@SoundLocked(true)"
                         OnClick="ToggleAudio" />
         </SettingRow>
         <SettingRow Title="Microphone">
@@ -49,7 +58,7 @@
                         Text="@(KeepsMicrophone ? "Mute Microphone" : "Unmute Microphone")"
                         Color="@(KeepsMicrophone ? Color.Default : Color.Error)"
                         Filled
-                        Disabled="@(IsExporting || Busy)"
+                        Disabled="@SoundLocked(false)"
                         OnClick="ToggleMicrophone" />
         </SettingRow>
     }
@@ -61,7 +70,7 @@
                         Text="@(WithAudio ? "Mute Audio" : "Unmute Audio")"
                         Color="@(WithAudio ? Color.Default : Color.Error)"
                         Filled
-                        Disabled="@(IsExporting || Busy)"
+                        Disabled="@SoundLocked(true)"
                         OnClick="ToggleAudio" />
         </SettingRow>
     }
@@ -76,6 +85,7 @@
                       Prefix="About"
                       data-copy-audio="@CopyAudioText"
                       data-copy-file="@Clip.SizeBytes"
+                      data-copy-video="@KeepsVideo"
                       data-copy-whole="@CopiesFile(CopiedTracks)" />
     </SettingRow>
     <SettingRow Title="Resolution">
