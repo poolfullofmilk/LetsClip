@@ -19,21 +19,12 @@
             </MudText>
             <MudSpacer />
             @* Clip Search *@
-            <MudTextField T="string"
-                          Value="s_query"
-                          ValueChanged="SearchAsync"
-                          Immediate
-                          DebounceInterval="250"
-                          Placeholder="Search"
-                          Adornment="Adornment.Start"
-                          AdornmentIcon="@Icons.Material.Rounded.Search"
-                          Clearable
-                          ClearIcon="@Icons.Material.Rounded.Clear"
-                          Variant="Variant.Outlined"
-                          Margin="Margin.Dense"
-                          Disabled="@(s_clips is not { Count: > 0 })"
-                          aria-label="Search Clips"
-                          Class="clip-search my-0" />
+            <SearchField Value="@s_query"
+                         ValueChanged="SearchAsync"
+                         DebounceInterval="250"
+                         Disabled="@(s_clips is not { Count: > 0 })"
+                         aria-label="Search Clips"
+                         Class="clip-search my-0" />
             @* Sort Menu *@
             <Tooltip Text="Sort Clips"
                      Disabled="@(shown.Count < 2)">
@@ -105,19 +96,10 @@
                     <MudElement HtmlTag="div"
                                 Class="pa-3">
                         @* Game Search *@
-                        <MudTextField T="string"
-                                      @bind-Value="_search"
-                                      Immediate
-                                      Placeholder="Search Sources"
-                                      Adornment="Adornment.Start"
-                                      AdornmentIcon="@Icons.Material.Rounded.Search"
-                                      Clearable
-                                      ClearIcon="@Icons.Material.Rounded.Clear"
-                                      Variant="Variant.Outlined"
-                                      Margin="Margin.Dense"
-                                      Disabled="@OneSource"
-                                      aria-label="Search Sources"
-                                      Class="my-0" />
+                        <SearchField @bind-Value="_search"
+                                     Placeholder="Search Sources"
+                                     Disabled="@OneSource"
+                                     aria-label="Search Sources" />
                     </MudElement>
                     <MudElement HtmlTag="div"
                                 Class="filter-list">

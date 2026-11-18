@@ -49,6 +49,7 @@ public sealed class Tray
     // What A Click On The Latest Balloon Does
     private Action? _balloonClick;
     private bool _isUpdating;
+    private Task<ReleaseInfo?>? _updateCheck;
 
     // The Game Last Announced, Restarts Never Repeat It
     private string? _announcedGame;
@@ -267,7 +268,15 @@ public sealed class Tray
         }
     }
 
-    private async Task<ReleaseInfo?> FindUpdateAsync()
+    private Task<ReleaseInfo?> FindUpdateAsync()
+    {
+        // The Start's Check And The First Open Share One Request
+        return _updateCheck is { IsCompleted: false } running
+            ? running
+            : _updateCheck = CheckForUpdateAsync();
+    }
+
+    private async Task<ReleaseInfo?> CheckForUpdateAsync()
     {
         // A Newer Release Gets Its Dialog And The Red Dot
         var latest = await Updater.CheckAsync();

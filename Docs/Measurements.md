@@ -398,3 +398,27 @@ Gaming PC, Debug sandbox at 1728 x 908 and 1920 x 1009 on the 240 Hz monitor, 59
 | 7 minute Record saved | 1700 s joined and saved in 2.3 s (16 November) | 425.8 s, 1.18 GB, a gigabyte spilled, saved in 1.8 s |
 | HEVC against H.264 on AMF at capture rates, clean 540p reference | 36.21 / 34.48 / 32.76 dB at 7 / 5 / 3.5 Mbps | 36.60 / 34.98 / 33.41 dB, not shipped |
 | Export loudness of the owner's match | -24.7 LUFS, true peak -6.5 dBFS | -16.3 LUFS, true peaks -1.6 (Opus) and -2.0 dBFS (AAC) |
+
+## The Work Laptop's Log, 18 November 2026
+
+Gaming PC (7800X3D reporting 8 threads, RX 9070 XT, AMF), master against the round, each through the same tools (`Docs/Verify.md`).
+
+| What | Master | The round |
+|---|---|---|
+| Two CPUs starved by four Highest threads (400 ms on, 100 off), a minute | 2 to 3 holes, 100 to 212 ms, packets up to 360 ms late, one drop logged | No hole |
+| The same with six threads (600 on, 50 off) | 2 holes, 104 ms, one drop logged | No hole |
+| The whole process frozen 9 times for 250 ms | 9 holes, 1471 ms | No hole |
+| The whole process frozen 9 times for 400 ms | 10 holes, 2761 ms, one drop logged | 1 hole of 56 ms, logged as one incident |
+| The default device reconnected 10 times | 11 starts, 10 holes of 10 ms | 1 start, no hole |
+| A process loopback recorder switched 10 times | 10 holes, 41 to 48 ms each (478 ms) | No hole |
+| A save of a minute, waiting for the press's segments | 810 to 1047 ms, file in 1.0 to 1.2 s | 870 to 1106 ms, file in 1.0 to 1.3 s |
+| Second monitor 165 to 144 Hz and back, Record running on the first | Session lost twice, Record saved at the change (1m4.5s), next save 9.5 s | Duplication back in 5 and 2 ms, Record of 87.00 s picture and 87.01 s sound to Stop, next save 60.01 s, one 233 ms held frame |
+| Update checks at a shown start | Two, 10 ms apart | One |
+| All on, then off, in Games and Apps (30 apps) | 30 in `AddedGames` and 30 in `RemovedGames` | Both empty, the old `claude` leftover too |
+| A single click on the editor's Video button | One change | One change (a double click 77 ms apart flips twice on both, as on the laptop) |
+| `WEBVIEW2_` variables in the capture's FFmpeg processes | `WEBVIEW2_USER_DATA_FOLDER` and the browser flags | None |
+| Recording the 2560 x 1440 monitor at 1080p60 in the tray, 30 s | LetsClip 1.0% of a core and 294 MB, audio FFmpeg 7.7%, video FFmpeg 58.8%, 34 threads | 0.9% and 315 MB, 8.6%, 59.7%, 33 threads |
+
+- Packets reaching a normal priority recorder in that starvation arrived up to 149 to 360 ms late; a recorder in the `Audio` class stayed on time (latest -19 ms at its end).
+- A D3D11 process at AboveNormal CPU priority still has Normal GPU priority (`D3DKMTGetProcessSchedulingPriorityClass` on the Claude app's and a WebView2 browser process), so the capture's AboveNormal FFmpeg never gets ahead of other apps on the graphics card.
+- FFmpeg's third build (`ffmpeg.zip` of the `ffmpeg` pre-release): 11.4 MB zipped, 28 MB unpacked, built in about 20 minutes at idle priority with four jobs; a 3 s `ddagrab` capture into AMF kept 180 of 180 frames.

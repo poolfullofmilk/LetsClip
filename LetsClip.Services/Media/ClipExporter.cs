@@ -708,14 +708,7 @@ public static class ClipExporter
             "-fps_mode",
             "cfr",
             .. VideoArguments(encoder, bitrate, job.FrameRate),
-            "-colorspace",
-            "bt709",
-            "-color_primaries",
-            "bt709",
-            "-color_trc",
-            "bt709",
-            "-color_range",
-            "tv",
+            .. VideoEncoders.ColourTags,
         ];
         List<string> output = [];
         if (job.AudioTrack is { } track)
@@ -837,9 +830,9 @@ public static class ClipExporter
             "-g",
             group,
         ];
-        List<string> specific = encoder.Codec switch
+        string[] specific = encoder.Codec switch
         {
-            "h264_amf" =>
+            "h264_amf" or "hevc_amf" =>
             [
                 "-usage",
                 "transcoding",
@@ -847,26 +840,8 @@ public static class ClipExporter
                 "quality",
                 "-rc",
                 "vbr_peak",
-                "-bf",
-                "3",
             ],
-            "hevc_amf" => ["-usage", "transcoding", "-quality", "quality", "-rc", "vbr_peak"],
-            "h264_nvenc" =>
-            [
-                "-preset",
-                "p6",
-                "-tune",
-                "hq",
-                "-rc",
-                "vbr",
-                "-multipass",
-                "fullres",
-                "-spatial-aq",
-                "1",
-                "-bf",
-                "3",
-            ],
-            "hevc_nvenc" =>
+            "h264_nvenc" or "hevc_nvenc" =>
             [
                 "-preset",
                 "p6",
@@ -879,15 +854,18 @@ public static class ClipExporter
                 "-spatial-aq",
                 "1",
             ],
-            "h264_qsv" => ["-preset", "slower", "-bf", "3"],
-            "hevc_qsv" => ["-preset", "slower"],
+            "h264_qsv" or "hevc_qsv" => ["-preset", "slower"],
             _ => ["-preset", "medium"],
         };
+
+        // A Card's H.264 Takes Three B Frames, Its HEVC None
+        string[] frames = encoder.IsHardware && !encoder.IsHevc ? ["-bf", "3"] : [];
+
         // Tagged hvc1, So Apple Devices Play It Too
         string[] profile = encoder.IsHevc
             ? ["-profile:v", "main", "-tag:v", "hvc1"]
             : ["-profile:v", "high"];
-        return ["-c:v", encoder.Codec, .. specific, .. profile, .. rate];
+        return ["-c:v", encoder.Codec, .. specific, .. frames, .. profile, .. rate];
     }
 
     private static async Task RunPassAsync(

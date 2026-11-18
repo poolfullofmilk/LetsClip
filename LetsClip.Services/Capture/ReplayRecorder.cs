@@ -80,6 +80,9 @@ public sealed partial class ReplayRecorder : IDisposable
     private int _problemTicks;
     private bool _windowQuiet;
 
+    // A Stalled Session Fails Once, Its Shutdown Takes Seconds
+    private long _stalledOrigin;
+
     public ReplayRecorder(ClipLibrary library)
     {
         _library = library;
@@ -443,6 +446,7 @@ public sealed partial class ReplayRecorder : IDisposable
         if (
             session?.Video is not { } video
             || session.Stopping
+            || session.OriginTimestamp == _stalledOrigin
             || Status.State != CaptureState.Recording
         )
         {
@@ -458,6 +462,7 @@ public sealed partial class ReplayRecorder : IDisposable
             s_logger.Warn(
                 $"Stalled, {videoSince.TotalSeconds:0} s Since A Video Segment And {audioSince.TotalSeconds:0} s Since An Audio One"
             );
+            _stalledOrigin = session.OriginTimestamp;
             _ = FailAsync(session, "Capture stalled, nothing arrived for several seconds");
             return;
         }

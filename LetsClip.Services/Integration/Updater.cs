@@ -476,7 +476,7 @@ public static class Updater
             startInfo.ArgumentList.Add(argument);
         }
 
-        Process.Start(startInfo)?.Dispose();
+        Process.Start(startInfo.WithoutWebView())?.Dispose();
     }
 
     public static string? DownloadOf(string[] arguments)
@@ -739,7 +739,7 @@ public static class Updater
                     UseShellExecute = false,
                     CreateNoWindow = true,
                     WorkingDirectory = Path.GetTempPath(),
-                }
+                }.WithoutWebView()
             )
             ?.Dispose();
     }

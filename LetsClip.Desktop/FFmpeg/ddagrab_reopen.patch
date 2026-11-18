@@ -1,0 +1,221 @@
+--- a/libavfilter/vsrc_ddagrab.c
++++ b/libavfilter/vsrc_ddagrab.c
+@@ -24,6 +24,7 @@
+ #endif
+ 
+ #include <windows.h>
++#include <wchar.h>
+ 
+ #define COBJMACROS
+ 
+@@ -52,6 +53,11 @@
+ #define TIMER_RES 1000000
+ #define TIMER_RES64 INT64_C(1000000)
+ 
++// A lost duplication (a display mode or topology change, a secure desktop)
++// is opened again this often, and the capture ends if it stays lost this long
++#define REOPEN_PERIOD INT64_C(100000)
++#define REOPEN_LIMIT  INT64_C(30000000)
++
+ typedef struct DdagrabContext {
+     const AVClass *class;
+ 
+@@ -77,6 +83,8 @@
+     int64_t time_frame;
+     int64_t time_timeout;
+     int64_t first_pts;
++    int64_t lost_since;
++    int64_t reopen_at;
+ 
+     DXGI_FORMAT raw_format;
+     int raw_width;
+@@ -169,13 +177,16 @@
+     av_buffer_unref(&dda->device_ref);
+ }
+ 
+-static av_cold int init_dxgi_dda(AVFilterContext *avctx)
++static int init_dxgi_dda(AVFilterContext *avctx, int reopen)
+ {
+     DdagrabContext *dda = avctx->priv;
+     IDXGIDevice *dxgi_device = NULL;
+     IDXGIAdapter *dxgi_adapter = NULL;
+     IDXGIOutput *dxgi_output = NULL;
+     IDXGIOutput1 *dxgi_output1 = NULL;
++    DXGI_OUTPUT_DESC output_desc;
++    // Reopening is retried quietly until it works or gives up
++    int level = reopen ? AV_LOG_VERBOSE : AV_LOG_ERROR;
+ #if HAVE_IDXGIOUTPUT5 && HAVE_DPI_AWARENESS_CONTEXT
+     IDXGIOutput5 *dxgi_output5 = NULL;
+ 
+@@ -204,17 +215,31 @@
+     IDXGIAdapter_Release(dxgi_adapter);
+     dxgi_adapter = NULL;
+     if (FAILED(hr)) {
+-        av_log(avctx, AV_LOG_ERROR, "Failed to enumerate DXGI output %d\n", dda->output_idx);
++        av_log(avctx, level, "Failed to enumerate DXGI output %d\n", dda->output_idx);
+         return AVERROR_EXTERNAL;
+     }
+ 
+-    hr = IDXGIOutput_GetDesc(dxgi_output, &dda->output_desc);
++    hr = IDXGIOutput_GetDesc(dxgi_output, &output_desc);
+     if (FAILED(hr)) {
+         IDXGIOutput_Release(dxgi_output);
+-        av_log(avctx, AV_LOG_ERROR, "Failed getting output description\n");
++        av_log(avctx, level, "Failed getting output description\n");
+         return AVERROR_EXTERNAL;
+     }
+ 
++    // A reopened output must be the same display, at the same size and turn
++    if (reopen && (wcsncmp(output_desc.DeviceName, dda->output_desc.DeviceName,
++                           FF_ARRAY_ELEMS(output_desc.DeviceName)) ||
++                   output_desc.Rotation != dda->output_desc.Rotation ||
++                   output_desc.DesktopCoordinates.right - output_desc.DesktopCoordinates.left !=
++                   dda->output_desc.DesktopCoordinates.right - dda->output_desc.DesktopCoordinates.left ||
++                   output_desc.DesktopCoordinates.bottom - output_desc.DesktopCoordinates.top !=
++                   dda->output_desc.DesktopCoordinates.bottom - dda->output_desc.DesktopCoordinates.top)) {
++        IDXGIOutput_Release(dxgi_output);
++        av_log(avctx, AV_LOG_ERROR, "DXGI output %d now shows another display or mode\n", dda->output_idx);
++        return AVERROR(EIO);
++    }
++    dda->output_desc = output_desc;
++
+ #if HAVE_IDXGIOUTPUT5 && HAVE_DPI_AWARENESS_CONTEXT
+     user32_module = dlopen("user32.dll", 0);
+     if (!user32_module) {
+@@ -299,19 +324,19 @@
+     }
+ 
+     if (hr == DXGI_ERROR_NOT_CURRENTLY_AVAILABLE) {
+-        av_log(avctx, AV_LOG_ERROR, "Too many open duplication sessions\n");
++        av_log(avctx, level, "Too many open duplication sessions\n");
+         return AVERROR(EBUSY);
+     } else if (hr == DXGI_ERROR_UNSUPPORTED) {
+-        av_log(avctx, AV_LOG_ERROR, "Selected output not supported\n");
++        av_log(avctx, level, "Selected output not supported\n");
+         return AVERROR_EXTERNAL;
+     } else if (hr == E_INVALIDARG) {
+-        av_log(avctx, AV_LOG_ERROR, "Invalid output duplication argument\n");
++        av_log(avctx, level, "Invalid output duplication argument\n");
+         return AVERROR(EINVAL);
+     } else if (hr == E_ACCESSDENIED) {
+-        av_log(avctx, AV_LOG_ERROR, "Desktop duplication access denied\n");
++        av_log(avctx, level, "Desktop duplication access denied\n");
+         return AVERROR(EPERM);
+     } else if (FAILED(hr)) {
+-        av_log(avctx, AV_LOG_ERROR, "Failed duplicating output\n");
++        av_log(avctx, level, "Failed duplicating output\n");
+         return AVERROR_EXTERNAL;
+     }
+ 
+@@ -684,6 +709,46 @@
+     return 0;
+ }
+ 
++static void lose_duplication(AVFilterContext *avctx)
++{
++    DdagrabContext *dda = avctx->priv;
++
++    release_resource(&dda->dxgi_outdupl);
++    dda->lost_since = dda->reopen_at = av_gettime_relative();
++    av_log(avctx, AV_LOG_WARNING, "Desktop duplication lost, reopening\n");
++}
++
++static int reopen_duplication(AVFilterContext *avctx)
++{
++    DdagrabContext *dda = avctx->priv;
++    int64_t now = av_gettime_relative();
++    int ret;
++
++    if (now < dda->reopen_at) {
++        // Without duplicated frames the caller asks again at once
++        if (!dda->dup_frames)
++            av_usleep(dda->reopen_at - now);
++        return AVERROR(EAGAIN);
++    }
++
++    ret = init_dxgi_dda(avctx, 1);
++    if (ret == AVERROR(EIO))
++        return ret;
++    if (ret < 0) {
++        if (now - dda->lost_since > REOPEN_LIMIT) {
++            av_log(avctx, AV_LOG_ERROR, "Desktop duplication not regained in %d s\n",
++                   (int)(REOPEN_LIMIT / TIMER_RES64));
++            return ret;
++        }
++        dda->reopen_at = now + REOPEN_PERIOD;
++        return AVERROR(EAGAIN);
++    }
++
++    av_log(avctx, AV_LOG_WARNING, "Desktop duplication regained after %d ms\n",
++           (int)((now - dda->lost_since) / 1000));
++    return 0;
++}
++
+ static int next_frame_internal(AVFilterContext *avctx, ID3D11Texture2D **desktop_texture, int need_frame)
+ {
+     DXGI_OUTDUPL_FRAME_INFO frame_info;
+@@ -692,6 +757,12 @@
+     HRESULT hr;
+     int ret;
+ 
++    if (!dda->dxgi_outdupl) {
++        ret = reopen_duplication(avctx);
++        if (ret < 0)
++            return ret;
++    }
++
+     hr = IDXGIOutputDuplication_AcquireNextFrame(
+         dda->dxgi_outdupl,
+         dda->time_timeout,
+@@ -699,6 +770,10 @@
+         &desktop_resource);
+     if (hr == DXGI_ERROR_WAIT_TIMEOUT) {
+         return AVERROR(EAGAIN);
++    } else if (hr == DXGI_ERROR_ACCESS_LOST) {
++        // Duplicated frames hold the picture until the output is back
++        lose_duplication(avctx);
++        return AVERROR(EAGAIN);
+     } else if (FAILED(hr)) {
+         av_log(avctx, AV_LOG_ERROR, "AcquireNextFrame failed: %lx\n", hr);
+         return AVERROR_EXTERNAL;
+@@ -770,7 +845,9 @@
+     release_resource(&desktop_resource);
+ 
+     hr = IDXGIOutputDuplication_ReleaseFrame(dda->dxgi_outdupl);
+-    if (FAILED(hr))
++    if (hr == DXGI_ERROR_ACCESS_LOST)
++        lose_duplication(avctx);
++    else if (FAILED(hr))
+         av_log(avctx, AV_LOG_ERROR, "DDA error ReleaseFrame failed!\n");
+ 
+     return ret;
+@@ -888,7 +965,7 @@
+ 
+     dda->device_hwctx = (AVD3D11VADeviceContext*)dda->device_ctx->hwctx;
+ 
+-    ret = init_dxgi_dda(avctx);
++    ret = init_dxgi_dda(avctx, 0);
+     if (ret < 0)
+         return ret;
+ 
+@@ -1192,7 +1269,10 @@
+     release_resource(&cur_texture);
+ 
+     hr = IDXGIOutputDuplication_ReleaseFrame(dda->dxgi_outdupl);
+-    if (FAILED(hr)) {
++    if (hr == DXGI_ERROR_ACCESS_LOST) {
++        // This frame was copied already, the next one reopens the output
++        lose_duplication(avctx);
++    } else if (FAILED(hr)) {
+         av_log(avctx, AV_LOG_ERROR, "DDA ReleaseFrame failed!\n");
+         ret = AVERROR_EXTERNAL;
+         goto fail;
+@@ -1238,7 +1318,7 @@
+     if (frame)
+         av_frame_free(&frame);
+ 
+-    if (cur_texture)
++    if (cur_texture && dda->dxgi_outdupl)
+         IDXGIOutputDuplication_ReleaseFrame(dda->dxgi_outdupl);
+ 
+     release_resource(&cur_texture);

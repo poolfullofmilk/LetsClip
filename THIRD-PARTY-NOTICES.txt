@@ -11,19 +11,19 @@ capture (ddagrab, gfxcapture), encoding, segmenting, probing, pictures and
 exports.
 
 The shipped binaries are built from the FFmpeg 9.0.2 release tarball
-(https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz) with two patches,
-LetsClip.Desktop\FFmpeg\scale_d3d11.patch and gfxcapture_lanczos.patch, by
-the script LetsClip.Desktop\FFmpeg\Build-FFmpeg.ps1 in the LetsClip
-repository, and
-published as the asset ffmpeg-9.0.2-letsclip-2.zip of the pre-release
-https://github.com/poolfullofmilk/LetsClip/releases/tag/ffmpeg-9.0.2-letsclip-2
+(https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz) with three patches,
+LetsClip.Desktop\FFmpeg\scale_d3d11.patch, gfxcapture_lanczos.patch and
+ddagrab_reopen.patch, by the script LetsClip.Desktop\FFmpeg\Build-FFmpeg.ps1
+in the LetsClip repository, and
+published as the asset ffmpeg.zip of the pre-release
+https://github.com/poolfullofmilk/LetsClip/releases/tag/ffmpeg
 
 It is configured with --enable-gpl and links in libx264, so this FFmpeg build
 is licensed under the GNU General Public License v2 or later. Its full licence
 text ships beside the binaries as FFmpeg\LICENSE.txt. The complete
 corresponding source is the FFmpeg 9.0.2 release with those patches, the build
 script and the MSYS2 packages it names, linked in statically: x264
-0.165.r3222.b35605a (GPL v2 or later), dav1d 1.5.4 (BSD 2 clause), opus
+0.165.r3222.b35605a (GPL v2 or later), dav1d 1.5.5 (BSD 2 clause), opus
 1.6.1 (BSD 3 clause), libvpl 2.17.0 (MIT), zlib 1.4 (zlib licence), AMF
 headers 1.5.3 (MIT) and NVENC headers 13.0.19.0 (MIT). It is compiled with
 GCC 16.2.0, whose libgcc and libstdc++ are linked in under the GCC Runtime

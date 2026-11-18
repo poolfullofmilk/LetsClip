@@ -352,25 +352,37 @@ public sealed class CaptureController : IDisposable
             .Select(game => game.Key)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var keys = games.Select(game => game.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var installed = _installedGames;
         UpdateSettings(settings =>
-            settings with
+        {
+            // Apps Are Added Entries No Library Holds, None Before Scanning
+            var removed = (settings.RemovedGames ?? []).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var apps = (settings.AddedGames ?? [])
+                .Where(game => installed?.ContainsKey(game.Key) == false)
+                .Select(game => game.Key)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            bool IsOff(string key) => keys.Contains(key) ? !recorded : removed.Contains(key);
+            return settings with
             {
-                AddedGames = recorded
-                    ?
-                    [
-                        .. settings.AddedGames ?? [],
-                        .. games.Where(game => !listed.Contains(game.Key)),
-                    ]
-                    : settings.AddedGames,
+                // An App Switched Off Leaves, Old Versions Kept Both
+                AddedGames =
+                [
+                    .. (settings.AddedGames ?? []).Where(game =>
+                        !apps.Contains(game.Key) || !IsOff(game.Key)
+                    ),
+                    .. recorded ? games.Where(game => !listed.Contains(game.Key)) : [],
+                ],
+
+                // Only Library Games Are Kept Switched Off
                 RemovedGames =
                 [
-                    .. (settings.RemovedGames ?? []).Where(entry => !keys.Contains(entry)),
+                    .. removed.Where(key => !keys.Contains(key) && !apps.Contains(key)),
                     .. recorded
                         ? []
-                        : games.Where(game => listed.Contains(game.Key)).Select(game => game.Key),
+                        : keys.Where(key => listed.Contains(key) && !apps.Contains(key)),
                 ],
-            }
-        );
+            };
+        });
     }
     #endregion
 
@@ -664,6 +676,20 @@ public sealed class CaptureController : IDisposable
         if ((settings.GamesOnly && window == 0) || (monitor ?? SelectedMonitor) is not { } shown)
         {
             return null;
+        }
+
+        // Moved Or No Longer Primary, The Same Picture Keeps Recording
+        if (
+            Recorder.Options?.Monitor is { } running
+            && running with
+            {
+                Left = shown.Left,
+                Top = shown.Top,
+                IsPrimary = shown.IsPrimary,
+            } == shown
+        )
+        {
+            shown = running;
         }
 
         // Only The Game's And Discord's Sound, Else Everything Windows Plays

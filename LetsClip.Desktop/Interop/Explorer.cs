@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using LetsClip.Data.Helpers;
 using LetsClip.Services.Media;
 using Microsoft.VisualBasic.FileIO;
 using NLog;
@@ -25,8 +26,8 @@ public static class Explorer
 
     public static void Open(string target)
     {
-        // A File Or A Link In Its Default App
-        Start(new ProcessStartInfo(target) { UseShellExecute = true });
+        // A File Or Link In Its Default App, Through Explorer
+        Start(new ProcessStartInfo("explorer.exe", $"\"{target}\""));
     }
 
     public static void OpenFolder(string folder)
@@ -77,7 +78,7 @@ public static class Explorer
     {
         try
         {
-            Process.Start(startInfo)?.Dispose();
+            Process.Start(startInfo.WithoutWebView())?.Dispose();
         }
         catch (Win32Exception exception)
         {

@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using LetsClip.Services.Games;
@@ -16,7 +17,13 @@ public sealed class AudioMixer : IDisposable
     private const int Channels = 2;
 
     // Writes Trail Real Time So Late Packets Still Land
-    private const int TrailFrames = SampleRate * 100 / 1000;
+    private const int TrailFrames = SampleRate * 300 / 1000;
+
+    // Windows Keeps A Second While A Capture Thread Waits
+    private const int BufferMilliseconds = 1000;
+
+    // Capture Threads Run In Windows' Audio Class, Never Starved
+    private const string ThreadClass = "Audio";
 
     // 40 ms Chunks, Fewer Wakeups Keep The CPU Asleep
     private const int ChunkFrames = SampleRate / 25;
@@ -122,7 +129,8 @@ public sealed class AudioMixer : IDisposable
             Reconnect(source => source.Wants(eventArgs.DeviceId));
         foreach (var source in _sources)
         {
-            source.Connect();
+            // A Slow Device Joins Later, Capture Starts Without It
+            _ = Task.Run(source.Connect);
         }
 
         if (systemId is not null && gameProcess != 0)
@@ -300,6 +308,10 @@ public sealed class AudioMixer : IDisposable
 
                 output.Write(MemoryMarshal.AsBytes(mix.AsSpan()));
                 _emittedFrames += ChunkFrames;
+                foreach (var source in _sources)
+                {
+                    source.ReportLate(closing: false);
+                }
             }
         }
         catch (Exception exception) when (exception is IOException or ObjectDisposedException)
@@ -349,17 +361,35 @@ public sealed class AudioMixer : IDisposable
         // Drift Past 2 ms Slews One Frame Per Packet
         private const int DriftFrames = SampleRate / 500;
 
+        // Late Packets Ten Seconds Apart Are Separate Incidents
+        private static readonly TimeSpan s_lateQuiet = TimeSpan.FromSeconds(10);
+
+        // An Idle Loopback Sends Nothing, A Handover Waits This Long
+        private static readonly TimeSpan s_handover = TimeSpan.FromSeconds(1);
+
         private readonly float[] _ring = new float[RingFrames * Channels];
         private readonly Lock _gate = new();
         private readonly Lock _connection = new();
+        private readonly ManualResetEventSlim _tookOver = new();
         private WasapiRecorder? _recorder;
+        private WasapiRecorder? _pending;
+        private bool _pendingStopped;
+        private string? _deviceId;
+        private string? _from;
+        private volatile bool _offDefault;
         private long? _expectedFrame;
         private long _drainedFrame;
         private long _slewedFrames;
-
         private bool _disposed;
+
+        // One Incident Of Late Packets, Logged Once It Ends
+        private DateTime? _lateSince;
+        private DateTime _lateUntil;
+        private long _lateSeen;
         private long _lateFrames;
-        private long _lateReported;
+        private long _lateWorstFrames;
+        private int _lateGaps;
+        private bool _lastWasLate;
 
         public string? Problem { get; private set; }
 
@@ -379,7 +409,7 @@ public sealed class AudioMixer : IDisposable
             var isPicked = string.Equals(changedId, deviceId, StringComparison.OrdinalIgnoreCase);
             return processId == 0
                 && (
-                    (Problem is not null && (FollowsDefault || isPicked))
+                    ((Problem is not null || _offDefault) && (FollowsDefault || isPicked))
                     || (FollowsDefault && isPicked)
                 );
         }
@@ -393,22 +423,66 @@ public sealed class AudioMixer : IDisposable
                     return;
                 }
 
-                Disconnect();
+                var starting = Stopwatch.GetTimestamp();
+                WasapiRecorder? recorder = null;
                 try
                 {
-                    var (recorder, from) = Build();
-                    recorder.DataAvailable += OnData;
-                    recorder.RecordingStopped += OnStopped;
+                    // The Device Already Recorded Is Kept, A Restart Would Gap
+                    var endpoint = Target();
+                    if (
+                        endpoint is not null
+                        && Problem is null
+                        && _recorder is not null
+                        && endpoint.ID == _deviceId
+                    )
+                    {
+                        _offDefault = false;
+                        return;
+                    }
+
+                    (recorder, var from) = Build(endpoint);
+                    var built = recorder;
+                    recorder.DataAvailable += (buffer, flags, _, counter) =>
+                        OnData(built, buffer, flags, counter);
+                    recorder.RecordingStopped += (_, eventArgs) => OnStopped(built, eventArgs);
+                    WasapiRecorder? previous;
+                    lock (_gate)
+                    {
+                        previous = _recorder;
+                        (_pending, _pendingStopped) = (recorder, false);
+                    }
+
+                    _tookOver.Reset();
+                    recorder.StartRecording();
+                    var took = Stopwatch.GetElapsedTime(starting).TotalMilliseconds;
+
+                    // The Old Recorder Writes Until The New One's First Sound
+                    if (previous is not null)
+                    {
+                        _tookOver.Wait(s_handover);
+                    }
 
                     lock (_gate)
                     {
-                        _expectedFrame = null;
+                        _pending = null;
+                        if (_pendingStopped)
+                        {
+                            throw new InvalidOperationException("The new recorder stopped");
+                        }
+
+                        if (_recorder != recorder)
+                        {
+                            _recorder = recorder;
+                            _expectedFrame = null;
+                        }
                     }
 
-                    _recorder = recorder;
-                    recorder.StartRecording();
+                    Release(previous);
+                    (_deviceId, _from, _offDefault) = (endpoint?.ID, from, false);
                     Problem = null;
-                    s_logger.Info($"Started {kind} From {from}");
+                    s_logger.Info(
+                        $"Started {kind} From {from}{(took >= 100 ? $" In {took:0} ms" : "")}"
+                    );
                 }
                 catch (Exception exception)
                     when (exception
@@ -418,6 +492,26 @@ public sealed class AudioMixer : IDisposable
                                 or NotSupportedException
                     )
                 {
+                    lock (_gate)
+                    {
+                        _pending = null;
+                    }
+
+                    if (recorder is not null && recorder != _recorder)
+                    {
+                        Release(recorder);
+                    }
+
+                    // A Failed Start Keeps The Running Device Recording
+                    if (Problem is null && _recorder is not null)
+                    {
+                        _offDefault = true;
+                        s_logger.Warn(
+                            $"Failed To Start {kind} {exception.GetType().Name}, Kept {_from}"
+                        );
+                        return;
+                    }
+
                     // A Missing Device Records Silence, Never Another Device
                     s_logger.Warn($"Failed To Start {kind} {exception.GetType().Name}");
                     Disconnect();
@@ -431,7 +525,20 @@ public sealed class AudioMixer : IDisposable
             }
         }
 
-        private (WasapiRecorder Recorder, string From) Build()
+        private MMDevice? Target()
+        {
+            // A Process Tree Has No Device, Else Picked Or Default
+            if (processId != 0 && CanRecordProcesses)
+            {
+                return null;
+            }
+
+            var picked = AudioDevices.Find(mixer._enumerator, deviceId);
+            FollowsDefault = picked is null;
+            return picked ?? mixer._enumerator.GetDefaultAudioEndpoint(Flow, Role.Console);
+        }
+
+        private (WasapiRecorder Recorder, string From) Build(MMDevice? endpoint)
         {
             var format = WaveFormat.CreateIeeeFloatWaveFormat(SampleRate, Channels);
             if (processId != 0 && CanRecordProcesses)
@@ -443,42 +550,45 @@ public sealed class AudioMixer : IDisposable
                         ProcessLoopbackMode.IncludeTargetProcessTree
                     )
                     .WithFormat(format)
-                    .WithBufferLength(100)
+                    .WithBufferLength(BufferMilliseconds)
+                    .WithMmcssThreadPriority(ThreadClass)
                     .BuildAsync()
                     .GetAwaiter()
                     .GetResult();
                 return (recorder, $"Process {processId} And Its Children");
             }
 
-            // An Empty Id Or Missing Device Follows The Default
-            var picked = AudioDevices.Find(mixer._enumerator, deviceId);
-            FollowsDefault = picked is null;
-            var endpoint = picked ?? mixer._enumerator.GetDefaultAudioEndpoint(Flow, Role.Console);
             var builder = new WasapiRecorderBuilder()
-                .WithDevice(endpoint)
+                .WithDevice(endpoint!)
                 .WithFormat(format)
-                .WithBufferLength(100);
+                .WithBufferLength(BufferMilliseconds)
+                .WithMmcssThreadPriority(ThreadClass);
             if (loopback)
             {
                 builder = builder.WithLoopbackCapture();
             }
 
-            return (builder.Build(), endpoint.FriendlyName);
+            return (builder.Build(), endpoint!.FriendlyName);
         }
 
         private void Disconnect()
         {
-            if (_recorder is not { } recorder)
+            WasapiRecorder? recorder;
+            lock (_gate)
             {
-                return;
+                recorder = _recorder;
+                _recorder = null;
             }
 
-            _recorder = null;
-            recorder.DataAvailable -= OnData;
-            recorder.RecordingStopped -= OnStopped;
+            Release(recorder);
+            _deviceId = null;
+        }
+
+        private static void Release(WasapiRecorder? recorder)
+        {
             try
             {
-                recorder.Dispose();
+                recorder?.Dispose();
             }
             catch (COMException)
             {
@@ -486,8 +596,25 @@ public sealed class AudioMixer : IDisposable
             }
         }
 
-        private void OnStopped(object? sender, StoppedEventArgs eventArgs)
+        private void OnStopped(WasapiRecorder from, StoppedEventArgs eventArgs)
         {
+            lock (_gate)
+            {
+                // A New Recorder Dying Before Taking Over Fails The Switch
+                if (from == _pending)
+                {
+                    _pendingStopped = true;
+                    _tookOver.Set();
+                    return;
+                }
+
+                // A Recorder Let Go On Purpose Stops Quietly
+                if (from != _recorder)
+                {
+                    return;
+                }
+            }
+
             if (eventArgs.Exception is { } exception && !_disposed)
             {
                 // A Picked Device Pulled Out Hands Over To The Default
@@ -505,9 +632,9 @@ public sealed class AudioMixer : IDisposable
         }
 
         private void OnData(
+            WasapiRecorder from,
             ReadOnlySpan<byte> buffer,
             AudioClientBufferFlags flags,
-            long devicePosition,
             long performanceCounter
         )
         {
@@ -526,6 +653,22 @@ public sealed class AudioMixer : IDisposable
                     : long.MinValue;
             lock (_gate)
             {
+                // A New Recorder Takes Over At Its First Sound
+                if (from == _pending)
+                {
+                    if (silent || !samples.ContainsAnyExcept(0f))
+                    {
+                        return;
+                    }
+
+                    (_recorder, _pending, _expectedFrame) = (from, null, null);
+                    _tookOver.Set();
+                }
+                else if (from != _recorder)
+                {
+                    return;
+                }
+
                 // Each Packet Lands At Its Clock Time, Gaps Stay Silent
                 var trusted =
                     performanceCounter > 0 && !flags.HasFlag(AudioClientBufferFlags.TimestampError);
@@ -557,7 +700,11 @@ public sealed class AudioMixer : IDisposable
                 var late = Math.Clamp(_drainedFrame - frame, 0, frames);
                 if (late > 0 && frame + frames > 0)
                 {
-                    ReportLate(late);
+                    NoteLate(late, mixer.CurrentFrame() - frame);
+                }
+                else
+                {
+                    _lastWasLate = false;
                 }
 
                 for (var index = 0; index < frames; index++)
@@ -576,18 +723,41 @@ public sealed class AudioMixer : IDisposable
             }
         }
 
-        private void ReportLate(long frames)
+        private void NoteLate(long frames, long behind)
         {
-            // Logged Once Per Streak Window, Not Once Per Packet
+            // Counted On The Audio Thread, Never Logged There
+            var now = DateTime.Now;
+            _lateSince ??= now;
+            _lateUntil = now;
+            _lateSeen = Stopwatch.GetTimestamp();
             _lateFrames += frames;
-            if (Stopwatch.GetElapsedTime(_lateReported) < TimeSpan.FromSeconds(10))
+            _lateWorstFrames = Math.Max(_lateWorstFrames, behind);
+            _lateGaps += _lastWasLate ? 0 : 1;
+            _lastWasLate = true;
+        }
+
+        public void ReportLate(bool closing)
+        {
+            // One Line Per Incident, After Ten Quiet Seconds Or Closing
+            string report;
+            lock (_gate)
             {
-                return;
+                if (
+                    _lateSince is not { } since
+                    || (!closing && Stopwatch.GetElapsedTime(_lateSeen) < s_lateQuiet)
+                )
+                {
+                    return;
+                }
+
+                report = string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Dropped {_lateFrames * 1000 / SampleRate} ms Of Late {kind} In {_lateGaps} {(_lateGaps == 1 ? "Gap" : "Gaps")} From {since:HH:mm:ss} To {_lateUntil:HH:mm:ss}, Up To {_lateWorstFrames * 1000 / SampleRate} ms Late"
+                );
+                (_lateSince, _lateFrames, _lateWorstFrames, _lateGaps) = (null, 0, 0, 0);
             }
 
-            s_logger.Info($"Dropped {_lateFrames} Late {kind} Frames");
-            _lateFrames = 0;
-            _lateReported = Stopwatch.GetTimestamp();
+            s_logger.Warn(report);
         }
 
         public void Drain(long fromFrame, float[] mix, int stride)
@@ -615,7 +785,11 @@ public sealed class AudioMixer : IDisposable
             {
                 _disposed = true;
                 Disconnect();
+                _tookOver.Dispose();
             }
+
+            // The Last Incident Before A Stop Is Logged Too
+            ReportLate(closing: true);
 
             // How Far The Device Clock Ran From The System's
             s_logger.Debug($"Slewed {kind} By {_slewedFrames} Frames");

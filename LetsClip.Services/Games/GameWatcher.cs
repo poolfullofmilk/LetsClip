@@ -107,7 +107,7 @@ public sealed partial class GameWatcher : IDisposable
     public static int StarterOf(int processId)
     {
         // Zero When Unknown, Or Its Number Was Reused
-        var parent = ParentOf(processId);
+        var parent = ProcessTree().FirstOrDefault(entry => entry.Id == processId).Parent;
         if (parent == 0)
         {
             return 0;
@@ -136,11 +136,6 @@ public sealed partial class GameWatcher : IDisposable
                 .Where(entry => entry.Parent == processId && StarterOf(entry.Id) == processId)
                 .Select(entry => entry.Id),
         ];
-    }
-
-    private static int ParentOf(int processId)
-    {
-        return ProcessTree().FirstOrDefault(entry => entry.Id == processId).Parent;
     }
 
     private static List<(int Id, int Parent)> ProcessTree()

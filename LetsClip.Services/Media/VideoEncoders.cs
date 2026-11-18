@@ -26,6 +26,19 @@ public static class VideoEncoders
     public static readonly VideoEncoder QuickSyncGpu = QuickSync with { GpuFrames = true };
     public static readonly VideoEncoder Software = new("x264 on the CPU", "libx264", false);
 
+    // Every Clip And Export Is Tagged BT.709 Limited Range
+    public static readonly string[] ColourTags =
+    [
+        "-colorspace",
+        "bt709",
+        "-color_primaries",
+        "bt709",
+        "-color_trc",
+        "bt709",
+        "-color_range",
+        "tv",
+    ];
+
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
     private static readonly ConcurrentDictionary<string, bool> s_tested = new();
 

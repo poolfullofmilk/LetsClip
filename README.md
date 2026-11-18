@@ -37,6 +37,8 @@
 - Spamming the key saves one clip, not a pile of copies
 - Finds your games wherever Steam is installed, games from the Xbox app and the ones Windows saw you play from Battle.net, Ubisoft or EA, even ones installed while it runs
 - A game always goes before an app you added, so a browser left open never takes its place
+- Keeps recording through a dock, a monitor switched off or on or another monitor's refresh rate changing
+- Sound stays whole on a busy PC, and a headset or speakerphone dropping out and back never cuts it
 - Change the replay length while it records, nothing is lost
 - Remembers where you left its window and how loud you play clips
 - Starts with Windows in the tray, updates itself in the background with signed updates, never in the middle of a recording you started, shows what changed and recovers from problems on its own, even a crash

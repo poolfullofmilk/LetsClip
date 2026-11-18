@@ -53,6 +53,8 @@ public partial class App : Application
                         Path.Combine(AppInfo.LogsDirectory, "log-${shortdate}.txt"),
                         maxArchiveFiles: 30
                     )
+                    // Written On Its Own Thread, Callers Never Wait On Disk
+                    .WithAsync(NLog.Targets.Wrappers.AsyncTargetWrapperOverflowAction.Grow)
             );
 
         // A Crash Off The Window's Thread Ends LetsClip, Logged First

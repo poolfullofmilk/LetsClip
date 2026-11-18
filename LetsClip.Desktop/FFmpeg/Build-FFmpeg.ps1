@@ -9,7 +9,8 @@ $msysUrl = 'https://github.com/msys2/msys2-installer/releases/download/2026-09-2
 $msysHash = 'AD336CCCFDA47758B5E15CDA993FBBA421115CB0B126697DAEF1EE4DFE37209F'
 $sourceUrl = 'https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz'
 $sourceHash = '8C3850283EB25FA026482078A04051E0BE17347B09EF81A0849BEC15A96E002E'
-$name = 'ffmpeg-9.0.2-letsclip-2'
+# One Name For Every Build, The Release Asset Is Replaced In Place
+$name = 'ffmpeg'
 
 function Get-Pinned([string]$url, [string]$path, [string]$hash) {
     if (-not (Test-Path $path)) { Invoke-WebRequest $url -OutFile $path }
@@ -40,7 +41,7 @@ pacman -Sy --noconfirm --needed make diffutils patch nasm mingw-w64-x86_64-gcc m
 # x264 Pulls In MSYS2's FFmpeg, Whose Static Libraries Would Link
 pacman -Rdd --noconfirm mingw-w64-x86_64-ffmpeg mingw-w64-x86_64-ffms2 > /dev/null 2>&1 || true
 cd "`$(cygpath -u '$Work')"
-rm -rf ffmpeg-9.0.2 stage
+rm -rf ffmpeg-9.0.2 stage '$name'
 tar xf ffmpeg-9.0.2.tar.xz
 cd ffmpeg-9.0.2
 for patch in ../*.patch; do sed 's/\r$//' "`$patch" | patch -p1; done

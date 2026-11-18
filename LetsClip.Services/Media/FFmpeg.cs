@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
+using LetsClip.Data.Helpers;
 using NLog;
 
 namespace LetsClip.Services.Media;
@@ -90,7 +91,7 @@ public static partial class FFmpeg
 
         var starting = Stopwatch.GetTimestamp();
         var process =
-            Process.Start(startInfo)
+            Process.Start(startInfo.WithoutWebView())
             ?? throw new InvalidOperationException($"Failed To Start {executable}");
         _ = AssignProcessToJobObject(s_job, process.Handle);
         KeepFullSpeed(process.Handle);
@@ -131,7 +132,6 @@ public static partial class FFmpeg
     )
     {
         using var process = Start(executable, arguments, false, workingDirectory);
-        var started = Stopwatch.StartNew();
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(token);
         limit.CancelAfter(timeout);
 
@@ -184,8 +184,11 @@ public static partial class FFmpeg
 
         var output = await outputTask;
         await errorTask;
+
+        // Windows' Own Times, A Stalled Caller Never Shortens Them
+        var ran = (process.ExitTime - process.StartTime).TotalMilliseconds;
         s_logger.Debug(
-            $"{Path.GetFileName(executable)} {process.Id} Exited {process.ExitCode} In {started.ElapsedMilliseconds} ms{(process.ExitCode == 0 ? "" : $", {lastError}")}"
+            $"{Path.GetFileName(executable)} {process.Id} Exited {process.ExitCode} In {ran:0} ms{(process.ExitCode == 0 ? "" : $", {lastError}")}"
         );
         return new ProcessResult(process.ExitCode, output, lastError);
     }

@@ -420,14 +420,7 @@ public sealed class CaptureSession(
             // A Second Frame In One Slot Drops, Never Doubles Up
             "-fps_mode",
             "vfr",
-            "-colorspace",
-            "bt709",
-            "-color_primaries",
-            "bt709",
-            "-color_trc",
-            "bt709",
-            "-color_range",
-            "tv",
+            .. VideoEncoders.ColourTags,
             // Encoders Skip The Colour Description, Written Into The Bitstream
             "-bsf:v",
             "h264_metadata=colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1:video_full_range_flag=0",
@@ -916,8 +909,9 @@ public sealed class CaptureSession(
                         return;
                     }
 
+                    // Details, The Session's End Is Logged With Its Reason
                     LastError = CleanError(line);
-                    s_logger.Info($"FFmpeg {_name} {line}");
+                    s_logger.Debug($"FFmpeg {_name} {line}");
                 }
             );
         }
