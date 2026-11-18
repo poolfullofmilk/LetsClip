@@ -9,12 +9,8 @@
         <MudStack Spacing="2">
             <MudText Typo="Typo.body2"
                      Class="text-relaxed">
-                @($"You have {AppInfo.VersionText}. Updating restarts LetsClip, recording starts again by itself")
+                @($"You have {AppInfo.VersionText}, updating restarts LetsClip and recording starts again by itself")
             </MudText>
-            @if (_changes is [_, ..])
-            {
-                <ChangeList Changes="_changes" />
-            }
             @if (_isInstalling)
             {
                 <TransferProgress @ref="_progress"

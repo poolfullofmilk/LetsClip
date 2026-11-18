@@ -26,16 +26,9 @@ public partial class UpdateDialog
     public required ReleaseInfo Release { get; set; }
 
     private bool _isInstalling;
-    private IReadOnlyList<string>? _changes;
     private TransferProgress? _progress;
 
     private string Title => $"LetsClip {Release.Tag} is Out";
-
-    protected override async Task OnInitializedAsync()
-    {
-        // Every Commit Since This Build, Read While The Dialog Shows
-        _changes = await Updater.ChangesAsync(AppInfo.Commit, Release.Tag);
-    }
 
     private async Task InstallAsync()
     {

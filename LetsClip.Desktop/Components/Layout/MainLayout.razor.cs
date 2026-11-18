@@ -26,6 +26,7 @@ public partial class MainLayout : IDisposable
     private SelfHealingBoundary? _errorBoundary;
     private bool _checking;
     private MudMenu? _moreMenu;
+    private Task _changesClosed = Task.CompletedTask;
 
     protected override void OnInitialized()
     {
@@ -57,20 +58,27 @@ public partial class MainLayout : IDisposable
 
     private async Task OfferUpdatesAsync()
     {
-        // What The Last Update Brought, Then Any Newer One
+        // The Last Update's Changes, Then Any Newer One Once Closed
         if (Shell.TakeChanges() is { } changes)
         {
-            await DialogService.ShowAsync<ChangesDialog>(
-                null,
-                new DialogParameters<ChangesDialog> { { dialog => dialog.Changes, changes } },
-                new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true }
-            );
+            _changesClosed = ShowChangesAsync(changes);
         }
 
+        await _changesClosed;
         if (Shell.TakeUnofferedUpdate() is { } release)
         {
             await ShowUpdateAsync(release);
         }
+    }
+
+    private async Task ShowChangesAsync(IReadOnlyList<string> changes)
+    {
+        var shown = await DialogService.ShowAsync<ChangesDialog>(
+            null,
+            new DialogParameters<ChangesDialog> { { dialog => dialog.Changes, changes } },
+            new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true }
+        );
+        await shown.Result;
     }
 
     private Task OpenMoreAsync()

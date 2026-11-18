@@ -119,7 +119,7 @@ public partial class App : Application
         {
             if (
                 MessageBox.Show(
-                    "LetsClip needs the Microsoft Edge WebView2 Runtime. OK opens Microsoft's download, install it and start LetsClip again",
+                    "LetsClip needs the Microsoft Edge WebView2 Runtime: OK opens Microsoft's download, install it and start LetsClip again",
                     AppInfo.DisplayName,
                     MessageBoxButton.OKCancel,
                     MessageBoxImage.Error
