@@ -206,6 +206,13 @@ public sealed class Tray
         _isUpdating = true;
         try
         {
+            // A Release Found Earlier May Be Gone, The Newest Wins
+            if (await Updater.CheckAsync() is { } latest && latest.Version > release.Version)
+            {
+                _shell.ReportUpdate(latest, offered: true);
+                release = latest;
+            }
+
             var path = await Task.Run(() => Updater.DownloadAsync(release, progress));
 
             // Remembered First, One That Cannot Start Is Not Retried

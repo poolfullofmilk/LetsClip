@@ -67,6 +67,7 @@ The owner's rule: consistent on every kind of system, and anything that can fix 
 | A sound only export ends before its selection, the picture having held its last frame past the sound | Accepted, a shorter sound is not a lost part (`ClipExporter.LengthHolds`); a video export must still match within 0.25 s | The export |
 | AMF's HEVC cannot start at a small export size (under 384 x 216, a portrait 240 x 428) | The 12 frame test fails and the card's H.264 takes it, then x264 (`VideoEncoders.WorksAsync`) | The export |
 | An update's exe is not the version its tag names | Refused after the signature check (`Updater.IsSameVersion`), like a bad signature | `The download could not be verified` |
+| The release an install found is gone (replaced and deleted while GitHub still named it) | Every install checks again before downloading and takes the newer release (Tray.InstallUpdateAsync, since v2.0.20); until then each Update Now failed with a 404 until the next check | Nothing, the newer version installs |
 | An app opened through LetsClip (a folder, a link, a file, the next version) would inherit its WebView2 profile and flags | Every process LetsClip starts gets an environment without `WEBVIEW2_` variables (`ProcessStarts.WithoutWebView`), links and files open through `explorer.exe`; until 18 November 2026 each child carried `WEBVIEW2_USER_DATA_FOLDER`, and a WebView2 app started from one would have used LetsClip's profile | Nothing |
 
 ## Reliability Research And Tests
