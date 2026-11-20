@@ -1,5 +1,4 @@
 using LetsClip.Data.ViewModels;
-using LetsClip.Desktop.Components.Pages;
 using Microsoft.AspNetCore.Components;
 using MudBlazor;
 
@@ -10,9 +9,6 @@ public partial class YesNoDialog
     [CascadingParameter]
     public required IMudDialogInstance MudDialog { get; set; }
 
-    [Inject]
-    public required NavigationManager Navigation { get; set; }
-
     [Parameter]
     public required string Question { get; set; }
 
@@ -20,25 +16,10 @@ public partial class YesNoDialog
     [Parameter]
     public IReadOnlyList<ClipInfo>? Clips { get; set; }
 
-    [Parameter]
-    public (string Text, string Route)? Link { get; set; }
-
-    public static Task<bool> ConfirmCutAsync(IDialogService dialogService, string title)
-    {
-        // Without Kept Originals, A Cut Cannot Be Undone
-        return ConfirmAsync(
-            dialogService,
-            title,
-            "The parts outside the selection are deleted forever",
-            ("Keep Originals in Settings", Settings.StorageRoute)
-        );
-    }
-
     public static async Task<bool> ConfirmAsync(
         IDialogService dialogService,
         string title,
         string question,
-        (string Text, string Route)? link = null,
         IReadOnlyList<ClipInfo>? clips = null
     )
     {
@@ -49,7 +30,6 @@ public partial class YesNoDialog
             {
                 { yesNo => yesNo.Question, question },
                 { yesNo => yesNo.Clips, clips },
-                { yesNo => yesNo.Link, link },
             },
             new DialogOptions { MaxWidth = MaxWidth.ExtraSmall }
         );
@@ -65,12 +45,5 @@ public partial class YesNoDialog
     private void No()
     {
         MudDialog.Cancel();
-    }
-
-    private void Follow(string route)
-    {
-        // Leaving To Change It Answers No
-        MudDialog.Cancel();
-        Navigation.NavigateTo(route);
     }
 }

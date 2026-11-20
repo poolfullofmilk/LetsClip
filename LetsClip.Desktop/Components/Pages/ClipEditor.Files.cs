@@ -80,21 +80,28 @@ public partial class ClipEditor
         }
 
         var keepOriginal = !Controller.Settings.DeleteOriginals;
+        var recycled = false;
         _cutting = true;
         StateHasChanged();
         var cut = await ReplaceFileAsync(async () =>
         {
-            await ClipLibrary.CutAsync(path, range, keepOriginal, CancellationToken.None);
+            recycled = await ClipLibrary.CutAsync(
+                path,
+                range,
+                keepOriginal,
+                CancellationToken.None
+            );
             return path;
         });
         _cutting = false;
         StateHasChanged();
         if (cut)
         {
+            // Either Way The Whole Clip Can Come Back
             Snackbar.Add(
-                keepOriginal
-                    ? "Saved the cut, Restore Original brings back the whole clip"
-                    : "Saved the cut",
+                recycled
+                    ? "Saved the cut, the whole clip is in the Recycle Bin"
+                    : "Saved the cut, Restore Original brings back the whole clip",
                 Severity.Success
             );
         }

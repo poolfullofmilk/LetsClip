@@ -264,11 +264,21 @@ public sealed class DesktopShell
         var data = new Forms.DataObject();
         data.SetFileDropList([path]);
         data.SetData("Preferred DropEffect", new MemoryStream(BitConverter.GetBytes(1)));
+        Copy(data, "Copied, paste it anywhere with Ctrl+V", snackbar);
+    }
+
+    public static void CopyText(string text, string copied, ISnackbar snackbar)
+    {
+        Copy(text, copied, snackbar);
+    }
+
+    private static void Copy(object data, string copied, ISnackbar snackbar)
+    {
         try
         {
             // Five Tries 50 ms Apart, Another App May Hold It
             Forms.Clipboard.SetDataObject(data, true, 5, 50);
-            snackbar.Add("Copied, paste it anywhere with Ctrl+V", Severity.Success);
+            snackbar.Add(copied, Severity.Success);
         }
         catch (ExternalException)
         {

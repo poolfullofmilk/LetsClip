@@ -92,7 +92,7 @@ Object.assign(
             if (video.error) failed();
             video.addEventListener("click", toggle, { signal });
             video.addEventListener("dblclick", fullScreen, { signal });
-            // The Crop Box Follows The Picture, Its Frame Drags Sideways
+            // The Crop Follows The Picture, Dragged To Move Or Size
             video.parentElement.addEventListener("pointerdown", cropDown, { signal });
             cropSizes.observe(video);
             timeline.addEventListener("pointerdown", down, { signal });
@@ -590,24 +590,54 @@ Object.assign(
         };
         const cropSizes = new ResizeObserver(() => placeCrop());
 
-        // Dragged Sideways Within The Picture, Blazor Hears Where It Rests
+        // Dragged To Move, Corners Size It, Blazor Hears On Release
         const cropDown = (event) => {
             const frame = event.target instanceof Element ? event.target.closest(".crop-frame") : null;
             if (!state || !frame || event.button !== 0) return;
-            const row = frame.parentElement;
-            const room = Math.max(1, row.clientWidth - frame.offsetWidth);
-            const from = event.clientX;
-            const start = parseFloat(row.style.getPropertyValue("--crop")) || 0;
-            const at = (clientX) => Math.min(1, Math.max(0, start + (clientX - from) / room));
+            const box = frame.parentElement.getBoundingClientRect();
+            const start = frame.getBoundingClientRect();
+            const size = parseFloat(frame.style.getPropertyValue("--crop-size")) || 1;
+            const smallest = parseFloat(frame.dataset.smallest) || 1;
+            const [fullWidth, fullHeight] = [start.width / size, start.height / size];
+            const corner = event.target.closest(".crop-grip")?.dataset.corner;
+            const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
+            const share = (offset, room) => (room > 0.5 ? clamp(offset / room, 0, 1) : 0.5);
+            const placed = (left, top, width, height) => ({
+                x: share(left - box.left, box.width - width),
+                y: share(top - box.top, box.height - height),
+                size: width / fullWidth,
+            });
+            const at = (clientX, clientY) => {
+                if (!corner) {
+                    const left = clamp(start.left + clientX - event.clientX, box.left, box.right - start.width);
+                    const top = clamp(start.top + clientY - event.clientY, box.top, box.bottom - start.height);
+                    return placed(left, top, start.width, start.height);
+                }
+
+                // The Opposite Corner Stays Put, The Box Keeps Its Shape
+                const [east, south] = [corner.includes("e"), corner.includes("s")];
+                const anchorX = east ? start.left : start.right;
+                const anchorY = south ? start.top : start.bottom;
+                const room = Math.min(1, (east ? box.right - anchorX : anchorX - box.left) / fullWidth, (south ? box.bottom - anchorY : anchorY - box.top) / fullHeight);
+                const wanted = Math.max(Math.abs(clientX - anchorX) / fullWidth, Math.abs(clientY - anchorY) / fullHeight);
+                const scale = clamp(wanted, smallest, Math.max(smallest, room));
+                const [width, height] = [fullWidth * scale, fullHeight * scale];
+                return placed(east ? anchorX : anchorX - width, south ? anchorY : anchorY - height, width, height);
+            };
+            const show = (crop) => {
+                frame.style.setProperty("--crop-x", crop.x);
+                frame.style.setProperty("--crop-y", crop.y);
+                frame.style.setProperty("--crop-size", crop.size);
+            };
             frame.setPointerCapture(event.pointerId);
             event.preventDefault();
             const dragged = new AbortController();
-            frame.addEventListener("pointermove", (move) => row.style.setProperty("--crop", at(move.clientX)), { signal: dragged.signal });
+            frame.addEventListener("pointermove", (move) => show(at(move.clientX, move.clientY)), { signal: dragged.signal });
             const done = (up) => {
                 dragged.abort();
-                const crop = at(up.clientX);
-                row.style.setProperty("--crop", crop);
-                state?.dotnet.invokeMethodAsync("OnCrop", crop).catch(() => {});
+                const crop = at(up.clientX, up.clientY);
+                show(crop);
+                state?.dotnet.invokeMethodAsync("OnCrop", crop.x, crop.y, crop.size).catch(() => {});
             };
             frame.addEventListener("pointerup", done, { signal: dragged.signal, once: true });
             frame.addEventListener("pointercancel", done, { signal: dragged.signal, once: true });

@@ -102,19 +102,21 @@ else
                                         aria-hidden="true" />
                             @if (_crop is { } crop && ShowsCrop)
                             {
-                                @* Vertical Crop Frame *@
+                                @* Crop Frame *@
                                 <MudElement HtmlTag="div"
                                             Class="crop-box">
                                     <MudElement HtmlTag="div"
-                                                Class="crop-row"
-                                                Style="@($"--crop:{Exact(crop)}")">
-                                        <MudElement HtmlTag="div"
-                                                    Class="crop-shade" />
-                                        <MudElement HtmlTag="div"
-                                                    Class="crop-frame"
-                                                    aria-label="Vertical Crop" />
-                                        <MudElement HtmlTag="div"
-                                                    Class="crop-shade" />
+                                                Class="crop-frame"
+                                                Style="@CropStyle(crop)"
+                                                data-smallest="@Exact(CropBox.SmallestSize)"
+                                                aria-label="Crop">
+                                        @* Crop Grips *@
+                                        @foreach (var corner in s_cropCorners)
+                                        {
+                                            <MudElement HtmlTag="div"
+                                                        Class="crop-grip"
+                                                        data-corner="@corner" />
+                                        }
                                     </MudElement>
                                 </MudElement>
                             }
@@ -269,7 +271,7 @@ else
                                  Busy="_swapping"
                                  Range="_range"
                                  Crop="_crop"
-                                 VerticalChanged="SetVertical"
+                                 CropChanged="SetCrop"
                                  StreamsChanged="OnStreamsChanged"
                                  Media="media">
                         <SettingRow Title="Name">

@@ -28,6 +28,19 @@ public partial class VolumeButton
     [Parameter]
     public EventCallback<double> ValueChanged { get; set; }
 
+    // A Microphone Shows As One, Never A Speaker
+    [Parameter]
+    public bool IsMicrophone { get; set; }
+
+    // Without It The Button Only Mutes, No Slider Rises
+    [Parameter]
+    public bool Slides { get; set; } = true;
+
+    private string Icon =>
+        !IsMicrophone ? IconOf(Value)
+        : Value <= 0 ? Icons.Material.Rounded.MicOff
+        : Icons.Material.Rounded.Mic;
+
     private async Task SlideAsync(double value)
     {
         // Every Caller Gets Whole Tenths

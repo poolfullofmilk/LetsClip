@@ -35,14 +35,6 @@
 
                 </MudTable>
             }
-            @if (Link is { } link)
-            {
-                <MudLink Typo="Typo.body1"
-                         Color="Color.Info"
-                         OnClick="() => Follow(link.Route)">
-                    @link.Text
-                </MudLink>
-            }
         </MudStack>
     </DialogContent>
     <DialogActions>

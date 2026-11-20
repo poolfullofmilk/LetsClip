@@ -2,7 +2,6 @@ using System.ComponentModel;
 using System.Diagnostics;
 using LetsClip.Data.Helpers;
 using LetsClip.Services.Media;
-using Microsoft.VisualBasic.FileIO;
 using NLog;
 
 namespace LetsClip.Desktop.Interop;
@@ -40,7 +39,7 @@ public static class Explorer
     {
         // To The Recycle Bin, So A Mistake Comes Back
         var original = ClipLibrary.OwnedOriginalOf(path);
-        if (!TryRecycle(path))
+        if (!ClipLibrary.Recycle(path))
         {
             return false;
         }
@@ -48,30 +47,10 @@ public static class Explorer
         // Its Hidden Original Follows, The Clip Is Gone Either Way
         if (original is not null)
         {
-            _ = TryRecycle(original);
+            _ = ClipLibrary.Recycle(original);
         }
 
         return true;
-    }
-
-    private static bool TryRecycle(string file)
-    {
-        try
-        {
-            FileSystem.DeleteFile(file, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
-            s_logger.Info($"Moved {Path.GetFileName(file)} To The Recycle Bin");
-            return true;
-        }
-        catch (Exception exception)
-            when (exception
-                    is IOException
-                        or UnauthorizedAccessException
-                        or OperationCanceledException
-            )
-        {
-            s_logger.Warn($"Failed To Recycle {Path.GetFileName(file)} {exception.GetType().Name}");
-            return false;
-        }
     }
 
     private static void Start(ProcessStartInfo startInfo)

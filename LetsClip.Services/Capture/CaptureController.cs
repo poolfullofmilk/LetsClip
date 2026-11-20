@@ -667,7 +667,9 @@ public sealed class CaptureController : IDisposable
                 s_logger.Info(
                     running.Seconds != wanted.Seconds
                         ? $"Changed The Replay Length From {running.Seconds} s To {wanted.Seconds} s, Recording Kept"
-                        : $"Changed The Microphone Volume From {running.MicrophoneVolume * 100:0}% To {wanted.MicrophoneVolume * 100:0}%, Recording Kept"
+                    : running.VoiceVolume != wanted.VoiceVolume
+                        ? $"Changed The Voice Chat Volume From {running.VoiceVolume * 100:0}% To {wanted.VoiceVolume * 100:0}%, Recording Kept"
+                    : $"Changed The Microphone Volume From {running.MicrophoneVolume * 100:0}% To {wanted.MicrophoneVolume * 100:0}%, Recording Kept"
                 );
                 return;
             }
@@ -707,7 +709,7 @@ public sealed class CaptureController : IDisposable
         // One Line A Log Reader Can Compare Between Steps
         return options is null
             ? "Nothing"
-            : $"{(options.GameWindow != 0 ? "A Game Window On " : "")}{options.Monitor.Label}, {options.Seconds} s, {options.Resolution}p, {options.FrameRate} FPS, {options.Quality}, System Audio {(options.GameProcess != 0 ? "Of The Game And Voice Chat" : options.SystemAudioId switch { null => "Off", "" => "Automatic", _ => "Picked" })}, Microphone {options.MicrophoneId switch { null => "Off", "" => "Automatic", _ => "Picked" }}{(options.CleanMicrophone ? " Cleaned" : "")}{(options.MicrophoneId is null ? "" : $" At {options.MicrophoneVolume * 100:0}%")}";
+            : $"{(options.GameWindow != 0 ? "A Game Window On " : "")}{options.Monitor.Label}, {options.Seconds} s, {options.Resolution}p, {options.FrameRate} FPS, {options.Quality}, System Audio {(options.GameProcess != 0 ? $"Of The Game And Voice Chat At {options.VoiceVolume * 100:0}%" : options.SystemAudioId switch { null => "Off", "" => "Automatic", _ => "Picked" })}, Microphone {options.MicrophoneId switch { null => "Off", "" => "Automatic", _ => "Picked" }}{(options.CleanMicrophone ? " Cleaned" : "")}{(options.MicrophoneId is null ? "" : $" At {options.MicrophoneVolume * 100:0}%")}";
     }
 
     private CaptureOptions? WantedOptions()
@@ -765,7 +767,8 @@ public sealed class CaptureController : IDisposable
             settings.Microphone ? settings.MicrophoneVolume : 1,
             window,
             window != 0 ? Games.GameName : null,
-            gameAudio
+            gameAudio,
+            gameAudio != 0 ? settings.VoiceVolume : 1
         );
     }
     #endregion

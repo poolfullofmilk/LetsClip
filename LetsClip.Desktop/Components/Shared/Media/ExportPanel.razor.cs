@@ -3,7 +3,6 @@ using System.Globalization;
 using LetsClip.Data.Enums;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
-using LetsClip.Desktop.Components.Shared.Dialogs;
 using LetsClip.Desktop.Interop;
 using LetsClip.Services.Capture;
 using LetsClip.Services.Media;
@@ -49,12 +48,12 @@ public partial class ExportPanel : IDisposable
     [Parameter]
     public bool Cutting { get; set; }
 
-    // Where A Vertical Crop Sits, Null Keeps The Whole Frame
+    // The Crop's Place And Size, Null Keeps The Whole Frame
     [Parameter]
-    public double? Crop { get; set; }
+    public CropBox? Crop { get; set; }
 
     [Parameter]
-    public EventCallback<bool> VerticalChanged { get; set; }
+    public EventCallback<CropShape> CropChanged { get; set; }
 
     // Video, Game Audio Or Microphone Kept Or Left Out
     [Parameter]
@@ -65,9 +64,6 @@ public partial class ExportPanel : IDisposable
 
     [Inject]
     public required ISnackbar Snackbar { get; set; }
-
-    [Inject]
-    public required IDialogService DialogService { get; set; }
 
     [Inject]
     public required IJSRuntime JavaScript { get; set; }
@@ -87,12 +83,15 @@ public partial class ExportPanel : IDisposable
             : DiscordPlan.Off;
 
     // Off Copies Exactly, A Crop Always Encodes
-    private bool KeepsClip => Plan == DiscordPlan.Off && !IsVertical;
+    private bool KeepsClip => Plan == DiscordPlan.Off && !IsCropped;
 
-    // Only A Landscape Clip Has A 9 By 16 Part
-    private bool CanCrop => Media.Width > Media.Height;
+    // A Crop That Changes The Frame, While A Picture Stays
+    private bool IsCropped =>
+        Crop is { } crop && KeepsVideo && CropBox.Changes(crop.Shape, Media.Width, Media.Height);
 
-    private bool IsVertical => Crop is not null && CanCrop && KeepsVideo;
+    private CropShape CropShown => IsCropped ? Crop!.Shape : CropShape.Off;
+
+    private bool AnyCropChanges => CropChanges(CropShape.Vertical) || CropChanges(CropShape.Square);
 
     private bool KeepsVideo =>
         ClipExporter.KeepsVideo(
@@ -104,7 +103,9 @@ public partial class ExportPanel : IDisposable
 
     // The Frame An Export Starts From, Cropped Or Whole
     private (int Width, int Height) Frame =>
-        IsVertical ? ClipExporter.CropSizeOf(Media.Height) : (Media.Width, Media.Height);
+        IsCropped && Crop!.PixelsOf(Media.Width, Media.Height) is var (width, height, _, _)
+            ? (width, height)
+            : (Media.Width, Media.Height);
 
     private bool AnyPlanChanges =>
         Enum.GetValues<DiscordPlan>().Any(plan => plan != DiscordPlan.Off && Changes(plan));
@@ -123,6 +124,14 @@ public partial class ExportPanel : IDisposable
     private bool KeepsGame => Controller.Settings.ExportAudio && Media.HasAudio;
 
     private bool KeepsMicrophone => Controller.Settings.ExportMicrophone;
+
+    private double GameVolume => Controller.Settings.ExportGameVolume;
+
+    private double MicrophoneVolume => Controller.Settings.ExportMicrophoneVolume;
+
+    // Both Tracks At Their Own Levels Rebuild The Mix
+    private bool IsBalanced =>
+        Media.HasSeparateTracks && Track == 0 && (GameVolume != 1 || MicrophoneVolume != 1);
 
     private int? Track => ClipExporter.TrackOf(Media, KeepsGame, KeepsMicrophone);
 
@@ -188,10 +197,11 @@ public partial class ExportPanel : IDisposable
 
     private bool IsCut => Range.CutsShort(Media.Duration);
 
-    // Off With Its Sound Kept, An Export Just Copies
+    // Off With Its Sound As Recorded, An Export Just Copies
     private bool OnlyCopies =>
         KeepsClip
         && KeepsVideo
+        && !IsBalanced
         && (Media.HasSeparateTracks ? Track == 0 : WithAudio == Media.HasAudio);
 
     // Once Exported, The Same Selection Reads Again
@@ -218,11 +228,11 @@ public partial class ExportPanel : IDisposable
     // Null For An Exact Copy, Crops Keep Bits Per Pixel
     private ExportBudget? Budget =>
         SizeBudget.LimitOf(Plan) is { } limit ? SizeBudget.Plan(limit, Shape)
-        : IsVertical ? SizeBudget.Plan(VerticalBytes / 1e6, Shape)
+        : IsCropped ? SizeBudget.Plan(CropBytes / 1e6, Shape)
         : null;
 
-    private long VerticalBytes =>
-        ClipExporter.VerticalBytes(Clip.SizeBytes, Media.Duration, Media, Range.Length);
+    private long CropBytes =>
+        ClipExporter.CropBytes(Clip.SizeBytes, Media.Duration, Media, Range.Length, Crop!);
 
     // A Copy's Weight, Or Where An Encode Lands
     private long ExportBytes => Budget?.TypicalBytes ?? CopyBytesOf(CopiedTracks);
@@ -243,10 +253,19 @@ public partial class ExportPanel : IDisposable
     private string ClipFrameRateText => Formatter.FormatFrameRate(ClipFrameRate);
 
     // A Long Selection's Budget Can Lower The Frame Rate
+    private double ExportFrameRate => Math.Min(FrameRate, Budget?.FrameRate ?? FrameRate);
+
     private string ExportFrameRateText =>
         IsTooLong ? ClipFrameRateText
         : !KeepsVideo ? NoneText
-        : Formatter.FormatFrameRate(Math.Min(FrameRate, Budget?.FrameRate ?? FrameRate));
+        : Formatter.FormatFrameRate(ExportFrameRate);
+
+    // Encodes Take The Last Export's Pace, Copies A Moment
+    private string ExportTimeText =>
+        IsTooLong ? "-"
+        : Budget is not null
+            ? $"About {Formatter.FormatDuration(ClipExporter.EncodeSeconds(OutputSize.Width, OutputSize.Height, ExportFrameRate, Range.Length, KeepsVideo))}"
+        : $"About {Formatter.FormatDuration(ClipExporter.CopySeconds(ExportBytes))}";
 
     private const string NoneText = "None";
 
@@ -291,7 +310,22 @@ public partial class ExportPanel : IDisposable
     {
         return SizeBudget.LimitOf(plan) is not { } limit
             || !KeepsVideo
-            || (IsVertical ? VerticalBytes : CopyBytes) > limit * 1_000_000;
+            || (IsCropped ? CropBytes : CopyBytes) > limit * 1_000_000;
+    }
+
+    private bool CropChanges(CropShape shape)
+    {
+        return shape == CropShape.Off || CropBox.Changes(shape, Media.Width, Media.Height);
+    }
+
+    private static string? CropDetailOf(CropShape shape)
+    {
+        return shape switch
+        {
+            CropShape.Vertical => "9:16",
+            CropShape.Square => "1:1",
+            _ => null,
+        };
     }
 
     private void SetPlan(DiscordPlan plan)
@@ -334,19 +368,31 @@ public partial class ExportPanel : IDisposable
     private Task ToggleMicrophone() =>
         SetStreamsAsync(settings => settings with { ExportMicrophone = !KeepsMicrophone });
 
+    private Task SetGameVolumeAsync(double level) =>
+        SetStreamsAsync(settings =>
+            settings with
+            {
+                ExportAudio = level > 0,
+                ExportGameVolume = level > 0 ? level : settings.ExportGameVolume,
+            }
+        );
+
+    private Task SetMicrophoneVolumeAsync(double level) =>
+        SetStreamsAsync(settings =>
+            settings with
+            {
+                ExportMicrophone = level > 0,
+                ExportMicrophoneVolume = level > 0 ? level : settings.ExportMicrophoneVolume,
+            }
+        );
+
     private async Task SaveCutAsync()
     {
         var range = Range;
-        if (await SettledPath() is { } path && await ConfirmCutAsync("Save Cut"))
+        if (await SettledPath() is { } path)
         {
             await SaveCut(path, range);
         }
-    }
-
-    private async Task<bool> ConfirmCutAsync(string title)
-    {
-        return !Controller.Settings.DeleteOriginals
-            || await YesNoDialog.ConfirmCutAsync(DialogService, title);
     }
 
     protected override void OnInitialized()
@@ -374,13 +420,13 @@ public partial class ExportPanel : IDisposable
     private async Task CopyAsync()
     {
         // A Cut Is Saved First, Then The Clip Is Copied
-        var (range, title, cut) = (Range, ExportText, IsCut);
+        var (range, cut) = (Range, IsCut);
         if (await SettledPath() is not { } path)
         {
             return;
         }
 
-        if (!cut || (await ConfirmCutAsync(title) && await SaveCut(path, range)))
+        if (!cut || await SaveCut(path, range))
         {
             DesktopShell.CopyFile(path, Snackbar);
         }
@@ -395,11 +441,12 @@ public partial class ExportPanel : IDisposable
         }
 
         // Read Before A Rename Replaces This Panel
-        var (cut, title, keepOriginal) = (IsCut, ExportText, !Controller.Settings.DeleteOriginals);
+        var (cut, keepOriginal) = (IsCut, !Controller.Settings.DeleteOriginals);
         var (range, plan, frameRate, track, video) = (Range, Plan, FrameRate, Track, KeepsVideo);
-        var crop = IsVertical ? Crop : null;
+        var crop = IsCropped ? Crop : null;
+        var (game, microphone) = IsBalanced ? (GameVolume, MicrophoneVolume) : (1.0, 1.0);
         var folder = Controller.Settings.ExportsDirectory;
-        if (await SettledPath() is not { } path || (cut && !await ConfirmCutAsync(title)))
+        if (await SettledPath() is not { } path)
         {
             return;
         }
@@ -413,7 +460,9 @@ public partial class ExportPanel : IDisposable
             track,
             folder,
             Crop: crop,
-            Video: video
+            Video: video,
+            GameVolume: game,
+            MicrophoneVolume: microphone
         );
         _ = Exports.RunAsync(request, cut, keepOriginal);
     }
@@ -456,13 +505,23 @@ public partial class ExportPanel : IDisposable
         }
         else
         {
-            var vertical = export.Height > export.Width && Media.Width > Media.Height;
-            if (vertical)
+            // A Crop Changed The Frame's Shape, So Its Size Too
+            var crop =
+                export.Width == export.Height && Media.Width != Media.Height ? CropShape.Square
+                : export.Height > export.Width && Media.Width > Media.Height ? CropShape.Vertical
+                : CropShape.Off;
+            if (crop != CropShape.Off)
             {
-                yield return (Icons.Material.Rounded.CropPortrait, "Vertical", false);
+                yield return (
+                    crop == CropShape.Square
+                        ? Icons.Material.Rounded.CropSquare
+                        : Icons.Material.Rounded.CropPortrait,
+                    crop.ToString(),
+                    false
+                );
             }
 
-            if (vertical ? export.Height < Media.Height : export.Width < Media.Width)
+            if (crop != CropShape.Off || export.Width < Media.Width)
             {
                 yield return (
                     Icons.Material.Rounded.PhotoSizeSelectSmall,

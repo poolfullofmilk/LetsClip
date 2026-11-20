@@ -1,14 +1,14 @@
 @* Volume Button *@
 <MudElement HtmlTag="div"
             Class="volume">
-    <IconButton Icon="@IconOf(Value)"
+    <IconButton Icon="@Icon"
                 Text="@Text"
                 Color="@(Value <= 0 ? Color.Error : Color.Default)"
                 Placement="Placement.Left"
                 Filled="Filled"
                 Disabled="Disabled"
                 OnClick="OnClick" />
-    @if (!Disabled)
+    @if (!Disabled && Slides)
     {
         <MudElement HtmlTag="div"
                     Class="volume-pop">

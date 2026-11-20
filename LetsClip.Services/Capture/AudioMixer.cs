@@ -59,19 +59,24 @@ public sealed partial class AudioMixer : IDisposable
     // Halved So It Passes The Full Scale Clamp
     private volatile float _halfMicrophoneVolume;
 
+    // Voice Apps Mix In At Their Own Level
+    private volatile float _voiceVolume;
+
     public AudioMixer(
         long originTimestamp,
         string? systemId,
         string? microphoneId,
         bool separateMicrophone,
         double microphoneVolume,
-        int gameProcess
+        int gameProcess,
+        double voiceVolume
     )
     {
         // A Cleaned Microphone Gets Two Channels, Its Volume A Fifth
         _origin = originTimestamp;
         _outputChannels = separateMicrophone ? (Channels * 2) + 1 : Channels;
         SetMicrophoneVolume(microphoneVolume);
+        SetVoiceVolume(voiceVolume);
         if (systemId is not null && gameProcess != 0)
         {
             // Only The Game And Voice Chat, Each With Its Children
@@ -229,6 +234,12 @@ public sealed partial class AudioMixer : IDisposable
         _halfMicrophoneVolume = (float)(volume / 2);
     }
 
+    public void SetVoiceVolume(double volume)
+    {
+        // From The Next Chunk, No Restart
+        _voiceVolume = (float)volume;
+    }
+
     public void MuteSystemAudio(TimeSpan duration)
     {
         // Our Own Save Chime Never Lands In The Next Clip
@@ -284,9 +295,15 @@ public sealed partial class AudioMixer : IDisposable
                 }
 
                 Array.Clear(mix);
+                var voiceVolume = _voiceVolume;
                 foreach (var source in _sources)
                 {
-                    source.Drain(_emittedFrames, mix, _outputChannels);
+                    source.Drain(
+                        _emittedFrames,
+                        mix,
+                        _outputChannels,
+                        source.Kind == VoiceKind ? voiceVolume : 1
+                    );
                 }
 
                 if (_outputChannels > Channels * 2)

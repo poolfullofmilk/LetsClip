@@ -117,6 +117,12 @@
                                 SwitchChanged="SetOnlyGameAndDiscord"
                                 SwitchDisabled="@(!CanRecordOnlyGameAndDiscord)" />
                     <MudDivider />
+                    @* Voice Chat Volume *@
+                    <VolumeRow Title="Voice Chat Volume"
+                               Value="Controller.Settings.VoiceVolume"
+                               ValueChanged="SetVoiceVolume"
+                               Disabled="@(!RecordsVoiceChat)" />
+                    <MudDivider />
                     <SettingRow Title="Microphone"
                                 Switch="Controller.Settings.Microphone"
                                 SwitchChanged="SetMicrophone"
@@ -141,28 +147,11 @@
                         </DeviceSelect>
                     </SettingRow>
                     <MudDivider />
-                    <SettingRow Title="Microphone Volume">
-                        <MudText Typo="Typo.body2"
-                                 Class="mud-text-secondary">
-                            @MicrophoneVolumeText
-                        </MudText>
-                        @* Microphone Volume Slider *@
-                        <MudElement HtmlTag="div"
-                                    Class="fixed-width d-flex">
-                            <MudSlider T="double"
-                                       Value="MicrophoneVolume"
-                                       ValueChanged="SetMicrophoneVolume"
-                                       Min="VolumeButton.Step"
-                                       Max="UserSettings.MaximumMicrophoneVolume"
-                                       Step="VolumeButton.Step"
-                                       Color="Color.Info"
-                                       Size="Size.Medium"
-                                       Variant="Variant.Filled"
-                                       Immediate
-                                       Disabled="@(!Controller.Settings.Microphone)"
-                                       aria-label="Microphone Volume" />
-                        </MudElement>
-                    </SettingRow>
+                    @* Microphone Volume *@
+                    <VolumeRow Title="Microphone Volume"
+                               Value="Controller.Settings.MicrophoneVolume"
+                               ValueChanged="SetMicrophoneVolumeAsync"
+                               Disabled="@(!Controller.Settings.Microphone)" />
                     <MudDivider />
                     <SettingRow Title="Noise Cancellation"
                                 Switch="Controller.Settings.NoiseCancellation"
@@ -171,8 +160,7 @@
                 </Panel>
 
                 @* Storage Settings *@
-                <Panel Title="Storage"
-                       Id="storage">
+                <Panel Title="Storage">
                     <SettingRow Title="Clips Folder">
                         @if (Controller.Settings.ClipsFolder is not null)
                         {

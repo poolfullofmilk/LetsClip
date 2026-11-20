@@ -1,0 +1,45 @@
+@* No Clips Panel *@
+<MudPaper Elevation="4"
+          Class="rounded-panel">
+    <EmptyState Icon="@Icons.Material.Rounded.VideoLibrary"
+                Text="No Clips Yet">
+        <MudStack AlignItems="AlignItems.Center"
+                  Spacing="1"
+                  Class="mt-n2">
+            @if (RecordingText is { } recording)
+            {
+                <MudText Typo="Typo.body2"
+                         Align="Align.Center"
+                         Class="mud-text-secondary">
+                    @recording
+                </MudText>
+            }
+            @if (Shell.HotkeyProblem is null)
+            {
+                <MudText Typo="Typo.body2"
+                         Align="Align.Center"
+                         Class="mud-text-secondary">
+                    @($"Press {Shell.HotkeyText} to save what just happened")
+                </MudText>
+            }
+            else
+            {
+                @* Hotkey Problem Chip *@
+                <ProblemChip Text="@($"{Shell.HotkeyText} is Taken")"
+                             Tip="Change Hotkey"
+                             OnClick="OpenSettings" />
+            }
+        </MudStack>
+        @if (Controller.Settings.GamesOnly)
+        {
+            @* Edit Games Button *@
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Info"
+                       Size="Size.Small"
+                       StartIcon="@Icons.Material.Rounded.SportsEsports"
+                       OnClick="() => GamesDialog.ShowAsync(DialogService)">
+                Edit Games and Apps
+            </MudButton>
+        }
+    </EmptyState>
+</MudPaper>

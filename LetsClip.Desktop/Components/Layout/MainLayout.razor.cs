@@ -142,6 +142,14 @@ public partial class MainLayout : IDisposable
         Explorer.OpenFolder(AppInfo.LogsDirectory);
     }
 
+    private async Task ReportProblemAsync()
+    {
+        // Log To The Clipboard, Then The Issue In The Browser
+        var log = await Task.Run(ProblemReport.RecentLog);
+        DesktopShell.CopyText(log, "The log is copied, paste it into the issue", Snackbar);
+        Explorer.Open(ProblemReport.IssueUrl());
+    }
+
     private async Task ShowAboutAsync()
     {
         await DialogService.ShowAsync<AboutDialog>(

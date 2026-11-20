@@ -16,7 +16,7 @@ public partial class AboutDialog
     // What Records Now Or Last, Graphics Card Or CPU
     private string? EncoderText =>
         Controller.Recorder.Encoder is { } encoder
-            ? $"Records With {encoder.Name}{(encoder.GpuFrames ? " On The GPU" : "")}"
+            ? $"Records with {encoder.Name}{(encoder.GpuFrames ? " on the GPU" : "")}"
             : null;
 
     private static void OpenNotices()

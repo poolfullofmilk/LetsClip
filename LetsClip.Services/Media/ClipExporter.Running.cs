@@ -74,11 +74,17 @@ public static partial class ClipExporter
         // Video Off Keeps The Sound Alone, Never Nothing
         var video = request.Video || !withAudio;
 
-        // A Vertical Crop Always Encodes, Only The Part It Keeps
-        var cropped = video && request.Crop is not null && source.Width > source.Height;
-        var (frameWidth, frameHeight) = cropped
-            ? CropSizeOf(source.Height)
-            : (source.Width, source.Height);
+        // A Crop Always Encodes, Only The Part It Keeps
+        var cropped =
+            video
+            && request.Crop is { } box
+            && CropBox.Changes(box.Shape, source.Width, source.Height);
+        var (frameWidth, frameHeight, cropLeft, cropTop) = cropped
+            ? request.Crop!.PixelsOf(source.Width, source.Height)
+            : (source.Width, source.Height, 0, 0);
+
+        // Game And Microphone Mixed Anew, Only From Their Own Tracks
+        var balanced = request.IsBalanced && source.HasSeparateTracks;
 
         // Off, Or Small Enough, Copies Exactly, Sound Alone Only Off
         var copyRate = video ? sourceRate : SizeBudget.AudioBitsPerSecond / 8;
@@ -86,11 +92,11 @@ public static partial class ClipExporter
             !cropped
             && (video || request.Plan == DiscordPlan.Off)
             && SizeBudget.KeepsClip(request.Plan, duration, copyRate)
-            && await CopyAsync(request, track, video, progress, token) is { } copied
+            && await CopyAsync(request, track, video, balanced, progress, token) is { } copied
         )
         {
             s_logger.Info(
-                $"Exported {Path.GetFileName(copied)} Losslessly At {Formatter.FormatSize(new FileInfo(copied).Length)}{(video ? "" : ", Sound Only,")} In {started.Elapsed.TotalSeconds:0.0} s"
+                $"Exported {Path.GetFileName(copied)} {(balanced ? "With Its Picture Copied And Its Game And Microphone Mixed Anew" : "Losslessly")} At {Formatter.FormatSize(new FileInfo(copied).Length)}{(video ? "" : ", Sound Only,")} In {started.Elapsed.TotalSeconds:0.0} s"
             );
             return copied;
         }
@@ -98,7 +104,7 @@ public static partial class ClipExporter
         // Too Big For The Plan, Encoded Smaller To Fit
         var limit =
             SizeBudget.LimitOf(request.Plan)
-            ?? VerticalBytes(sourceBytes, source.Duration, source, duration) / 1e6;
+            ?? CropBytes(sourceBytes, source.Duration, source, duration, request.Crop!) / 1e6;
         var (fullWidth, fullHeight) = OutputSize(frameWidth, frameHeight);
         var clip = new ExportShape(
             duration,
@@ -142,14 +148,14 @@ public static partial class ClipExporter
 
         encoders.Add(VideoEncoders.Software);
         var gain = track is { } measured
-            ? await LoudnessGainAsync(request, measured, progress, token)
+            ? await LoudnessGainAsync(request, measured, balanced, progress, token)
             : 0;
         var workFolder = CacheFolders.NewFolder();
         var temporary = ClipLibrary.PartialPathIn(request.ExportsFolder);
         var crop = cropped
             ? string.Create(
                 CultureInfo.InvariantCulture,
-                $"crop={frameWidth}:{frameHeight}:{(int)((source.Width - frameWidth) * request.Crop!.Value) / 2 * 2}:0,"
+                $"crop={frameWidth}:{frameHeight}:{cropLeft}:{cropTop},"
             )
             : "";
         var job = new EncodeJob(
@@ -163,7 +169,8 @@ public static partial class ClipExporter
             crop,
             budget.AudioBitsPerSecond,
             video,
-            gain
+            gain,
+            balanced
         );
         try
         {
@@ -222,6 +229,17 @@ public static partial class ClipExporter
 
                     if (size <= budget.TargetBytes)
                     {
+                        // The Next Estimate Takes This Export's Pace
+                        if (video)
+                        {
+                            s_pixelsPerSecond =
+                                width
+                                * (double)height
+                                * frameRate
+                                * duration
+                                / Math.Max(0.5, started.Elapsed.TotalSeconds - StartSeconds);
+                        }
+
                         var finalPath = Keep(request, temporary, video ? ".mp4" : ".ogg");
                         var codec =
                             !video ? "Opus"
@@ -256,10 +274,14 @@ public static partial class ClipExporter
         ExportRequest request,
         int? track,
         bool video,
+        bool balanced,
         IProgress<ExportProgress> progress,
         CancellationToken token
     )
     {
+        // A Rebuilt Mix Is Measured, Evened Like Any Encode
+        var gain = balanced ? await LoudnessGainAsync(request, 0, true, progress, token) : 0;
+
         // Stream Copied, The Clip's Own Frames, Size And Quality
         progress.Report(new ExportProgress("Copying", 0.5));
         var range = request.Range;
@@ -267,7 +289,16 @@ public static partial class ClipExporter
         try
         {
             List<string> streams = video ? ["-map", "0:v:0"] : [];
-            if (track is { } index)
+            if (balanced)
+            {
+                streams.AddRange([
+                    "-filter_complex",
+                    SoundGraph(request, 0, true, gain),
+                    "-map",
+                    "[sound]",
+                ]);
+            }
+            else if (track is { } index)
             {
                 streams.AddRange([
                     "-map",
@@ -280,7 +311,19 @@ public static partial class ClipExporter
                 range,
                 streams,
                 temporary,
-                token
+                token,
+                balanced
+                    ?
+                    [
+                        "-c:a",
+                        "aac",
+                        "-b:a",
+                        string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"{(int)(SizeBudget.AudioBitsPerSecond / 1000)}k"
+                        ),
+                    ]
+                    : null
             );
             if (
                 output is null

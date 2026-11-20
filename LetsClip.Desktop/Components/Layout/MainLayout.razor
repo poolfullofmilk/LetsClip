@@ -45,6 +45,10 @@
                                      Label="Check for Updates"
                                      Class="@(Shell.AvailableUpdate is null ? null : "update-dot")"
                                      OnClick="CheckForUpdatesAsync" />
+                        @* Report Problem *@
+                        <MudMenuItem Icon="@Icons.Material.Rounded.BugReport"
+                                     Label="Report a Problem"
+                                     OnClick="ReportProblemAsync" />
                         @* Open Logs *@
                         <MudMenuItem Icon="@Icons.Material.Rounded.Description"
                                      Label="Open Logs Folder"

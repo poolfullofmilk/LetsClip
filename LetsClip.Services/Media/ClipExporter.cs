@@ -14,9 +14,15 @@ public sealed record ExportRequest(
     int? AudioTrack,
     string ExportsFolder,
     bool CopyWhenDone = false,
-    double? Crop = null,
-    bool Video = true
-);
+    CropBox? Crop = null,
+    bool Video = true,
+    double GameVolume = 1,
+    double MicrophoneVolume = 1
+)
+{
+    // Game And Microphone Mixed Anew, Each At Its Own Level
+    public bool IsBalanced => AudioTrack == 0 && (GameVolume != 1 || MicrophoneVolume != 1);
+}
 
 public sealed record ExportProgress(string Phase, double Fraction);
 
@@ -55,9 +61,54 @@ public static partial class ClipExporter
     private const double MostLimiting = 6;
     private const string PeakLimit = "alimiter=limit=0.708:level=0:latency=1";
 
+    // Starting, Probing And Checking Take About This Long
+    private const double StartSeconds = 1.5;
+
+    // Measured Over 1080p60 HEVC On AMF And Two x264 Passes
+    private const double HardwarePixelsPerSecond = 400_000_000;
+    private const double SoftwarePixelsPerSecond = 130_000_000;
+    private const double CopyBytesPerSecond = 400_000_000;
+
+    // The Last Export's Pace, Unknown Until One Ran
+    private static double? s_pixelsPerSecond;
+
     static ClipExporter()
     {
         Debug.Assert(SelfTestPasses());
+    }
+
+    public static double EncodeSeconds(
+        int width,
+        int height,
+        double frameRate,
+        double seconds,
+        bool video
+    )
+    {
+        // Ponytail: Measured Per Run, The First Takes The Usual Pace
+        var pace = s_pixelsPerSecond ??= VideoEncoders
+            .Candidates()
+            .Any(encoder => encoder.IsHardware)
+            ? HardwarePixelsPerSecond
+            : SoftwarePixelsPerSecond;
+
+        // Sound Alone Encodes Hundreds Of Times Faster Than Real Time
+        return Rounded(
+            StartSeconds + (video ? width * (double)height * frameRate * seconds / pace : 0)
+        );
+    }
+
+    public static double CopySeconds(long bytes)
+    {
+        return Rounded((StartSeconds / 2) + (bytes / CopyBytesPerSecond));
+    }
+
+    private static double Rounded(double seconds)
+    {
+        // Whole Seconds, Then Fives, Then Tens
+        return seconds < 10 ? Math.Max(1, Math.Round(seconds))
+            : seconds < 60 ? Math.Round(seconds / 5) * 5
+            : Math.Round(seconds / 10) * 10;
     }
 
     public static (int Width, int Height) OutputSize(
@@ -97,21 +148,16 @@ public static partial class ClipExporter
         return Math.Clamp(aimed, bitrate / 2, proportional);
     }
 
-    public static (int Width, int Height) CropSizeOf(int height)
-    {
-        // The Tallest 9 By 16 Part Of The Frame, Even
-        return ((int)(height * 9 / 16.0) / 2 * 2, height / 2 * 2);
-    }
-
-    public static long VerticalBytes(
+    public static long CropBytes(
         long clipBytes,
         double clipSeconds,
         MediaInfo media,
-        double seconds
+        double seconds,
+        CropBox crop
     )
     {
         // Off Keeps The Clip's Bits Per Pixel Over The Crop
-        var (width, height) = CropSizeOf(media.Height);
+        var (width, height, _, _) = crop.PixelsOf(media.Width, media.Height);
         var kept = width * height / (double)(media.Width * media.Height);
         return (long)(clipBytes / clipSeconds * seconds * kept);
     }
@@ -173,28 +219,35 @@ public static partial class ClipExporter
         bool microphone,
         bool video,
         string folder,
-        double? crop
+        CropBox? crop,
+        double gameVolume,
+        double microphoneVolume
     )
     {
-        // The Editor's Plan Rules, Pressed From A Card, Crop Included
+        // The Editor's Rules From A Card, Crop And Balance Included
         var track = TrackOf(media, game, microphone);
         var keepsVideo = KeepsVideo(media, video, game, microphone);
         var limit = SizeBudget.LimitOf(plan) ?? double.MaxValue;
-        var cropped = keepsVideo && crop is not null && media.Width > media.Height;
+        var cropped =
+            keepsVideo && crop is { } box && CropBox.Changes(box.Shape, media.Width, media.Height);
+        var balanced =
+            media.HasSeparateTracks && track == 0 && (gameVolume != 1 || microphoneVolume != 1);
         var copied = CopyBytes(clip.SizeBytes, media, range, track is null ? 0 : 1, keepsVideo);
 
         // Sound Alone Becomes Opus, Which Discord Plays Inline
         var encodes = cropped || !keepsVideo || copied > limit * 1e6;
-        var everyTrack = media.HasSeparateTracks ? track == 0 : track is not null == media.HasAudio;
+        var everyTrack = media.HasSeparateTracks
+            ? track == 0 && !balanced
+            : track is not null == media.HasAudio;
         if (!encodes && keepsVideo && everyTrack && !range.CutsShort(media.Duration))
         {
             return new(null, null);
         }
 
         var frameRate = FrameRateOf(media, encodes);
-        var (frameWidth, frameHeight) = cropped
-            ? CropSizeOf(media.Height)
-            : (media.Width, media.Height);
+        var (frameWidth, frameHeight, _, _) = cropped
+            ? crop!.PixelsOf(media.Width, media.Height)
+            : (media.Width, media.Height, 0, 0);
         var (width, height) = OutputSize(frameWidth, frameHeight);
         var shape = new ExportShape(
             range.Length,
@@ -222,7 +275,9 @@ public static partial class ClipExporter
                 folder,
                 CopyWhenDone: true,
                 Crop: cropped ? crop : null,
-                Video: keepsVideo
+                Video: keepsVideo,
+                GameVolume: gameVolume,
+                MicrophoneVolume: microphoneVolume
             ),
             null
         );
@@ -239,6 +294,10 @@ public static partial class ClipExporter
             && NextBitrate([(10_000_000, 30_000_000), (9_000_000, 31_000_000)], 20_000_000)
                 == 4_500_000
             && FrameRateOf(new MediaInfo(5, "h264", null, 0, 0, 239.9, null, null), true) == 60
-            && FrameRateOf(new MediaInfo(5, "h264", null, 0, 0, 0, null, null), false) == 60;
+            && FrameRateOf(new MediaInfo(5, "h264", null, 0, 0, 0, null, null), false) == 60
+            && Rounded(0.2) == 1
+            && Rounded(7.4) == 7
+            && Rounded(23) == 25
+            && Rounded(84) == 80;
     }
 }

@@ -2,6 +2,50 @@
 
 Every dated round, newest first: what changed, the owner's picks, what was measured and why. The other files in `Docs` hold the current rules and what LetsClip does now; this one keeps the reasons and numbers behind them, so search it for a name or a number rather than reading it whole. A new round adds its own day at the top.
 
+## 20 November 2026
+
+### Picks: The User Friendliness Round
+
+The owner read the list of 30 user friendliness ideas written after v2.0.21 and picked 1, 2, 3, 7, 9, 17, 18, 20, 22, 26 and 27, with 17 as the recorded rate alone and 20 done cleanly with the crop's border rounded like the rest. Two new looks went to him as rendered sheets first and he picked both, plus one question: the red tile for the tray during Record Until Stopped (C, over a light ring, a ring and dot, and a red square), corner grips on the crop frame (A, over edge pills and the frame alone), and dropping the question before a cut once its full clip goes to the Recycle Bin (over keeping it reworded).
+
+- The status chip (1): Waiting for a Game or App opens Games and Apps, Recording Error opens the fix of what only the person can fix (HDR, space, a monitor gone, a missing part), typed as `CaptureFix` on `CaptureBlockedException` and `CaptureStatus` rather than read from its words.
+- The empty Clips page (2) said `Press F10 To Save One` while `F10 Is Taken` sat in the app bar; it now says what records, the key or the taken key's chip, and offers Edit Games and Apps.
+- Unknown games (3): a window filling a monitor for two minutes while nothing records is looked at once, and an app no list knows is offered once ever, a toast over the game and a clickable balloon. Browsers, players, Remote Desktop, PowerPoint and the voice apps never are.
+- The tray (7): the whole tile red while Record runs, its tooltip counting the time when pointed at.
+- Voice Chat Volume (9): 10% to 200% under Only Record Game and Voice Chat, applied live to the voice apps' recorders.
+- The frame rate (17): the probe reads the nominal rate, so a 60 FPS window recording of a game drawing 32 FPS reads 60 everywhere, Details, the Exported chips and copied clips' details alike.
+- The balance (18): the game and microphone buttons in one Audio row are volume buttons; both kept at other levels rebuild the mix from their own tracks, the picture still copied under Off.
+- Crops (20): a Crop select of Off, Vertical and Square, each disabled where it changes nothing, its box dragged anywhere and sized from its corners down to half, the frame now the trim frame's ring.
+- Export Time (22): a row under Bitrate from the last export's measured pace.
+- A cut's full clip (26) goes to the Recycle Bin instead of `File.Delete`; restored from there it lands in `.Originals` and Restore Original brings it back, checked end to end.
+- Report a Problem (27): the log's end on the clipboard, the profile folder hidden, and a new GitHub issue with the version and Windows build.
+- Words: `F10 Is Taken`, `Clip Is Black`, `Or Pick A Function Key Alone` and About's `Records With ... On The GPU` read with their joining words lower case now (`F10 is Taken`), and the exe's description `Saves What Just Happened on Screen as a Clip Ready to Share`.
+- Cut away with them: the cut question, its Keep Originals in Settings link, the Storage reveal behind that link, `YesNoDialog`'s link, `Explorer`'s own recycle (one `ClipLibrary.Recycle` now), `ClipLibrary.DeleteOriginal`, the Settings page's own volume timer (one `VolumeRow` for both volume rows), `ClipExporter.CropSizeOf` and `VerticalBytes`.
+
+### Verify: The User Friendliness Round
+
+- In a sandbox on the second monitor: the Waiting chip underlined with its tooltip, the empty page with a free key (F7) and a taken one (F10, held by the owner's copy), the Crop select's items and details (`9:16`, `1:1`), Square sized to 62% and moved, saved as `CropShape` 2, `CropY` and `CropSize` beside `Crop`, the Audio row's two buttons, Export Time, the Voice Chat Volume row, the More menu.
+- Save Cut asked nothing and said `Saved the cut, the whole clip is in the Recycle Bin`; the full clip, put back from the Recycle Bin with the Shell's undelete, came back into `.Originals`, the editor offered Restore Original, and the clip read 30 s again. Nothing of the test was left in the owner's Recycle Bin.
+- The short standard pass on a stand-in game window: recording, Record for 6 s then Stop, the video FFmpeg killed and two clips from one press, the game closed and Waiting in 0.22 s, the kept replay saved.
+- Report a Problem's log came to 155 lines and 51,101 characters of the last 200, no profile path left; 200 whole lines had reached 85,966, past the 65,536 a GitHub issue takes, so it is cut to 60,000.
+- The sweep at 1920 x 1009, 1600 x 845 and 1264 x 680 on Clips, both editors and Settings: no sideways scroll, nothing past its panel, no wrapped title or button. Details alone fits the side panel at 1264 x 680 with 8 px to spare; with an Exported panel holding its chips the side panel scrolls, as accepted on 9 November 2026.
+- Not measurable this time: sound. The PC had no active output device (the owner's LetsClip logged `Found Render Devices:` empty since 19 November), so neither the sandbox nor a harness inside or outside the Claude app's container got a sample from the stand-in tones. Voice Chat Volume was checked by its live change in the log and its one multiplication in the writer; the owner can confirm it by ear.
+
+### Measurements: The User Friendliness Round
+
+| What | Result |
+|---|---|
+| The game track at 50% in a balanced Off export | Its 330 Hz tone fell 6.0 dB against the microphone's 660 Hz (1.3 dB above it in the recorded mix, 4.7 dB below after), loudness moved -1.8 dB, the H.264 picture copied at 16.2 Mbps, 30.000 s |
+| A Square crop of a 1080p clip at full size, HEVC on AMF, 30 s at 60 FPS | 1080 x 1080, 32.1 MB, 4.6 s (estimated 7 s on the usual pace, 5 s after measuring 677 megapixels a second) |
+| A balanced Off export of the same clip | 61.2 MB in 0.8 s, estimated 1 s |
+| A window clip of a stand-in drawing at 40 FPS (it delivered 32) | `r_frame_rate` 60/1, `avg_frame_rate` 31.8; details and a copy of it without details read 60 FPS |
+| Report a Problem's log | 155 whole lines, 51,101 characters |
+
+### Release: v2.0.22
+
+- The demo, the owner's ask of the evening (faster, more of the app, nothing useless or odd, a cool short clip): 20.7 s and 0.73 MB against 27.6 s and 1.53 MB, now with the card menu's Copy for Discord, the crop made smaller and moved and the game lowered under the voice, ending on Exported, with Settings left to its still. The first takes showed what read odd: Fit for Discord greyed under the crop (no plan changes a cropped 14 s selection), Audio's volume pop and tooltip opening where the pointer rested after a pick, the cut's snackbar running on into Settings, the pointer frozen mid slide in the last frame, and faint outlines where the crop frame's shadow had been. Each was taken out (`Docs/Release.md`, Screenshots And The Demo).
+- Fresh stills on a demo library made again from gradient clips. The PC had no sound device on, so Settings shows No Output Device Detected and No Microphone Detected, the owner's pick over waiting for his headset.
+
 ## 19 November 2026
 
 ### Capture: The Sweep And The Owner's Picks

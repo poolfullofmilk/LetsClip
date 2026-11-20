@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Net.Http;
 using LetsClip.Data.Enums;
 using LetsClip.Data.Helpers;
@@ -31,6 +32,14 @@ public sealed class Tray
     // Hidden This Long Is Idle, A Found Update Installs
     private static readonly TimeSpan s_idleBeforeUpdate = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan s_idleCheckPeriod = TimeSpan.FromMinutes(1);
+
+    // Unknown Apps Filling A Monitor This Long Are Offered Once
+    private static readonly TimeSpan s_offerAfter = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan s_offerCheck = TimeSpan.FromSeconds(15);
+
+    // The App Icon's Grey Tile And Light Glyph
+    private const int TileGrey = 0x44;
+    private const int GlyphGrey = 0xF2;
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
 
     private readonly MainWindow _window;
@@ -44,6 +53,7 @@ public sealed class Tray
     // Tray Icons Per State, Drawn Once
     private readonly Drawing.Icon _plainIcon;
     private readonly Drawing.Icon _recordingIcon;
+    private readonly Drawing.Icon _untilStoppedIcon;
     private readonly Drawing.Icon _problemIcon;
 
     // What A Click On The Latest Balloon Does
@@ -61,6 +71,7 @@ public sealed class Tray
         _shell = shell;
         _plainIcon = Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!)!;
         _recordingIcon = WithDot(_plainIcon, ToDrawingColor(AppTheme.Custom.PaletteDark.Error));
+        _untilStoppedIcon = Tinted(_plainIcon, ToDrawingColor(AppTheme.Custom.PaletteDark.Error));
         _problemIcon = WithDot(_plainIcon, ToDrawingColor(AppTheme.Custom.PaletteDark.Warning));
         _icon = new Forms.NotifyIcon
         {
@@ -80,6 +91,9 @@ public sealed class Tray
             }
         };
         _icon.BalloonTipClicked += (_, _) => (_balloonClick ?? _window.ShowFromTray)();
+
+        // A Long Recording's Length Is Read When Pointed At
+        _icon.MouseMove += (_, _) => UpdateText();
 
         controller.Recorder.StatusChanged += () => _window.Dispatcher.InvokeAsync(UpdateIcon);
 
@@ -120,6 +134,7 @@ public sealed class Tray
         _controller.Exports.Finished += NotifyExported;
         _ = KeepUpdatedAsync();
         _ = FindChangesAsync();
+        _ = OfferUnknownAppsAsync();
 
         // A Tray Start Shows No Panel, So Say It Here
         if (
@@ -396,6 +411,64 @@ public sealed class Tray
         }
     }
 
+    private async Task OfferUnknownAppsAsync()
+    {
+        // One Window Filling A Monitor Since Then, Nothing Recording
+        var (watched, since, looked) = (default(nint), 0L, default(nint));
+        while (!_window.IsExiting)
+        {
+            await Task.Delay(s_offerCheck);
+            var window = GameWatcher.ForegroundWindow();
+            var waiting =
+                _controller.Settings.GamesOnly
+                && !_controller.IsRecording
+                && !_controller.ShowsError
+                && MonitorCatalog.FilledBy(_controller.Monitors, window) is not null;
+            if (!waiting || window != watched)
+            {
+                (watched, since) = (waiting ? window : 0, Stopwatch.GetTimestamp());
+                continue;
+            }
+
+            if (window == looked || Stopwatch.GetElapsedTime(since) < s_offerAfter)
+            {
+                continue;
+            }
+
+            // Each Window Looked At Once, Each App Offered Once
+            looked = window;
+            var known = _controller
+                .GameList()
+                .Select(game => game.Key)
+                .Concat(_controller.Settings.OfferedApps ?? [])
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (
+                GameWatcher.ForegroundApp() is { } app
+                && !known.Contains(app.Key)
+                && GameWatcher.MayBeGame(app)
+            )
+            {
+                Offer(app);
+            }
+        }
+    }
+
+    private void Offer(AddedGame app)
+    {
+        // Full Screen Games Hide Balloons, The Toast Points There
+        _controller.UpdateSettings(settings =>
+            settings with
+            {
+                OfferedApps = [.. settings.OfferedApps ?? [], app.Key],
+            }
+        );
+        s_logger.Info($"Offered To Record {app.Name}, It Filled A Monitor For 2 Minutes");
+        var title = $"{app.Name} is Not Recorded";
+        _ = ToastInGame(title, "Add it from LetsClip's notification");
+        _balloonClick = () => RecordFromNowOn(app);
+        TrayBalloon.ShowQuiet(_icon, BalloonMilliseconds, title, "Click to record it from now on");
+    }
+
     private void RecordFromNowOn(AddedGame app)
     {
         // One Click Turns A Missed Clip Into A Recorded Game
@@ -511,9 +584,9 @@ public sealed class Tray
 
         s_logger.Warn($"Saved A Black Clip, {Path.GetFileName(path)}");
         const string detail = "The game may hide its picture, try borderless or windowed mode";
-        if (!ToastInGame("Clip Is Black", detail, isWarning: true))
+        if (!ToastInGame("Clip is Black", detail, isWarning: true))
         {
-            ShowBalloon("Clip Is Black", detail, () => _window.OpenClip(path));
+            ShowBalloon("Clip is Black", detail, () => _window.OpenClip(path));
         }
     }
 
@@ -585,17 +658,26 @@ public sealed class Tray
 
     private void UpdateIcon()
     {
-        // The Same Words As The Chip
-        var status = _controller.Recorder.Status;
+        // A Recording Until Stopped Turns The Whole Tile Red
         _icon.Icon =
             _controller.ShowsError ? _problemIcon
+            : _controller.RecordingSince is not null ? _untilStoppedIcon
             : _controller.IsRecording ? _recordingIcon
             : _plainIcon;
-        var text = _controller.ShowsError
-            ? $"{AppInfo.DisplayName}, Error, {status.Message}"
+        UpdateText();
+        AnnounceGame();
+    }
+
+    private void UpdateText()
+    {
+        // The Chip's Words, A Recording Says How Long
+        var text =
+            _controller.ShowsError
+                ? $"{AppInfo.DisplayName}, Error, {_controller.Recorder.Status.Message}"
+            : _controller.RecordingSince is { } since
+                ? $"{AppInfo.DisplayName}, Recording Until Stopped, {Formatter.FormatDuration(Math.Floor((DateTimeOffset.Now - since).TotalSeconds))}"
             : $"{AppInfo.DisplayName}, {_controller.StatusText}";
         _icon.Text = text.Length > 127 ? text[..127] : text;
-        AnnounceGame();
     }
 
     private static Drawing.Icon WithDot(Drawing.Icon baseIcon, Drawing.Color color)
@@ -618,8 +700,40 @@ public sealed class Tray
             graphics.DrawEllipse(ring, bounds);
         }
 
-        // Ponytail: Two Icon Handles Live For The App's Life
+        // Ponytail: Each Icon Handle Lives For The App's Life
         return Drawing.Icon.FromHandle(bitmap.GetHicon());
+    }
+
+    private static Drawing.Icon Tinted(Drawing.Icon baseIcon, Drawing.Color color)
+    {
+        using var bitmap = baseIcon.ToBitmap();
+
+        // The Grey Tile Turns The Colour, The Glyph Stays
+        for (var x = 0; x < bitmap.Width; x++)
+        {
+            for (var y = 0; y < bitmap.Height; y++)
+            {
+                var pixel = bitmap.GetPixel(x, y);
+                var light = Math.Clamp((pixel.R - TileGrey) / (double)(GlyphGrey - TileGrey), 0, 1);
+                bitmap.SetPixel(
+                    x,
+                    y,
+                    Drawing.Color.FromArgb(
+                        pixel.A,
+                        Blend(color.R, pixel.R, light),
+                        Blend(color.G, pixel.G, light),
+                        Blend(color.B, pixel.B, light)
+                    )
+                );
+            }
+        }
+
+        return Drawing.Icon.FromHandle(bitmap.GetHicon());
+    }
+
+    private static int Blend(int from, int to, double share)
+    {
+        return (int)Math.Round(from + ((to - from) * share));
     }
 
     private static Drawing.Color ToDrawingColor(MudColor color)

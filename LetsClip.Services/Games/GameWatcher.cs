@@ -42,6 +42,34 @@ public sealed partial class GameWatcher : IDisposable
         "steam",
     ];
 
+    // Browsers, Players And Voice Apps, Full Screen But No Games
+    private static readonly HashSet<string> s_notGames =
+    [
+        with(StringComparer.OrdinalIgnoreCase),
+        "msedge",
+        "chrome",
+        "firefox",
+        "brave",
+        "opera",
+        "vivaldi",
+        "arc",
+        "zen",
+        "vlc",
+        "mpv",
+        "mpchc64",
+        "mpcbe64",
+        "potplayermini64",
+        "wmplayer",
+        "microsoft.media.player",
+        "video.ui",
+        "kodi",
+        "plex",
+        "powerpnt",
+        "mstsc",
+        "steamwebhelper",
+        .. s_voiceNames.Select(GameScanner.NormalizeProcessKey),
+    ];
+
     private readonly Timer _timer;
 
     // The Found Game's Handle, One Thread At A Time
@@ -287,6 +315,12 @@ public sealed partial class GameWatcher : IDisposable
     public static nint ForegroundWindow()
     {
         return GetForegroundWindow();
+    }
+
+    public static bool MayBeGame(AddedGame app)
+    {
+        // Ponytail: Non Games Listed By Name, Others Get One Offer
+        return !s_notGames.Contains(app.Key);
     }
 
     public static AddedGame? ForegroundApp()

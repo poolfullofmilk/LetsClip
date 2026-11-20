@@ -1,10 +1,30 @@
-@* Capture Chip *@
-<MudChip T="string"
-         Icon="@Icon"
-         IconColor="@IconColor"
-         Color="@ChipColor"
-         Size="Size.Small"
-         Variant="Variant.Text"
-         Class="@(Controller.IsRecording && !IsError ? "recording" : null)">
-    @Controller.StatusText
-</MudChip>
+@if (Fix is { } fix)
+{
+    @* Capture Fix Chip *@
+    <Tooltip Text="@fix.Text"
+             Placement="Placement.Bottom">
+        <MudChip T="string"
+                 Icon="@Icon"
+                 IconColor="@IconColor"
+                 Color="@ChipColor"
+                 Size="Size.Small"
+                 Variant="Variant.Text"
+                 Class="action-chip"
+                 OnClick="fix.Open">
+            @Controller.StatusText
+        </MudChip>
+    </Tooltip>
+}
+else
+{
+    @* Capture Chip *@
+    <MudChip T="string"
+             Icon="@Icon"
+             IconColor="@IconColor"
+             Color="@ChipColor"
+             Size="Size.Small"
+             Variant="Variant.Text"
+             Class="@(Controller.IsRecording && !IsError ? "recording" : null)">
+        @Controller.StatusText
+    </MudChip>
+}

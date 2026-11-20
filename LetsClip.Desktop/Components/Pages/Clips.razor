@@ -171,16 +171,7 @@
             }
             else if (s_clips.Count == 0)
             {
-                <MudPaper Elevation="4"
-                          Class="rounded-panel">
-                    <EmptyState Icon="@Icons.Material.Rounded.VideoLibrary"
-                                Text="No Clips Yet">
-                        <MudText Typo="Typo.body2"
-                                 Class="mud-text-secondary mt-n2">
-                            @($"Press {Controller.Settings.Hotkey} To Save One")
-                        </MudText>
-                    </EmptyState>
-                </MudPaper>
+                <NoClips />
             }
             else if (shown.Count == 0)
             {

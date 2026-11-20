@@ -27,6 +27,7 @@ public sealed record UserSettings(
     bool SystemAudio = true,
     string SystemAudioDeviceId = "",
     bool OnlyGameAndDiscord = true,
+    double VoiceVolume = 1,
     bool Microphone = true,
     string MicrophoneDeviceId = "",
     double MicrophoneVolume = 0.8,
@@ -36,6 +37,8 @@ public sealed record UserSettings(
     DiscordPlan ExportDiscordPlan = DiscordPlan.Off,
     bool ExportAudio = true,
     bool ExportMicrophone = true,
+    double ExportGameVolume = 1,
+    double ExportMicrophoneVolume = 1,
     bool ExportVideo = true,
     bool DeleteOriginals = true,
     int DefaultsVersion = 0,
@@ -45,7 +48,8 @@ public sealed record UserSettings(
     DateTimeOffset? ClipsSeenAt = null,
     double PlayerVolume = UserSettings.OpeningVolume,
     bool PlayerMuted = false,
-    WindowBounds? Window = null
+    WindowBounds? Window = null,
+    string[]? OfferedApps = null
 )
 {
     // Raised When New Defaults Reach Existing Users Once
@@ -54,8 +58,8 @@ public sealed record UserSettings(
     // First Clip At Half Volume, The Microphone Test Too
     public const double OpeningVolume = 0.5;
 
-    // A Quiet Microphone Can Be Doubled
-    public const double MaximumMicrophoneVolume = 2;
+    // A Quiet Microphone Or Friend Can Be Doubled
+    public const double MaximumVolume = 2;
 
     public static readonly int[] ReplayChoices = [30, 60, 120, 300, 600];
     public static readonly int[] FrameRateChoices = [30, 60, 120, 144, 165, 240];
@@ -161,6 +165,8 @@ public sealed record UserSettings(
             ExportDiscordPlan = ExportDiscordPlan,
             ExportAudio = ExportAudio,
             ExportMicrophone = ExportMicrophone,
+            ExportGameVolume = ExportGameVolume,
+            ExportMicrophoneVolume = ExportMicrophoneVolume,
             ExportVideo = ExportVideo,
             DefaultsVersion = DefaultsVersion,
             ClipSort = ClipSort,
@@ -170,6 +176,7 @@ public sealed record UserSettings(
             PlayerVolume = PlayerVolume,
             PlayerMuted = PlayerMuted,
             Window = Window,
+            OfferedApps = OfferedApps,
         };
     }
 
@@ -271,8 +278,18 @@ public sealed record UserSettings(
                 ? Math.Clamp(Math.Round(SaveSoundVolume, 1), 0.1, 1)
                 : defaults.SaveSoundVolume,
             MicrophoneVolume = double.IsFinite(MicrophoneVolume)
-                ? Math.Clamp(Math.Round(MicrophoneVolume, 1), 0.1, MaximumMicrophoneVolume)
+                ? Math.Clamp(Math.Round(MicrophoneVolume, 1), 0.1, MaximumVolume)
                 : defaults.MicrophoneVolume,
+            VoiceVolume = double.IsFinite(VoiceVolume)
+                ? Math.Clamp(Math.Round(VoiceVolume, 1), 0.1, MaximumVolume)
+                : defaults.VoiceVolume,
+            ExportGameVolume = double.IsFinite(ExportGameVolume)
+                ? Math.Clamp(Math.Round(ExportGameVolume, 1), 0.1, 1)
+                : defaults.ExportGameVolume,
+            ExportMicrophoneVolume = double.IsFinite(ExportMicrophoneVolume)
+                ? Math.Clamp(Math.Round(ExportMicrophoneVolume, 1), 0.1, 1)
+                : defaults.ExportMicrophoneVolume,
+            OfferedApps = OfferedApps?.Where(key => !string.IsNullOrWhiteSpace(key)).ToArray(),
             PlayerVolume = double.IsFinite(PlayerVolume)
                 ? Math.Clamp(Math.Round(PlayerVolume, 1), 0.1, 1)
                 : defaults.PlayerVolume,

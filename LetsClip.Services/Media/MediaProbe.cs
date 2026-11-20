@@ -233,12 +233,12 @@ public static class MediaProbe
         var audio = streams.FirstOrDefault(stream => stream.CodecType == "audio");
         var tracks = streams.Where(stream => stream.CodecType == "audio").ToList();
 
-        // Average Rate, Unless Long Holds Sank It Under Half Nominal
+        // The Recorded Rate, A Game's Fewer Frames Never Lower It
         var nominal = RateOf(video?.RFrameRate);
         var frameRate =
-            RateOf(video?.AvgFrameRate) is > 0 and var average && average >= nominal / 2
-                ? average
-                : nominal;
+            nominal is > 1 and < 241 ? nominal
+            : RateOf(video?.AvgFrameRate) is > 0 and var average ? average
+            : nominal;
 
         // A Sound Tail Under A Step Never Lengthens The Clip
         var duration =

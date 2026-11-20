@@ -19,7 +19,8 @@ public sealed record CaptureOptions(
     double MicrophoneVolume,
     nint GameWindow,
     string? GameName,
-    int GameProcess
+    int GameProcess,
+    double VoiceVolume = 1
 )
 {
     // Cleaning And Volume Both Filter The Microphone Alone
@@ -29,7 +30,11 @@ public sealed record CaptureOptions(
 
 public sealed record SaveOutcome(ClipInfo? Clip, string? Error);
 
-public sealed class CaptureBlockedException(string message) : InvalidOperationException(message);
+public sealed class CaptureBlockedException(string message, CaptureFix fix)
+    : InvalidOperationException(message)
+{
+    public CaptureFix Fix { get; } = fix;
+}
 
 public sealed class WindowRefusedException()
     : InvalidOperationException("Windows refused to record the window");
@@ -192,7 +197,16 @@ public sealed partial class ReplayRecorder : IDisposable
                     _ => CaptureFailure.Brief,
                 }
             );
-            SetStatus(Status with { State = CaptureState.Error, Message = message });
+            SetStatus(
+                Status with
+                {
+                    State = CaptureState.Error,
+                    Message = message,
+                    Fix = exception is CaptureBlockedException blocked
+                        ? blocked.Fix
+                        : CaptureFix.None,
+                }
+            );
             s_logger.Warn($"Failed To Start Recording {exception.GetType().Name}, {message}");
         }
         finally
@@ -217,7 +231,14 @@ public sealed partial class ReplayRecorder : IDisposable
             {
                 if (Status.State == CaptureState.Error)
                 {
-                    SetStatus(Status with { State = CaptureState.Stopped, Message = reason });
+                    SetStatus(
+                        Status with
+                        {
+                            State = CaptureState.Stopped,
+                            Message = reason,
+                            Fix = CaptureFix.None,
+                        }
+                    );
                 }
 
                 return;
@@ -244,6 +265,7 @@ public sealed partial class ReplayRecorder : IDisposable
                     State = CaptureState.Stopped,
                     Message = reason,
                     Warning = null,
+                    Fix = CaptureFix.None,
                 }
             );
             s_logger.Info(reason ?? "Stopped Recording");
@@ -285,19 +307,24 @@ public sealed partial class ReplayRecorder : IDisposable
     {
         if (!FFmpeg.IsAvailable)
         {
-            throw new CaptureBlockedException("Part of LetsClip is missing, reinstall it");
+            throw new CaptureBlockedException(
+                "Part of LetsClip is missing, reinstall it",
+                CaptureFix.Reinstall
+            );
         }
 
         // The Saved Monitor Is Found By Device Path, Never Number
         var monitor =
             MonitorCatalog.Find(MonitorCatalog.Enumerate(), options.Monitor.DevicePath)
             ?? throw new CaptureBlockedException(
-                $"{options.Monitor.FriendlyName} is not connected"
+                $"{options.Monitor.FriendlyName} is not connected",
+                CaptureFix.Monitor
             );
         if (monitor.IsHdr)
         {
             throw new CaptureBlockedException(
-                $"HDR is on for {monitor.FriendlyName}, turn it off in Display Settings to record in SDR"
+                $"HDR is on for {monitor.FriendlyName}, turn it off in Display Settings to record in SDR",
+                CaptureFix.Display
             );
         }
 
@@ -323,7 +350,8 @@ public sealed partial class ReplayRecorder : IDisposable
         if (spills > 0 && FreeBytes(AppInfo.CacheDirectory) < needed)
         {
             throw new CaptureBlockedException(
-                $"Less than {Formatter.FormatSize(needed)} free for a {Formatter.FormatDuration(options.Seconds)} replay, free some space or pick a shorter one"
+                $"Less than {Formatter.FormatSize(needed)} free for a {Formatter.FormatDuration(options.Seconds)} replay, free some space or pick a shorter one",
+                CaptureFix.Storage
             );
         }
 
@@ -422,7 +450,7 @@ public sealed partial class ReplayRecorder : IDisposable
         CaptureSession session,
         string message,
         bool windowClosed = false,
-        bool blocked = false
+        CaptureFix fix = CaptureFix.None
     )
     {
         // A Broken Session Ends, Its Finished Segments Kept A While
@@ -446,13 +474,13 @@ public sealed partial class ReplayRecorder : IDisposable
 
             // The Controller Hears First, A Quick Retry Shows No Error
             Failed?.Invoke(
-                blocked ? CaptureFailure.Blocked
+                fix != CaptureFix.None ? CaptureFailure.Blocked
                 : windowClosed ? CaptureFailure.WindowClosed
                 : Stopwatch.GetElapsedTime(session.OriginTimestamp) > s_ranLong
                     ? CaptureFailure.RanLong
                 : CaptureFailure.Brief
             );
-            SetStatus(Status with { State = CaptureState.Error, Message = message });
+            SetStatus(Status with { State = CaptureState.Error, Message = message, Fix = fix });
             if (windowClosed)
             {
                 s_logger.Info("Stopped Recording, The Window Closed");
@@ -526,7 +554,7 @@ public sealed partial class ReplayRecorder : IDisposable
             _ = FailAsync(
                 session,
                 "The disk is almost full, free some space and start again",
-                blocked: true
+                fix: CaptureFix.Storage
             );
             return;
         }

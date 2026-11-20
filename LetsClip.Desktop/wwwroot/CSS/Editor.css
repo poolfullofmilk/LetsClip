@@ -14,6 +14,9 @@
     container-type: size;
     /* The Selection Lines And The Crop Frame Share One Width */
     --bar-width: round(5px, var(--device-pixel));
+    /* Grips Of The Trim Handles And The Crop's Corners */
+    --grip-gap: round(5px, var(--device-pixel));
+    --grip-width: round(3px, var(--device-pixel));
     /* The Height Left For The Clip In A Full Panel */
     --clip-room: calc(100cqh - 48px - 32px - var(--controls-height) - var(--timeline-height));
 }
@@ -89,7 +92,7 @@
         display: none;
     }
 
-/* Vertical Crop, The 9 By 16 Part An Export Keeps */
+/* The Crop, The Part An Export Keeps, Over The Picture */
 .crop-box {
     position: absolute;
     overflow: hidden;
@@ -97,24 +100,82 @@
     pointer-events: none;
 }
 
-.crop-row {
-    --crop-width: calc(100% * 9 / 16 / var(--clip-aspect));
-    display: grid;
-    grid-template-columns: calc((100% - var(--crop-width)) * var(--crop)) var(--crop-width) 1fr;
-    height: 100%;
-}
-
-.crop-shade {
-    background-color: var(--shade);
-}
-
+/* Its Shape's Largest Box, Scaled, Shade Spread Round It */
 .crop-frame {
-    outline: var(--bar-width) solid var(--grabber);
-    outline-offset: calc(0px - var(--bar-width));
+    --crop-width: calc(100% * var(--crop-size) * min(1, var(--crop-aspect) / var(--clip-aspect)));
+    --crop-height: calc(100% * var(--crop-size) * min(1, var(--clip-aspect) / var(--crop-aspect)));
+    position: absolute;
+    top: calc((100% - var(--crop-height)) * var(--crop-y));
+    left: calc((100% - var(--crop-width)) * var(--crop-x));
+    width: var(--crop-width);
+    height: var(--crop-height);
+    overflow: hidden;
+    border-radius: var(--radius-inner);
+    box-shadow: var(--picture-shadow), 0 0 0 200vmax var(--shade);
     cursor: grab;
     pointer-events: auto;
     touch-action: none;
 }
+
+    /* The Kept Part, Rounded Less, Its Spread Paints The Frame */
+    .crop-frame::before {
+        content: "";
+        position: absolute;
+        inset: var(--bar-width);
+        border-radius: var(--radius-thumb);
+        box-shadow: 0 0 0 100px var(--grabber), inset var(--picture-shadow);
+        pointer-events: none;
+    }
+
+/* An L In Each Corner, Dragged To Size The Box */
+.crop-grip {
+    --arm: round(14px, var(--device-pixel));
+    --inset: calc(var(--bar-width) + var(--grip-gap));
+    position: absolute;
+    box-sizing: content-box;
+    width: var(--arm);
+    height: var(--arm);
+    background:
+        linear-gradient(var(--grip), var(--grip)) var(--grip-x) var(--grip-y) / var(--arm) var(--grip-width) no-repeat content-box,
+        linear-gradient(var(--grip), var(--grip)) var(--grip-x) var(--grip-y) / var(--grip-width) var(--arm) no-repeat content-box;
+    filter: drop-shadow(var(--icon-shadow));
+}
+
+    .crop-grip[data-corner="nw"] {
+        --grip-x: left;
+        --grip-y: top;
+        top: 0;
+        left: 0;
+        padding: var(--inset) 0 0 var(--inset);
+        cursor: nwse-resize;
+    }
+
+    .crop-grip[data-corner="ne"] {
+        --grip-x: right;
+        --grip-y: top;
+        top: 0;
+        right: 0;
+        padding: var(--inset) var(--inset) 0 0;
+        cursor: nesw-resize;
+    }
+
+    .crop-grip[data-corner="sw"] {
+        --grip-x: left;
+        --grip-y: bottom;
+        bottom: 0;
+        left: 0;
+        padding: 0 0 var(--inset) var(--inset);
+        cursor: nesw-resize;
+    }
+
+    .crop-grip[data-corner="se"] {
+        --grip-x: right;
+        --grip-y: bottom;
+        right: 0;
+        bottom: 0;
+        padding: 0 var(--inset) var(--inset) 0;
+        cursor: nwse-resize;
+    }
 
 /* A Held Frame Covers A File Change, Then Fades */
 .player-frozen {
@@ -148,8 +209,6 @@
 /* Thumbnails In A Track, Handles Outside The Kept Part */
 .timeline {
     /* Whole Screen Pixels, Every Part Snaps Alike At Any Scale */
-    --grip-gap: round(5px, var(--device-pixel));
-    --grip-width: round(3px, var(--device-pixel));
     --grip-height: round(22px, calc(2 * var(--device-pixel)));
     --handle-width: calc(2 * var(--grip-gap) + var(--grip-width));
     height: var(--timeline-height);

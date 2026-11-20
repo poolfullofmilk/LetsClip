@@ -1,5 +1,7 @@
 using System.Globalization;
+using LetsClip.Data.Enums;
 using LetsClip.Data.Helpers;
+using LetsClip.Data.ViewModels;
 using LetsClip.Desktop.Interop;
 using LetsClip.Services.Media;
 using Microsoft.JSInterop;
@@ -86,10 +88,20 @@ public partial class ClipEditor
     }
 
     [JSInvokable]
-    public void OnCrop(double center)
+    public void OnCrop(double x, double y, double size)
     {
-        // Dragged In The Page Script, Remembered With The Clip
-        _crop = Math.Clamp(center, 0, 1);
+        // Moved Or Sized In The Page, Remembered With The Clip
+        if (_crop is not { } crop)
+        {
+            return;
+        }
+
+        _crop = crop with
+        {
+            X = Math.Clamp(x, 0, 1),
+            Y = Math.Clamp(y, 0, 1),
+            Size = Math.Clamp(size, CropBox.SmallestSize, 1),
+        };
         SaveCrop();
         StateHasChanged();
     }
@@ -100,9 +112,14 @@ public partial class ClipEditor
         _placeCrop = _crop is not null;
     }
 
-    private void SetVertical(bool vertical)
+    private void SetCrop(CropShape shape)
     {
-        (_crop, _placeCrop) = (vertical ? 0.5 : null, vertical);
+        // Another Shape Keeps Where The Box Sat And Its Size
+        _crop =
+            shape == CropShape.Off ? null
+            : _crop is { } crop ? crop with { Shape = shape }
+            : CropBox.Centred(shape);
+        _placeCrop = _crop is not null;
         SaveCrop();
     }
 
@@ -112,9 +129,14 @@ public partial class ClipEditor
         {
             var crop = _crop;
             _ = Task.Run(() =>
-                ClipLibrary.UpdateMetadata(path, metadata => metadata with { Crop = crop })
+                ClipLibrary.UpdateMetadata(path, metadata => metadata.WithBox(crop))
             );
         }
+    }
+
+    private static string CropStyle(CropBox crop)
+    {
+        return $"--crop-x:{Exact(crop.X)}; --crop-y:{Exact(crop.Y)}; --crop-size:{Exact(crop.Size)}; --crop-aspect:{Exact(crop.Aspect)}";
     }
 
     [JSInvokable]

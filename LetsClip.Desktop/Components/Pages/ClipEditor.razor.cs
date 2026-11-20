@@ -76,8 +76,9 @@ public partial class ClipEditor : IAsyncDisposable
     private double _duration;
     private TrimRange _range;
 
-    // A Vertical Export's Crop, Placed Once Shown
-    private double? _crop;
+    // An Export's Crop, Placed Once Shown, Sized From Any Corner
+    private CropBox? _crop;
+    private static readonly string[] s_cropCorners = ["nw", "ne", "sw", "se"];
     private bool _placeCrop;
 
     // The Timeline's Shown Window, The Whole Clip Unless Zoomed
@@ -113,10 +114,12 @@ public partial class ClipEditor : IAsyncDisposable
     // A Cut Or Restore Swapping The File Locks Every Edit
     private bool Editable => _ready && !_swapping;
 
-    // The Crop Box Shows While The Export Keeps A Picture
+    // Shown While The Export Keeps A Picture The Crop Changes
     private bool ShowsCrop =>
         _ready
         && _media is { } media
+        && _crop is { } crop
+        && CropBox.Changes(crop.Shape, media.Width, media.Height)
         && ClipExporter.KeepsVideo(
             media,
             Controller.Settings.ExportVideo,
@@ -235,7 +238,7 @@ public partial class ClipEditor : IAsyncDisposable
             metadata is { TrimStart: { } start, TrimEnd: { } end }
                 ? TrimRange.Fit(start, end, media.Duration)
                 : TrimRange.Whole(media.Duration),
-            metadata?.Crop,
+            metadata?.Box,
             opening,
             token
         );
@@ -564,7 +567,7 @@ public partial class ClipEditor : IAsyncDisposable
         string Path,
         string? StripUrl,
         TrimRange Range,
-        double? Crop,
+        CropBox? Crop,
         bool Opening,
         CancellationToken Token
     );

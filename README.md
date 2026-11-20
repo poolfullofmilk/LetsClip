@@ -2,49 +2,51 @@
 
 ## Features
 - Keeps the last 30 seconds to 10 minutes of your game, app or monitor, ready to save with one key
-- Record keeps everything from the moment you press it until you stop, saved as one clip
-- If your game crashes, closes or restarts, the moments before it are still there to save
-- Games and Apps Only records just that window, so chats and notifications stay out, and you pick any installed game or app from one list
-- Press the key in a game LetsClip does not know yet and it offers to record that game from then on
+- Starts with Windows in the tray and records by itself, and the status says what it records and opens the fix when something is wrong
+- Games and Apps Only records just the game's window, so chats and notifications stay out
+- Finds your games from Steam, Epic, Riot, Rockstar, Roblox and the Xbox app, and the ones Windows saw you play from Battle.net, Ubisoft or EA, even ones installed while it runs
+- Add any other app or game from one list, and a game it does not know yet is offered once it fills your screen or when you press the key in it
+- A game always goes before an app you added, so a browser left open never takes its place
+- Records the game's real window, past splash screens and hidden windows, and follows a game like Roblox when it opens a new one
+- Give a game its own replay length, resolution, frame rate and quality
 - Recommended marks the best quality for your PC, or record up to your monitor's own resolution and refresh rate
-- Give a game its own replay length, resolution, frame rate and quality, like a higher frame rate for one game only
 - The replay waits in memory, so recording all day barely writes to your SSD
-- Records only your game and voice chat (Discord, Vesktop, TeamSpeak, Mumble, Steam), or everything your PC plays, and your microphone at the volume you set with its background noise cleaned out and quiet words brought up
-- Your microphone also gets its own track, so an export can leave out your voice or the game
+- Records only your game and voice chat (Discord, Vesktop, TeamSpeak, Mumble, Steam), or everything your PC plays
+- Voice chat and your microphone each have a volume of their own
+- Your microphone is cleaned of background noise with quiet words brought up, and gets a track of its own
 - Test your microphone live and hear how it will sound in a clip
+- Record keeps everything from your press until you stop as one clip, the tray icon red meanwhile
+- If your game crashes, closes or restarts, the moments before it are still there to save
+- Spamming the key saves one clip, not a pile of copies
+- A different sound tells you when a press saved nothing, and no notification ever plays a Windows sound over your game
 - Turn on Notifications for a small toast over your full screen game when a clip is saved or a game starts recording
 - A clip that comes out black always tells you, with the fix
 - Clips are named after their game and time, and renaming a clip renames its file, so it shares under that name
-- Trim a clip to the exact frame, by dragging, typing or stepping, over a strip with the game and your voice drawn across it in their own colours that the mouse wheel zooms, and export an exact copy of it, or fit it to Discord's Free, Nitro Basic or Nitro limit as HEVC at the size that looks sharpest
-- Long selections still fit a Discord plan, at a smaller picture and frame rate the longer they run
-- Leave out the video to share only the sound, like a long voice chat, as a file Discord plays right in the chat
-- Exports even out the sound, so a quiet clip is never too quiet in Discord
-- Make a vertical export of any landscape clip for phones, dragging the box to the part you want
-- Exports keep going when you leave the editor and wait their turn, with their progress in the top bar
-- Keep just the trimmed part without losing any quality, and keep the full clip to bring back if you want
-- The length, size and bitrate shown before an export are what the file comes out as
-- Clips sit under Today, Yesterday, This Week, Last Week and then each month, each tagged with its game, app or monitor, with its resolution, bitrate and size in its menu
-- Search, rename and sort clips, and filter them by game, app or monitor, each with its count, or to the ones you have not edited yet
-- Clips saved since you last opened LetsClip are marked New
-- Each clip's picture shows the moment just before you saved it
-- Rest the pointer on a clip to preview it
-- Stays quick with thousands of clips, their pictures made four at a time, the ones on screen first
+- Clips sit under Today, Yesterday, This Week, Last Week and then each month, each tagged with its game, app or monitor
+- Search, sort and filter clips by game, app or monitor, or to the ones you have not edited yet
+- Clips saved since you last looked are marked New, and resting the pointer on one previews it
 - Copy any clip as a file and paste it straight into Discord, or drag its card into Discord or a folder
-- Copy a clip sized for your Discord plan straight from its card, with the plans it already fits greyed out, and copy its last export again any time
+- Copy a clip sized for your Discord plan straight from its card, and copy its last export again any time
 - Deleting a clip can be undone for a moment, then it goes to the Recycle Bin
-- Changing the clips folder moves every clip with its details, with a progress bar
-- Each clip's details sit beside it, so moving or renaming clips in Explorer, to a USB drive or out of a backup, keeps their names, trims and games
-- A different sound tells you when a press saved nothing, and no notification ever plays a Windows sound over your game
+- Stays quick with thousands of clips, the pictures on screen made first
+- Trim to the exact frame by dragging, typing or stepping, over a strip with the game and your voice drawn in their own colours that the mouse wheel zooms
+- Keep just the trimmed part without losing any quality, the full clip kept to bring back or sent to the Recycle Bin
+- Export an exact copy, or fit Discord's Free, Nitro Basic or Nitro limit as HEVC at the size that looks sharpest, even for long selections
+- Crop to vertical for phones or square, dragging the box where you want it and making it smaller to zoom in
+- Leave out your voice or the game, or balance the two, and exports even out the sound so it is never too quiet in Discord
+- Share only the sound, like a long voice chat, as a file Discord plays right in the chat
+- The length, size, bitrate and time shown before an export are what you get
+- Exports keep going when you leave the editor and wait their turn, with their progress in the top bar
 - A problem, like keys another app already uses or an almost full drive, shows as a small chip next to where you fix it
-- Spamming the key saves one clip, not a pile of copies
-- Finds your games wherever Steam is installed, games from the Xbox app and the ones Windows saw you play from Battle.net, Ubisoft or EA, even ones installed while it runs
-- A game always goes before an app you added, so a browser left open never takes its place
-- Records the game's real window, past splash screens and hidden windows, and follows a game like Roblox when it opens a new one
-- Keeps recording through a dock, a monitor switched off or on or another monitor's refresh rate changing
+- Changing the clips folder moves every clip with its details, with a progress bar
+- Moving or renaming clips in Explorer, to a USB drive or out of a backup, keeps their names, trims and games
+- Keeps recording through a dock, a monitor switched off or on, or another monitor changing its refresh rate
 - Sound stays whole on a busy PC, and a headset or speakerphone dropping out and back never cuts it
 - Change the replay length while it records, nothing is lost
 - Remembers where you left its window and how loud you play clips
-- Starts with Windows in the tray, updates itself in the background with signed updates, never in the middle of a recording you started, shows what changed and recovers from problems on its own, even a crash
+- Updates itself in the background with signed updates, never during a recording you started, and shows what changed
+- Recovers from problems on its own, even a crash
+- Report a Problem opens a GitHub issue with the log ready to paste, your user folder left out
 - Uninstalls from Windows' own Apps list, and your clips stay
 
 ## Quick start

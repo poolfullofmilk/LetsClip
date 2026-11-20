@@ -25,13 +25,29 @@
             </ChoiceSelect>
         </MudElement>
     </SettingRow>
-    @if (CanCrop)
-    {
-        <SettingRow Title="Vertical"
-                    Switch="IsVertical"
-                    SwitchChanged="VerticalChanged"
-                    SwitchDisabled="@(IsExporting || Busy || !KeepsVideo)" />
-    }
+    <SettingRow Title="Crop">
+        @* Crop Select *@
+        <MudElement HtmlTag="div"
+                    Class="content-field">
+            <ChoiceSelect T="CropShape"
+                          Value="CropShown"
+                          ValueChanged="CropChanged"
+                          ToStringFunc="@(shape => shape.ToString())"
+                          Disabled="@(IsExporting || Busy || !KeepsVideo || !AnyCropChanges)"
+                          RelativeWidth="@DropdownWidth.Adaptive"
+                          aria-label="Crop">
+                @foreach (var shape in Enum.GetValues<CropShape>())
+                {
+                    <MudSelectItem T="CropShape"
+                                   Value="shape"
+                                   Disabled="@(!CropChanges(shape))">
+                        <ItemLabel Text="@shape.ToString()"
+                                   Detail="@CropDetailOf(shape)" />
+                    </MudSelectItem>
+                }
+            </ChoiceSelect>
+        </MudElement>
+    </SettingRow>
     <SettingRow Title="Video">
         @* Video Button *@
         <IconButton Icon="@(KeepsVideo ? Icons.Material.Rounded.Videocam : Icons.Material.Rounded.VideocamOff)"
@@ -43,23 +59,24 @@
     </SettingRow>
     @if (Media.HasSeparateTracks)
     {
-        <SettingRow Title="Game Audio">
-            @* Game Audio Button *@
-            <IconButton Icon="@(KeepsGame ? Icons.Material.Rounded.VolumeUp : Icons.Material.Rounded.VolumeOff)"
-                        Text="@(KeepsGame ? "Mute Game Audio" : "Unmute Game Audio")"
-                        Color="@(KeepsGame ? Color.Default : Color.Error)"
-                        Filled
-                        Disabled="@SoundLocked(true)"
-                        OnClick="ToggleAudio" />
-        </SettingRow>
-        <SettingRow Title="Microphone">
-            @* Microphone Button *@
-            <IconButton Icon="@(KeepsMicrophone ? Icons.Material.Rounded.Mic : Icons.Material.Rounded.MicOff)"
-                        Text="@(KeepsMicrophone ? "Mute Microphone" : "Unmute Microphone")"
-                        Color="@(KeepsMicrophone ? Color.Default : Color.Error)"
-                        Filled
-                        Disabled="@SoundLocked(false)"
-                        OnClick="ToggleMicrophone" />
+        <SettingRow Title="Audio">
+            @* Game Audio Volume *@
+            <VolumeButton Text="@(KeepsGame ? "Mute Game Audio" : "Unmute Game Audio")"
+                          Filled
+                          Disabled="@SoundLocked(true)"
+                          Slides="KeepsMicrophone"
+                          OnClick="ToggleAudio"
+                          Value="@(KeepsGame ? GameVolume : 0)"
+                          ValueChanged="SetGameVolumeAsync" />
+            @* Microphone Volume *@
+            <VolumeButton Text="@(KeepsMicrophone ? "Mute Microphone" : "Unmute Microphone")"
+                          Filled
+                          IsMicrophone
+                          Disabled="@SoundLocked(false)"
+                          Slides="KeepsGame"
+                          OnClick="ToggleMicrophone"
+                          Value="@(KeepsMicrophone ? MicrophoneVolume : 0)"
+                          ValueChanged="SetMicrophoneVolumeAsync" />
         </SettingRow>
     }
     else if (Media.HasAudio)
@@ -100,6 +117,12 @@
         <ChangedValue Was="@ClipBitrateText"
                       Value="@BitrateText"
                       Prefix="About" />
+    </SettingRow>
+    <SettingRow Title="Export Time">
+        <MudText Typo="Typo.body2"
+                 Class="mud-text-secondary">
+            @ExportTimeText
+        </MudText>
     </SettingRow>
 
     <MudStack Spacing="3"

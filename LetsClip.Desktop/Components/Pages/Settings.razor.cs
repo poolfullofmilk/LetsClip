@@ -15,9 +15,6 @@ public partial class Settings : IDisposable
 {
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
 
-    // The Storage Panel, Where Kept Originals Are Set
-    public const string StorageRoute = "settings#storage";
-
     // A Slid Volume Plays Once Settled, Restarts Cut The Chime
     private static readonly TimeSpan s_chimeDelay = TimeSpan.FromMilliseconds(300);
 
@@ -42,9 +39,6 @@ public partial class Settings : IDisposable
     [Inject]
     public required ISnackbar Snackbar { get; set; }
 
-    [Inject]
-    public required NavigationManager Navigation { get; set; }
-
     // Null Until Windows Answers, So None Never Flashes While Loading
     private IReadOnlyList<AudioDeviceInfo>? _playback;
     private IReadOnlyList<AudioDeviceInfo>? _microphones;
@@ -56,15 +50,12 @@ public partial class Settings : IDisposable
     private Timer? _deviceTimer;
     private bool _closed;
     private Timer? _chimeTimer;
-    private Timer? _volumeTimer;
-    private double? _slidVolume;
     private bool _capturingKey;
     private Hotkey? _pendingKey;
     private string? _keysHint;
     private (long Used, long Free)? _space;
     private long? _originalsBytes;
     private bool _listingOriginals;
-    private bool _revealStorage;
 
     private string? SpaceText =>
         _space is var (used, free)
@@ -127,23 +118,11 @@ public partial class Settings : IDisposable
 
         await RefreshDevicesAsync();
         await MeasureSpaceAsync();
-
-        // Revealed Once Loaded, So Storage Lands Where It Stays
-        _revealStorage = new Uri(Navigation.Uri).Fragment == "#storage";
         _deviceTimer = new Timer(_ => OnDevicesSettled());
         _deviceWatch = await Task.Run(() => AudioDevices.WatchChanges(OnDevicesChanged));
         if (_closed)
         {
             _deviceWatch.Dispose();
-        }
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (_revealStorage)
-        {
-            _revealStorage = false;
-            await JavaScript.CallAsync("letsClip.reveal", "storage");
         }
     }
 
@@ -261,26 +240,17 @@ public partial class Settings : IDisposable
         await RestartMicrophoneTestAsync();
     }
 
-    private double MicrophoneVolume => _slidVolume ?? Controller.Settings.MicrophoneVolume;
+    // Only A Game Window's Voice Apps Have Their Own Level
+    private bool RecordsVoiceChat =>
+        CanRecordOnlyGameAndDiscord && Controller.Settings.OnlyGameAndDiscord;
 
-    private string MicrophoneVolumeText => $"{MicrophoneVolume * 100:0}%";
-
-    private void SetMicrophoneVolume(double level)
+    private void SetVoiceVolume(double level)
     {
-        // Shown At Once, Applied Once The Slider Rests
-        _slidVolume = Math.Round(level, 1);
-        _volumeTimer ??= new Timer(_ => _ = InvokeAsync(ApplyMicrophoneVolumeAsync));
-        _volumeTimer.Change(s_deviceSettle, Timeout.InfiniteTimeSpan);
+        Controller.UpdateSettings(settings => settings with { VoiceVolume = level });
     }
 
-    private async Task ApplyMicrophoneVolumeAsync()
+    private async Task SetMicrophoneVolumeAsync(double level)
     {
-        if (_slidVolume is not { } level)
-        {
-            return;
-        }
-
-        _slidVolume = null;
         Controller.UpdateSettings(settings => settings with { MicrophoneVolume = level });
         if (!_closed)
         {
@@ -462,7 +432,7 @@ public partial class Settings : IDisposable
     {
         // Each Press Replaces The Last, A Slip Is Pressed Again
         _pendingKey = Hotkey.FromBrowser(code, key, control, alt, shift, meta);
-        _keysHint = _pendingKey is { IsUsable: true } ? null : "Or Pick A Function Key Alone";
+        _keysHint = _pendingKey is { IsUsable: true } ? null : "Or Pick a Function Key Alone";
         StateHasChanged();
     }
 
@@ -536,9 +506,8 @@ public partial class Settings : IDisposable
             return;
         }
 
-        // A Running Test Or Slid Volume Would Undo It
+        // A Running Test Would Undo It
         StopMicrophoneTest();
-        _slidVolume = null;
         var saved = Controller.Settings.Hotkey;
         var taken = Hotkey.Default.ToString() != saved && !Shell.ApplyHotkey(Hotkey.Default);
         if (taken)
@@ -683,9 +652,6 @@ public partial class Settings : IDisposable
             _ = StopKeysAsync();
         }
 
-        // A Volume Slid Just Before Leaving Still Lands
-        _volumeTimer?.Dispose();
-        _ = ApplyMicrophoneVolumeAsync();
         _reference?.Dispose();
         _chimeTimer?.Dispose();
         GC.SuppressFinalize(this);

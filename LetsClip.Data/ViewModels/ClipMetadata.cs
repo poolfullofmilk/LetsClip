@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+using LetsClip.Data.Enums;
 using LetsClip.Data.Helpers;
 
 namespace LetsClip.Data.ViewModels;
@@ -20,9 +22,30 @@ public sealed record ClipMetadata(
     int? Monitor = null,
     bool Cut = false,
     string? Export = null,
-    double? Crop = null
+    double? Crop = null,
+    CropShape? CropShape = null,
+    double? CropY = null,
+    double? CropSize = null
 )
 {
+    // Older Clips Kept Only Where A Full Height Vertical Sat
+    [JsonIgnore]
+    public CropBox? Box =>
+        Crop is { } x
+            ? new CropBox(CropShape ?? Enums.CropShape.Vertical, x, CropY ?? 0.5, CropSize ?? 1)
+            : null;
+
+    public ClipMetadata WithBox(CropBox? box)
+    {
+        return this with
+        {
+            Crop = box?.X,
+            CropY = box?.Y,
+            CropSize = box?.Size,
+            CropShape = box?.Shape,
+        };
+    }
+
     // Named, Cut Or Trimmed Short, Only Unedited Leaves It Out
     public bool IsEdited =>
         Title is not null

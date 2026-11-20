@@ -42,11 +42,12 @@ public sealed class CaptureSession(
 
     public static bool CanAdjust(CaptureOptions running, CaptureOptions wanted)
     {
-        // The Length, Or A Volume The Same Filters Can Carry
+        // Length, Voice Chat, Or A Volume The Filters Can Carry
         return running with
             {
                 Seconds = wanted.Seconds,
                 MicrophoneVolume = wanted.MicrophoneVolume,
+                VoiceVolume = wanted.VoiceVolume,
             } == wanted
             && (
                 running.MicrophoneVolume == wanted.MicrophoneVolume
@@ -60,13 +61,15 @@ public sealed class CaptureSession(
 
     public void Adjust(CaptureOptions wanted)
     {
-        // Length From The Next Segment, Volume From The Next Chunk
+        // Length From The Next Segment, Volumes From The Next Chunk
         Options = Options with
         {
             Seconds = wanted.Seconds,
             MicrophoneVolume = wanted.MicrophoneVolume,
+            VoiceVolume = wanted.VoiceVolume,
         };
         Mixer?.SetMicrophoneVolume(wanted.MicrophoneVolume);
+        Mixer?.SetVoiceVolume(wanted.VoiceVolume);
     }
 
     // High Frame Rates Need Room For Their Whole Replay
@@ -134,7 +137,8 @@ public sealed class CaptureSession(
                 Options.MicrophoneId,
                 Options.SeparatesMicrophone,
                 Options.MicrophoneVolume,
-                Options.GameProcess
+                Options.GameProcess,
+                Options.VoiceVolume
             );
             Audio = new SegmentProcess(
                 "Audio",

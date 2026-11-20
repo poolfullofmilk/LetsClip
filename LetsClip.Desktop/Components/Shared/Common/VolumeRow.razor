@@ -1,0 +1,22 @@
+<SettingRow Title="@Title">
+    <MudText Typo="Typo.body2"
+             Class="mud-text-secondary">
+        @($"{Shown * 100:0}%")
+    </MudText>
+    @* Volume Slider *@
+    <MudElement HtmlTag="div"
+                Class="fixed-width d-flex">
+        <MudSlider T="double"
+                   Value="Shown"
+                   ValueChanged="Slide"
+                   Min="VolumeButton.Step"
+                   Max="UserSettings.MaximumVolume"
+                   Step="VolumeButton.Step"
+                   Color="Color.Info"
+                   Size="Size.Medium"
+                   Variant="Variant.Filled"
+                   Immediate
+                   Disabled="Disabled"
+                   aria-label="@Title" />
+    </MudElement>
+</SettingRow>

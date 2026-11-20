@@ -6,9 +6,29 @@ namespace LetsClip.Services.Media;
 
 public static partial class ClipExporter
 {
+    private static string SoundSource(ExportRequest request, int track, bool balanced)
+    {
+        // One Track, Or Game And Microphone Mixed At Their Levels
+        return balanced
+            ? string.Create(
+                CultureInfo.InvariantCulture,
+                $"[0:a:1]volume={request.GameVolume}[game];[0:a:2]volume={request.MicrophoneVolume}[voice];[game][voice]amix=inputs=2:normalize=0"
+            )
+            : string.Create(CultureInfo.InvariantCulture, $"[0:a:{track}]anull");
+    }
+
+    private static string SoundGraph(ExportRequest request, int track, bool balanced, double gain)
+    {
+        // Raised Sound And A Rebuilt Mix Keep Their Peaks Under
+        var level = string.Create(CultureInfo.InvariantCulture, $"volume={gain}dB");
+        var limit = gain > 0 || balanced ? $",{PeakLimit}" : "";
+        return $"{SoundSource(request, track, balanced)},{level}{limit}[sound]";
+    }
+
     private static async Task<double> LoudnessGainAsync(
         ExportRequest request,
         int track,
+        bool balanced,
         IProgress<ExportProgress> progress,
         CancellationToken token
     )
@@ -33,10 +53,10 @@ public static partial class ClipExporter
                     request.SourcePath,
                     "-t",
                     FFmpeg.Seconds(range.Length),
+                    "-filter_complex",
+                    $"{SoundSource(request, track, balanced)},ebur128=peak=true:framelog=quiet[sound]",
                     "-map",
-                    string.Create(CultureInfo.InvariantCulture, $"0:a:{track}"),
-                    "-af",
-                    "ebur128=peak=true:framelog=quiet",
+                    "[sound]",
                     "-f",
                     "null",
                     "-",
@@ -118,7 +138,8 @@ public static partial class ClipExporter
         string Crop,
         double AudioBitsPerSecond,
         bool Video,
-        double Gain
+        double Gain,
+        bool Balanced
     );
 
     private static async Task EncodeAsync(
@@ -178,15 +199,10 @@ public static partial class ClipExporter
                 ? ["-c:a", "aac"]
                 : ["-c:a", "libopus", "-vbr", "constrained", "-application", "audio"];
             output.AddRange([
+                "-filter_complex",
+                SoundGraph(job.Request, track, job.Balanced, job.Gain),
                 "-map",
-                string.Create(CultureInfo.InvariantCulture, $"0:a:{track}"),
-                "-af",
-                job.Gain > 0
-                    ? string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"volume={job.Gain}dB,{PeakLimit}"
-                    )
-                    : string.Create(CultureInfo.InvariantCulture, $"volume={job.Gain}dB"),
+                "[sound]",
                 .. codec,
                 "-b:a",
                 string.Create(CultureInfo.InvariantCulture, $"{(int)(sound / 1000)}k"),

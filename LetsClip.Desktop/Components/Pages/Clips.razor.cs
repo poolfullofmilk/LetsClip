@@ -407,7 +407,9 @@ public partial class Clips : IDisposable
             settings.ExportMicrophone,
             settings.ExportVideo,
             settings.ExportsDirectory,
-            metadata?.Crop
+            metadata?.Box,
+            settings.ExportGameVolume,
+            settings.ExportMicrophoneVolume
         );
         if (copy.Problem is { } problem)
         {

@@ -2,6 +2,7 @@ using System.ComponentModel;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
 using LetsClip.Services.Capture;
+using Microsoft.VisualBasic.FileIO;
 
 namespace LetsClip.Services.Media;
 
@@ -25,7 +26,7 @@ public sealed partial class ClipLibrary
         );
     }
 
-    public static async Task CutAsync(
+    public static async Task<bool> CutAsync(
         string path,
         TrimRange range,
         bool keepOriginal,
@@ -45,12 +46,12 @@ public sealed partial class ClipLibrary
                 throw new IOException("Failed To Cut The Clip");
             }
 
-            // The First Cut Keeps The Full Clip If Asked
+            // The First Cut Sets The Full Clip Aside
             var original = OwnedOriginalOf(path);
             var earlierStart = original is null ? 0 : metadata.CutStart ?? 0;
             await ReplaceWhileBusyAsync(() =>
             {
-                if (keepOriginal && original is null)
+                if (original is null)
                 {
                     KeepFullClip(path, temporary);
                 }
@@ -60,10 +61,12 @@ public sealed partial class ClipLibrary
                 }
             });
 
-            // Not Kept, An Earlier Original Goes Too, Leaving No History
-            if (!keepOriginal && original is not null)
+            // Not Kept, It Goes To The Recycle Bin Unless Locked
+            var originalPath = original ?? OriginalPathOf(path);
+            var recycled = !keepOriginal && Recycle(originalPath);
+            if (recycled)
             {
-                DeleteOriginal(original);
+                RemoveEmptyFolder(Path.GetDirectoryName(originalPath)!);
             }
 
             // Restore Needs The Cut In The Original's Own Time
@@ -74,8 +77,8 @@ public sealed partial class ClipLibrary
                     {
                         TrimStart = null,
                         TrimEnd = null,
-                        CutStart = keepOriginal ? earlierStart + range.Start : null,
-                        CutEnd = keepOriginal ? earlierStart + range.End : null,
+                        CutStart = recycled ? null : earlierStart + range.Start,
+                        CutEnd = recycled ? null : earlierStart + range.End,
                         ForeignOriginal = false,
                         Cut = true,
                     },
@@ -84,10 +87,32 @@ public sealed partial class ClipLibrary
             s_logger.Info(
                 $"Cut {Path.GetFileName(path)} To {Formatter.FormatDuration(range.Start)} Through {Formatter.FormatDuration(range.End)}, {Formatter.FormatDuration(media.Duration)} Kept Losslessly"
             );
+            return recycled;
         }
         finally
         {
             await FFmpeg.DeleteOutputAsync(temporary);
+        }
+    }
+
+    public static bool Recycle(string file)
+    {
+        // To The Recycle Bin, So A Mistake Comes Back
+        try
+        {
+            FileSystem.DeleteFile(file, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
+            s_logger.Info($"Moved {Path.GetFileName(file)} To The Recycle Bin");
+            return true;
+        }
+        catch (Exception exception)
+            when (exception
+                    is IOException
+                        or UnauthorizedAccessException
+                        or OperationCanceledException
+            )
+        {
+            s_logger.Warn($"Failed To Recycle {Path.GetFileName(file)} {exception.GetType().Name}");
+            return false;
         }
     }
 
@@ -96,7 +121,8 @@ public sealed partial class ClipLibrary
         TrimRange range,
         IReadOnlyList<string> streams,
         string output,
-        CancellationToken token
+        CancellationToken token,
+        IReadOnlyList<string>? soundCodec = null
     )
     {
         // Stream Copied, The MP4 Edit List Hides The Keyframe Pre-Roll
@@ -118,6 +144,8 @@ public sealed partial class ClipLibrary
                 .. streams,
                 "-c",
                 "copy",
+                // A Rebuilt Mix Encodes, The Last Codec Given Wins
+                .. soundCodec ?? [],
                 // A Still Window's Held Last Frame Ends At The Selection
                 "-bsf:v",
                 $"setts=duration=min(DURATION\\,max(1\\,{FFmpeg.Seconds(range.Length)}/TB-PTS))",
@@ -137,22 +165,6 @@ public sealed partial class ClipLibrary
     {
         // Unfinished Outputs Stay Out Of The Library Until Renamed
         return Path.Combine(folder, $"{PartialPrefix}{Guid.NewGuid():N}.mp4");
-    }
-
-    private static void DeleteOriginal(string original)
-    {
-        // The Cut Landed, A Locked Original Waits For Settings' Delete
-        try
-        {
-            File.Delete(original);
-            RemoveEmptyFolder(Path.GetDirectoryName(original)!);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            s_logger.Warn(
-                $"Failed To Delete The Original Of {Path.GetFileName(original)}, {exception.GetType().Name}"
-            );
-        }
     }
 
     internal static async Task ReplaceWhileBusyAsync(Action replace)
