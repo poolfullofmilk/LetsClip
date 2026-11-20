@@ -51,6 +51,11 @@ public sealed partial class GameWatcher : IDisposable
     private bool _failing;
     private Process? _game;
 
+    // The Window Given Out, And Those Windows Refused To Record
+    private nint _window;
+    private readonly HashSet<nint> _refused = [];
+    private static readonly HashSet<nint> s_noRefusals = [];
+
     // A Library Game, Never An Added App
     private bool _isGame;
     private volatile IReadOnlyDictionary<string, GameEntry> _games =
@@ -62,6 +67,9 @@ public sealed partial class GameWatcher : IDisposable
     }
 
     public event Action<string?>? GameChanged;
+
+    // The Same Game Rebuilt Or Brought Back Its Window
+    public event Action? WindowChanged;
 
     public string? GameName { get; private set; }
 
@@ -338,17 +346,109 @@ public sealed partial class GameWatcher : IDisposable
         lock (_gate)
         {
             // Read Fresh, Games Recreate Their Window On A Mode Change
-            try
+            _window = _game is { } game ? BestWindowOf(game.Id, _refused) : 0;
+            return _window;
+        }
+    }
+
+    public void Refuse(nint window)
+    {
+        // Windows Refused It, Another Window Of The Game Is Tried
+        lock (_gate)
+        {
+            _refused.Add(window);
+        }
+    }
+
+    private static nint BestWindowOf(int processId, HashSet<nint> refused)
+    {
+        // Shown, Uncloaked, Unowned, The Largest Drawn One
+        var best = (nint)0;
+        var bestArea = -1L;
+        foreach (var window in TopLevelWindows())
+        {
+            if (
+                GetWindowThreadProcessId(window, out var owner) == 0
+                || owner != processId
+                || refused.Contains(window)
+                || !IsWindowVisible(window)
+                || GetWindow(window, OwnerWindow) != 0
+                || IsCloaked(window)
+            )
             {
-                _game?.Refresh();
-                return _game?.MainWindowHandle ?? 0;
+                continue;
             }
-            catch (InvalidOperationException)
+
+            // A Minimised Window Counts Last, An Empty One Never
+            var area = IsIconic(window) ? 0 : ClientAreaOf(window);
+            if (area == 0 && !IsIconic(window))
             {
-                // Gone Meanwhile, No Window To Record
-                return 0;
+                continue;
+            }
+
+            if (area > bestArea)
+            {
+                (best, bestArea) = (window, area);
             }
         }
+
+        return best;
+    }
+
+    private bool WindowMoved()
+    {
+        lock (_gate)
+        {
+            // The Window Given Out Still Stands, Nothing To Do
+            if (
+                _game is not { } game
+                || (_window != 0 && IsWindow(_window) && !_refused.Contains(_window))
+            )
+            {
+                return false;
+            }
+
+            // A New Window To Record, Not Yet Asked For
+            var best = BestWindowOf(game.Id, _refused);
+            return best != 0 && best != _window && !IsIconic(best);
+        }
+    }
+
+    private static unsafe List<nint> TopLevelWindows()
+    {
+        List<nint> windows = [];
+        var handle = GCHandle.Alloc(windows);
+        try
+        {
+            _ = EnumWindows(&CollectWindow, GCHandle.ToIntPtr(handle));
+        }
+        finally
+        {
+            handle.Free();
+        }
+
+        return windows;
+    }
+
+    [UnmanagedCallersOnly]
+    private static int CollectWindow(nint window, nint state)
+    {
+        ((List<nint>)GCHandle.FromIntPtr(state).Target!).Add(window);
+        return 1;
+    }
+
+    private static bool IsCloaked(nint window)
+    {
+        // Another Desktop Or Hidden By Windows, It Draws Nothing
+        return DwmGetWindowAttribute(window, CloakedAttribute, out var cloaked, sizeof(int)) == 0
+            && cloaked != 0;
+    }
+
+    private static long ClientAreaOf(nint window)
+    {
+        return GetClientRect(window, out var client)
+            ? (long)(client.Right - client.Left) * (client.Bottom - client.Top)
+            : 0;
     }
 
     private void Check()
@@ -377,6 +477,13 @@ public sealed partial class GameWatcher : IDisposable
                 running = null;
             }
 
+            // A Running Game Whose Window Was Rebuilt Records Anew
+            if (running is not null && WindowMoved())
+            {
+                s_logger.Info($"Found A New Window Of {running}");
+                WindowChanged?.Invoke();
+            }
+
             // A Game Stays, An App Gives Way To One
             if (running is not null && _isGame)
             {
@@ -398,7 +505,7 @@ public sealed partial class GameWatcher : IDisposable
                     candidate.Game is { } game
                     && (running is null || game.IsInstalledGame)
                     && candidate.Process.Id != Environment.ProcessId
-                    && candidate.Process.MainWindowHandle is not 0 and var window
+                    && BestWindowOf(candidate.Process.Id, s_noRefusals) is not 0 and var window
                     && !IsIconic(window)
                     && IsSameProgram(candidate.Process, game)
                 )
@@ -416,6 +523,8 @@ public sealed partial class GameWatcher : IDisposable
 
                     _game?.Dispose();
                     _game = found.Process;
+                    _window = 0;
+                    _refused.Clear();
                     _isGame = next.IsInstalledGame;
                     GameName = next.Name;
                     GameKey = next.Key;
@@ -514,6 +623,8 @@ public sealed partial class GameWatcher : IDisposable
         {
             _game?.Dispose();
             _game = null;
+            _window = 0;
+            _refused.Clear();
             GameName = null;
             GameKey = null;
         }
@@ -568,4 +679,47 @@ public sealed partial class GameWatcher : IDisposable
 
     [LibraryImport("user32.dll")]
     private static partial uint GetWindowThreadProcessId(nint window, out uint processId);
+
+    // A Window's Owner, And Whether Windows Cloaked It
+    private const uint OwnerWindow = 4;
+    private const uint CloakedAttribute = 14;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ClientRectangle
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static unsafe partial bool EnumWindows(
+        delegate* unmanaged<nint, nint, int> callback,
+        nint state
+    );
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool IsWindow(nint window);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool IsWindowVisible(nint window);
+
+    [LibraryImport("user32.dll")]
+    private static partial nint GetWindow(nint window, uint command);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetClientRect(nint window, out ClientRectangle rectangle);
+
+    [LibraryImport("dwmapi.dll")]
+    private static partial int DwmGetWindowAttribute(
+        nint window,
+        uint attribute,
+        out int value,
+        int size
+    );
 }

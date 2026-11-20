@@ -29,6 +29,7 @@ public sealed class MicrophoneMeter : IDisposable
     private WasapiRecorder? _recorder;
     private WasapiPlayer? _player;
     private Process? _filters;
+    private readonly Task[] _readers = [];
     private Stream? _toFilters;
     private BufferedWaveProvider? _heard;
     private float _peak;
@@ -71,8 +72,7 @@ public sealed class MicrophoneMeter : IDisposable
                 redirectInput: true
             );
             _toFilters = _filters.StandardInput.BaseStream;
-            _ = PassOnAsync(_filters);
-            _ = _filters.StandardError.ReadToEndAsync();
+            _readers = [PassOnAsync(_filters), _filters.StandardError.ReadToEndAsync()];
             _recorder = new WasapiRecorderBuilder()
                 .WithDevice(microphone)
                 .WithFormat(WaveFormat.CreateIeeeFloatWaveFormat(AudioMixer.SampleRate, Channels))
@@ -225,7 +225,11 @@ public sealed class MicrophoneMeter : IDisposable
             // A Vanished Device Can Fail Its Own Teardown
         }
 
-        _filters?.Dispose();
+        if (_filters is { } filters)
+        {
+            _ = FFmpeg.ReleaseAsync(filters, _readers);
+        }
+
         (_recorder, _player, _filters, _toFilters, _heard) = (null, null, null, null, null);
     }
 

@@ -3,10 +3,11 @@
 ## Features
 - Keeps the last 30 seconds to 10 minutes of your game, app or monitor, ready to save with one key
 - Record keeps everything from the moment you press it until you stop, saved as one clip
+- If your game crashes, closes or restarts, the moments before it are still there to save
 - Games and Apps Only records just that window, so chats and notifications stay out, and you pick any installed game or app from one list
 - Press the key in a game LetsClip does not know yet and it offers to record that game from then on
 - Recommended marks the best quality for your PC, or record up to your monitor's own resolution and refresh rate
-- Give a game its own resolution, frame rate and quality, like a higher frame rate for one game only
+- Give a game its own replay length, resolution, frame rate and quality, like a higher frame rate for one game only
 - The replay waits in memory, so recording all day barely writes to your SSD
 - Records only your game and voice chat (Discord, Vesktop, TeamSpeak, Mumble, Steam), or everything your PC plays, and your microphone at the volume you set with its background noise cleaned out and quiet words brought up
 - Your microphone also gets its own track, so an export can leave out your voice or the game
@@ -27,6 +28,7 @@
 - Clips saved since you last opened LetsClip are marked New
 - Each clip's picture shows the moment just before you saved it
 - Rest the pointer on a clip to preview it
+- Stays quick with thousands of clips, their pictures made four at a time, the ones on screen first
 - Copy any clip as a file and paste it straight into Discord, or drag its card into Discord or a folder
 - Copy a clip sized for your Discord plan straight from its card, with the plans it already fits greyed out, and copy its last export again any time
 - Deleting a clip can be undone for a moment, then it goes to the Recycle Bin
@@ -37,6 +39,7 @@
 - Spamming the key saves one clip, not a pile of copies
 - Finds your games wherever Steam is installed, games from the Xbox app and the ones Windows saw you play from Battle.net, Ubisoft or EA, even ones installed while it runs
 - A game always goes before an app you added, so a browser left open never takes its place
+- Records the game's real window, past splash screens and hidden windows, and follows a game like Roblox when it opens a new one
 - Keeps recording through a dock, a monitor switched off or on or another monitor's refresh rate changing
 - Sound stays whole on a busy PC, and a headset or speakerphone dropping out and back never cuts it
 - Change the replay length while it records, nothing is lost

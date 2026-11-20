@@ -10,7 +10,6 @@ using LetsClip.Desktop.Components;
 using LetsClip.Desktop.Components.Pages;
 using LetsClip.Desktop.Interop;
 using LetsClip.Services.Capture;
-using LetsClip.Services.Media;
 using Microsoft.AspNetCore.Components.WebView.Wpf;
 using Microsoft.Web.WebView2.Core;
 using NLog;

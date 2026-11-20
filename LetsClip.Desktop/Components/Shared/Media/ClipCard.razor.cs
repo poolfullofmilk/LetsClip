@@ -2,6 +2,7 @@ using LetsClip.Data.Enums;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
 using MudBlazor;
 
 namespace LetsClip.Desktop.Components.Shared.Media;
@@ -59,6 +60,11 @@ public partial class ClipCard
 
     private object? _drawn;
 
+    // Built On First Use, Most Cards Never Open Their Menu
+    private MudMenu? _menu;
+    private bool _menuBuilt;
+    private MouseEventArgs? _opening;
+
     private IEnumerable<(string Label, string Value)> Facts
     {
         get
@@ -91,13 +97,25 @@ public partial class ClipCard
     }
 
     private object Shown =>
-        (Clip, IsNew, Query, Time, CardStyle, Exporting, MakingPicture, SoundOnly);
+        (Clip, IsNew, Query, Time, CardStyle, Exporting, MakingPicture, SoundOnly, _menuBuilt);
 
-    protected override void OnAfterRender(bool firstRender)
+    private void BuildMenu(MouseEventArgs click)
+    {
+        (_menuBuilt, _opening) = (true, click);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
             _drawn = Shown;
+        }
+
+        // The Click That Built The Menu Opens It
+        if (_opening is { } click && _menu is not null)
+        {
+            _opening = null;
+            await _menu.OpenMenuAsync(click);
         }
     }
 

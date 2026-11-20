@@ -1,4 +1,3 @@
-using System.Collections.Specialized;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Threading;

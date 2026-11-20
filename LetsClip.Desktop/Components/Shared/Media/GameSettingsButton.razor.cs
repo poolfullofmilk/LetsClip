@@ -28,12 +28,19 @@ public partial class GameSettingsButton
             var saved = Saved;
             string?[] parts =
             [
+                saved.Seconds is { } seconds ? Formatter.FormatDuration(seconds) : null,
                 saved.Resolution is { } lines ? Formatter.FormatLines(lines) : null,
                 saved.FrameRate is { } rate ? Formatter.FormatFrameRate(rate) : null,
                 saved.Quality?.ToString(),
             ];
             return saved.IsDefault ? null : string.Join(", ", parts.OfType<string>());
         }
+    }
+
+    private int? Seconds
+    {
+        get => _draft.Seconds;
+        set => _draft = _draft with { Seconds = value };
     }
 
     private int? Resolution
@@ -74,6 +81,11 @@ public partial class GameSettingsButton
     {
         Controller.SetGameSettings(_draft);
         _open = false;
+    }
+
+    private static string SecondsLabel(int? seconds)
+    {
+        return seconds is { } picked ? Formatter.FormatDuration(picked) : "Default";
     }
 
     private static string ResolutionLabel(int? lines)

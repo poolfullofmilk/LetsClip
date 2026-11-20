@@ -550,11 +550,11 @@ public sealed class Tray
     private void ShowMenu()
     {
         var open = new TrayMenuItem("Open LetsClip");
-        var save = new TrayMenuItem(_controller.SaveText, _controller.IsRecording);
+        var save = new TrayMenuItem(_controller.SaveText, _controller.CanSave);
         var recording = _controller.RecordingSince is not null;
         var record = new TrayMenuItem(
             recording ? "Stop Recording" : "Record Until Stopped",
-            recording || (_controller.IsRecording && !_controller.Recorder.Status.IsSaving)
+            recording || _controller.IsRecording
         );
         var exit = new TrayMenuItem("Exit");
         var picked = TrayMenu.Show(_messages.Handle, open, save, record, null, exit);

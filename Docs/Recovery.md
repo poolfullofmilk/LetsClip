@@ -11,20 +11,22 @@ The owner's rule: consistent on every kind of system, and anything that can fix 
 | A hardware encoder's capture hangs or fails to start | The same encoder gets a second start (12 s limit each), then the next one | Recording throughout |
 | Recording runs on a lesser encoder than the machine has | `UpgradeAsync` tries the better one after 1, 2, 5 and 15 minutes, then every 30: it runs beside the running session until it holds a whole replay, then takes over, so no history is lost and a failed try costs nothing | Nothing |
 | A window's encoder hangs, at the start or mid session | A hung encoder and a still window both send nothing, so after 20 s of no video segment `ProbeWindowAsync` starts a fresh capture beside it, on the same encoder and then x264, at most once per quiet spell. Only a fresh capture that draws while the old one still sends nothing takes over; a still window keeps its session and history | Recording throughout |
-| A session dies or stalls | Retries after 2, 5, 15, 30 s, then each minute | Recording for the first four in a row, about a minute, then the error with Try Again while retries go on |
-| HDR on, less free space than 2 GB plus the whole replay, FFmpeg missing, monitor gone (`CaptureBlockedException`, `CaptureFailure.Blocked`) | Retried the same way | Shown at once, only the person can fix these |
+| A session dies or stalls | Retries after 2, 5, 15, 30 s, then each minute; its replay is kept for its own length and Save saves it as a clip of its own beside the new session's (`ReplayRecorder.KeptReplay`, since 19 November 2026: an encoder killed mid session still gave its clip and the new session's) | Recording for the first four in a row, about a minute, then the error with Try Again while retries go on |
+| The game closes, makes a new window, or a setting or monitor restarts capture | The ended session's replay is kept the same way, so the moments before it still save (a game window made anew gave two clips, 24 s kept and 4.1 s new); only lock, sleep, display off and Exit clear it | Save stays enabled, a press saves the kept replay |
+| Windows refuses to capture a game's window (`Failed to setup graphics capture`, a destroyed or protected window; Roblox's on 17 November 2026) | The start ends at once (`WindowRefusedException`), the window is passed over and the game's next window is tried 2 s later, never counted toward the backoff (`GameWatcher.Refuse`); a window that blinks in and out was tried nine times, never escalated, and the steady one recorded 3 s after it appeared | Recording |
+| HDR on, less free space than 1 GB plus the part of the replay past the memory budget, FFmpeg missing, monitor gone (`CaptureBlockedException`, `CaptureFailure.Blocked`) | Retried the same way | Shown at once, only the person can fix these |
 | An audio device is pulled or restarts | Reconnects, falling back to the default; a new recorder starts before the old one stops and takes over at its first sound, and a default that comes back to the device already recorded restarts nothing (18 November 2026) | A Notice only after 5 s of it (`ProblemTicks`) |
 | A new default audio device will not start | The device still recording keeps recording (`Kept <device>` in the log) and any later device event tries again | Nothing |
 | The audio capture is starved or the whole app stalls (a busy CPU, a slow disk under the log) | Capture threads run in Windows' `Audio` class, Windows holds a second of sound, the writer trails by 300 ms and logs run on their own thread; a packet still later is dropped and logged once per incident with its span and how late it was | Nothing, a gap in the sound only past about 300 ms |
 | Another monitor changes mode, is switched off or on, a dock comes or goes, a secure desktop shows | LetsClip's `ddagrab` opens its Desktop Duplication again within milliseconds and repeats the last frame meanwhile; the session, its replay and a Record go on (`ddagrab_reopen.patch`) | A held frame for the moment of the switch |
 | Capture falls below its frame rate | Nothing to do | A Notice only after 10 slow reports (`SlowTicks`), never for a loading screen |
-| A save's remux fails (a scanner holding the file), or its rename is blocked | The remux runs once more after 1 s from the same inputs, a long recording's joined files among them, which stay until the clip has its name or both tries are spent; after a timeout only a joined save tries again. A blocked rename waits five times a second apart and never remuxes again (`ClipSaver`, `ClipLibrary.ReplaceWhileBusyAsync`) | Nothing |
+| A save's remux fails (a scanner holding the file), or its rename is blocked | The remux runs once more after 1 s from the same segments, still pinned in memory or in their spilled files until the clip has its name or both tries are spent, after an IO error or a timeout alike. A blocked rename waits five times a second apart and never remuxes again (`ClipSaver`, `ClipLibrary.ReplaceWhileBusyAsync`) | Nothing |
 | The clips folder is gone or read only | `ClipSaver.FolderFor` saves to `Videos\LetsClip` | The balloon opens that file |
 | An export encoder hangs or fails | The next encoder takes over | Progress carries on |
 | A page throws | `SelfHealingBoundary` logs it and goes back to Clips, waiting for the route so the broken page is not rendered again; a second failure within 10 s shows the panel, so it can never loop | Clips |
 | WebView2's renderer crashes | `ProcessFailed` reloads the page, recording never depended on it | A blink |
 | WebView2's whole browser process exits | `ProcessFailed` with `BrowserProcessExited` runs `MainWindow.RebuildPageAsync`: the dead page is released without waiting on it (`ReleasePageAsync(browserGone: true)`, the control disposed directly) and a new one is built at once while shown, else on the next show. Tested with CDP's `Browser.crash`: the Clips page was back with its cards in 1.2 s, the window responsive, no background errors; waiting on the dead page's own disposal took 5 s and logged 34 unobserved `The WebView control is no longer valid` errors from Blazor reporting to the dead browser, which is why it no longer waits | A blink |
-| An update is out while LetsClip sits in the tray | Installed after 10 minutes hidden with nothing saving, exporting or recording until stopped, the new version starting in the tray (see Updates) | Nothing, the replay starts over |
+| An update is out while LetsClip sits in the tray | Installed after 10 minutes hidden with nothing saving, exporting or recording until stopped, the new version starting in the tray (see `Docs/Release.md`, Updates) | Nothing, the replay starts over |
 | Temp cleaners or Storage Sense sweep `%Temp%` | FFmpeg sits in the single file exe's extraction under `%Temp%\.net`, so `FFmpeg.HoldFiles` keeps every file open from start to exit | Nothing |
 | The microphone test loses a device | It ends and says so | A Notice |
 | The clips folder's watcher overflows or its drive leaves | `ClipLibrary` rescans and builds a new watcher, 15 s between tries while the folder is missing (`Rewatch`) | Clips Folder Not Available until it returns, 4 s after a test drive came back |
@@ -52,9 +54,11 @@ The owner's rule: consistent on every kind of system, and anything that can fix 
 | A session ends during Record (a restart, a lost encoder, Exit) | The recording stops and saves what it holds (`FinishRecordingOf`), its segments pinned until saved; Exit waits up to two minutes | The clip, then recording as before |
 | A recording that ended by itself cannot be saved | Said like a Stop that failed (`ReplayRecorder.RecordingNotSaved`, `EndRecordingAsync`); before 16 November 2026 its outcome was dropped | The falling chime and `Recording Not Saved` with why |
 | A better encoder is ready while Record runs | The upgrade's swap gives way (`SwapAsync` looks again under the gate) and tries again at its next wait; a hung window's probe still swaps, its recording gets nothing more anyway | Nothing, the recording runs until Stop |
-| Windows shuts down or signs out during Record or a save | LetsClip answers no, names `Saving the recording`, saves like Exit and then exits, two minutes at most (`Tray.EndSession`, see Shutdown With A Recording); with neither it exits at once | Windows' own screen naming LetsClip, then the shutdown |
+| Windows shuts down or signs out during Record or a save | LetsClip answers no, names `Saving the recording`, saves like Exit and then exits, two minutes at most (`Tray.EndSession`, see `Docs/History.md`, Shutdown With A Recording); with neither it exits at once | Windows' own screen naming LetsClip, then the shutdown |
 | The clips drive fills during Record | The health check stops and saves it before the drive could no longer hold it plus 1 GB (`RecordingNeedsStop`) | The recording as a clip |
-| LetsClip dies while a long recording joins its segments | `join-video.ts` and `join-audio.ts` are named like the cache's own files, so the next start's cleanup takes them with the segments | Nothing |
+| LetsClip dies with segments spilled to disk | The next start's cleanup deletes the session folders, older versions' `join-video.ts` and `join-audio.ts` among them; the memory goes with the process | Nothing |
+| FFmpeg's pipes outlive their process | Every run lets go of its redirected pipes once read (`FFmpeg.Release`, `ReleaseAsync`), so handles stay flat over thousands of thumbnails, probes and saves; before 19 November 2026 a run's pipe handles waited for the garbage collector | Nothing |
+| The save key is hammered | One clip: a press within 2 s of the last one is ignored, and one during a save does nothing | One chime, one clip |
 | A hardware export misses its limit twice | A third try along the line of the first two (`NextBitrate`), then the next encoder | The export, a little later |
 | A clip comes out black, a game hiding its picture | Said whatever Notifications says (`WarnIfBlackAsync`), logged | `Clip Is Black` with its fix |
 | A clip renamed or moved in Explorer loses its details | Details whose clip left are adopted by size and a write time within 2 s (`Adopt`), else the game comes from the name | The clip with its name, trim and game |
@@ -97,54 +101,3 @@ Tools, all throwaway and never committed:
 - A page exception is tested with a temporary `@page "/crash"` that throws, removed before the diff is carried over; a renderer crash with CDP's `Page.crash`.
 - Monitor mode without recording: rename the build's `FFmpeg\ffmpeg.exe` for the look.
 - The owner's G522 gives only silence to a process started from the Claude app, so the microphone path is proven with synthetic speech; the owner confirms by ear.
-
-## Injected In A Live Match, 11 November 2026
-
-The gaps the handoff's round 3 closed were exercised through a stand in `ffmpeg.exe` (a throwaway that hangs or fails when a file names a pattern in its arguments, else runs the real one) under a windowless harness on `CaptureController`, recording Overwatch with the owner's settings.
-
-- A failure streak long past counts anew: with `_failures` set to 9 and the last failure six minutes old, killing the video encoder 4 s into its session logged `Failure 1 In A Row, Brief, Out Of Sight`, kept the chip on Recording and was recording again 3.3 s later. The control, the same nine failures but recent, showed Recording Error at once and waited 60 s, which is what every later failure did before the fix.
-- A failed encoder test is not run again for that encoder's second start: with the AMF test failing once, the log holds one `Skipped AMD AMF`, then the x264 test, and recording on x264 4.9 s after launch.
-- A start throwing an unlisted exception was not injected, no way to make FFmpeg cause one was found; the catch is now unconditional.
-
-## The Game Window Crash, Found 13 November 2026
-
-The owner's video FFmpeg died with `0xC0000005` seven times between 8 and 12 November, always on Overwatch's window with AMF, after 4 to 43 minutes, with no warning first. Reproduced outside the app: a full screen test window on the first monitor that animates and, every 9 s, minimises, bursts 40 random sizes, hides, shrinks to 1 x 1, goes windowed and moves, captured by the app's own command lines under a small debugger that records the faulting module and writes a minidump (`LcCrash`, started through Explorer so it outlived the session).
-
-- Window capture with AMF crashed after 29.8 minutes, in a resize burst. Window capture with x264 and monitor capture with AMF ran two hours each without one.
-- The faulting thread belonged to AMD's D3D11 driver itself (`amdxx64.dll` 32.0.32015.7029, `+0x5EC80`, reading address 0x8): every frame on its stack was the driver's own, down to the thread start. FFmpeg's filter thread was inside `hwdownload` and AMF was encoding at that moment.
-- The difference between the crashing setup and the two that held: FFmpeg hands an encoder the one D3D11 device it finds, so `gfxcapture` and AMF shared the capture's device (`Using device capture (type d3d11va) with h264_amf encoder`). `ddagrab` makes its own device, and x264 takes none.
-- Fix: a window capture initialises a second, unused device (`-init_hw_device d3d11va=spare:N`). With two devices of a type FFmpeg gives the encoder neither (`hw_device_get_by_type` returns none when two match), so AMF makes its own, like on a monitor. The log then shows no `Using device capture` line.
-- Soak, 14:47 to 16:12 on a fresh stress window: the shared-device baseline crashed twice (after 73.9 and then 5.7 minutes), both times at the same `amdxx64.dll+0x5EC80`, while the two separate-device copies beside it on the same window ran 1 hour 25 minutes each without a crash. Counting the first run, sharing crashed three times in about 5 hours 10 minutes and separate devices never in 2 hours 50 minutes. Shipped in v2.0.9.
-
-## The Handoff Round, 16 November 2026
-
-A cloud session read the whole of v2.0.14 and listed fifteen fixes, the work laptop wrote them, and the gaming PC verified each one, the owner's words: verify, never assume. Each problem was shown first on a v2.0.14 build made from `git archive master`, then shown gone on the round's build, with the tools in `Docs/Verify.md`.
-
-- Packet listing hung (the stand in holding every `packet=stream_index` run): v2.0.14 sat 20.1 s, went back to Clips without a word and logged `Failed In A Page ... TimeoutException: ffprobe.exe Took Too Long`. Now the editor opened after 20.7 s with estimated sizes, six handle drags read the same live as at rest, the second open took 0.2 s, and Copy for Discord (Free) from the card started at once and landed 17.8 MB of HEVC on AMF in 7.4 s.
-- Plain probe hung: a warning snackbar and Clips after 20.1 s, `Failed To Open ... TimeoutException` in the log, no page error.
-- A strip render hung: its spinner stopped when the 60 s limit ended it, one `Failed To Make A Picture TimeoutException`, the editor usable throughout.
-- A long recording's save, 1705 one second video and audio segments through a harness on `ClipSaver`: on v2.0.14 one failed remux, or a rename blocked for 2.5 s, lost the recording (only the live replay's 64 + 64 segments were left). Now one failed remux saved all 1705 s in 4.5 s, two failed cleanly leaving nothing behind, the blocked rename saved in 5.1 s without a second remux, and a first remux that hung until its limit was tried again and saved. A short save still tries again once (1.2 s), and a full drive refuses at once with the disk full code, FFmpeg never started.
-- AMF's capture start failed three times, so the session ran on x264 and its upgrade stood by from one minute in; Record was pressed 70 s in. v2.0.14 logged `Moved Recording From x264 on the CPU To AMD AMF` 23 s later and the recording ended by itself at 21.9 s. Now it logged `Stayed On x264 on the CPU, A Recording Runs Until Stopped`, ran until Stop at 50.9 s, and the upgrade moved to AMF at its next wait two minutes later.
-- The capture ended mid recording with both remux tries failing: v2.0.14 showed nothing; now the `Recording Not Saved`, `The clip could not be written` balloon showed (seen on screen).
-- An export with `ffmpeg.exe` taken away: v2.0.14 kept `Exporting 0%` in the app bar and `Reading Clip` in the panel for good; now the snackbar `Export could not run, reinstall LetsClip` came within 0.3 s and the button was back.
-- A background update during Record, in throwaway copies whose install only logs and whose idle time is 20 s: v2.0.14 began installing 21 s after the window hid, mid recording; now nothing in 40 s, and 23 s after Stop and hiding again.
-- Not injected here: a real update refused for its version (the first release this check judges is the one after it ships), and a real shutdown.
-
-### Shutdown With A Recording
-
-- Microsoft's rules since Vista: an app without a visible window is ended 5 s into a shutdown unless it registers a reason (`ShutdownBlockReasonCreate`), and the person keeps Shut Down Anyway and Cancel on Windows' own screen. WPF's `SessionEnding` with `Cancel` answers the session's question with no; the reason is registered on `WindowMessages`' plain window, on the thread that made it.
-- Simulated by sending `WM_QUERYENDSESSION` to every window of the sandbox while it recorded a test window with Record running, a clip deleted a moment before: v2.0.14 answered yes on all 15 windows, was gone 0.2 s later, lost the 17 s recording and left the deleted clip on disk. Now WPF's own window answered no, the log read `Held The Session's End To Save A Recording, Reason Shown True`, the 16.6 s recording was saved with its sound (933 frames), the deleted clip went to the Recycle Bin and the process was gone 0.6 s after the question. With nothing recording until stopped every window answered yes and it was gone in 0.2 s, as before.
-- Known gap: someone who cancels the shutdown on Windows' screen finds LetsClip closed after its save. Left so, since Windows gives the app that answered no nothing further to go by.
-- For the owner to try for real, a session cannot shut its own PC down: Record, then Shut Down and then Sign Out. Does the screen name `Saving the recording`, does Windows go on by itself once LetsClip has exited, and what do Shut Down Anyway and Cancel do.
-
-## Memory Replay, 17 November 2026
-
-| Case | What Happens |
-|---|---|
-| A segment pipe is not there when FFmpeg opens it | FFmpeg ends the session with an error and capture starts again; eight pipes wait ahead, so only a LetsClip stalled for seconds can miss one |
-| LetsClip stalls a moment | 8 MB of pipe buffer per segment, about two seconds at the highest capture rate, before FFmpeg waits on a write |
-| Spilling a segment fails | It stays in memory and the warning is logged; a nearly full disk stops the session as before |
-| A save's remux fails | Tried again from the same segments, still pinned in memory or on disk |
-| A loudness measurement fails | The export keeps the sound as recorded |
-
-The older row about LetsClip dying while a long recording joins its segments no longer applies: nothing is joined since this round.

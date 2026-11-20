@@ -1,15 +1,18 @@
 window.letsClip = (() => {
     // Changes Run Through Here Animate, Named Cards Slide
     const transition = (dotnet, method, fromTop) => {
+        const scroller = document.querySelector(".page-scroll");
         const change = async () => {
             await dotnet.invokeMethodAsync(method).catch(() => {});
             // A New Order Or Filter Reads From Its Start
-            if (fromTop) document.querySelector(".page-scroll")?.scrollTo(0, 0);
+            if (fromTop) scroller?.scrollTo(0, 0);
         };
+        // Only The Page Animates, A Whole Document Swallowed Every Click
+        const scope = scroller ?? document.querySelector(".page");
         // No Transition Support Still Makes The Change
-        if (!document.startViewTransition) return void change();
+        if (!scope?.startViewTransition) return void change();
         // A Newer Change Skips This One, Which Rejects Ready
-        document.startViewTransition(change).ready.catch(() => {});
+        scope.startViewTransition(change).ready.catch(() => {});
     };
 
     // Each Page Remembers Its Scroll, Clips Comes Back There

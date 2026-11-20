@@ -1,7 +1,6 @@
 using System.Windows;
 using LetsClip.Data.Enums;
 using LetsClip.Data.Helpers;
-using LetsClip.Data.ViewModels;
 using LetsClip.Desktop.Interop;
 using LetsClip.Desktop.Theming;
 using LetsClip.Services.Capture;

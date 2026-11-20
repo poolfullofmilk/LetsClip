@@ -7,9 +7,11 @@ public sealed record GameCapture(
     string Key,
     int? FrameRate = null,
     int? Resolution = null,
-    CaptureQuality? Quality = null
+    CaptureQuality? Quality = null,
+    int? Seconds = null
 )
 {
     [JsonIgnore]
-    public bool IsDefault => FrameRate is null && Resolution is null && Quality is null;
+    public bool IsDefault =>
+        FrameRate is null && Resolution is null && Quality is null && Seconds is null;
 }

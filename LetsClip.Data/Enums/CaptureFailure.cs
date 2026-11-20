@@ -5,5 +5,6 @@ public enum CaptureFailure
     Brief,
     RanLong,
     WindowClosed,
+    WindowRefused,
     Blocked,
 }

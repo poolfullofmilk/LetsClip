@@ -23,7 +23,7 @@
         Try Again
     </MudButton>
 }
-else if (Controller.IsRecording)
+else if (Controller.CanSave)
 {
     @* Save Button *@
     <Tooltip Text="@($"Or Press {Controller.Settings.Hotkey}")"

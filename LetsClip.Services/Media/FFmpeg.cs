@@ -131,7 +131,7 @@ public static partial class FFmpeg
         Action<string>? outputLine = null
     )
     {
-        using var process = Start(executable, arguments, false, workingDirectory);
+        var process = Start(executable, arguments, false, workingDirectory);
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(token);
         limit.CancelAfter(timeout);
 
@@ -163,34 +163,81 @@ public static partial class FFmpeg
         );
         try
         {
-            await process.WaitForExitAsync(limit.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            Kill(process);
-            await process.WaitForExitAsync(CancellationToken.None);
-            using (var drained = new CancellationTokenSource())
+            try
             {
-                await Task.WhenAny(
-                    Task.WhenAll(outputTask, errorTask),
-                    Task.Delay(s_drainLimit, drained.Token)
-                );
-                drained.Cancel();
+                await process.WaitForExitAsync(limit.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Kill(process);
+                await process.WaitForExitAsync(CancellationToken.None);
+                token.ThrowIfCancellationRequested();
+                throw new TimeoutException($"{Path.GetFileName(executable)} Took Too Long");
             }
 
-            token.ThrowIfCancellationRequested();
-            throw new TimeoutException($"{Path.GetFileName(executable)} Took Too Long");
+            var output = await outputTask;
+            await errorTask;
+
+            // Windows' Own Times, A Stalled Caller Never Shortens Them
+            var ran = (process.ExitTime - process.StartTime).TotalMilliseconds;
+            s_logger.Debug(
+                $"{Path.GetFileName(executable)} {process.Id} Exited {process.ExitCode} In {ran:0} ms{(process.ExitCode == 0 ? "" : $", {lastError}")}"
+            );
+            return new ProcessResult(process.ExitCode, output, lastError);
+        }
+        finally
+        {
+            // Pipes Close Once Read, Whatever The Ending
+            await ReleaseAsync(process, outputTask, errorTask);
+        }
+    }
+
+    public static async Task ReleaseAsync(Process process, params Task[] readers)
+    {
+        // A Killed Child's Pipes Close At Once, A Limit Anyway
+        using (var drained = new CancellationTokenSource())
+        {
+            await Task.WhenAny(Task.WhenAll(readers), Task.Delay(s_drainLimit, drained.Token));
+            drained.Cancel();
         }
 
-        var output = await outputTask;
-        await errorTask;
+        if (readers.All(reader => reader.IsCompleted))
+        {
+            Release(process);
+            return;
+        }
 
-        // Windows' Own Times, A Stalled Caller Never Shortens Them
-        var ran = (process.ExitTime - process.StartTime).TotalMilliseconds;
-        s_logger.Debug(
-            $"{Path.GetFileName(executable)} {process.Id} Exited {process.ExitCode} In {ran:0} ms{(process.ExitCode == 0 ? "" : $", {lastError}")}"
-        );
-        return new ProcessResult(process.ExitCode, output, lastError);
+        // Still Reading, Its Pipes Wait For The Next GC
+        process.Dispose();
+    }
+
+    public static void Release(Process process)
+    {
+        // Read Pipes Stay Open Until Closed, Two Handles A Run
+        var start = process.StartInfo;
+        try
+        {
+            if (start.RedirectStandardInput)
+            {
+                process.StandardInput.Dispose();
+            }
+
+            if (start.RedirectStandardOutput)
+            {
+                process.StandardOutput.Dispose();
+            }
+
+            if (start.RedirectStandardError)
+            {
+                process.StandardError.Dispose();
+            }
+        }
+        catch (IOException)
+        {
+            // A Dead Child's Input Pipe Can Fail Its Last Flush
+        }
+
+        process.Dispose();
     }
 
     public static async Task ReadLinesAsync(StreamReader reader, Action<string> onLine)

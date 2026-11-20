@@ -90,10 +90,15 @@ public partial class CaptureSettings : IDisposable
 
     private void SetReplay(int seconds)
     {
-        // The Cache And Every Clip Grow With The Length
+        // Memory, Then Disk Past The Budget, Grow With The Length
+        var bytes = Controller.ReplayBytes(seconds);
+        var held =
+            bytes > SegmentMemory.Budget
+                ? $"{Formatter.FormatSize(SegmentMemory.Budget)} of it in memory and the rest on disk"
+                : "all of it in memory";
         WarnOnRaise(
             seconds > Controller.Settings.ReplaySeconds && seconds > 120,
-            $"A {ReplayLabel(seconds)} replay keeps about {Formatter.FormatSize(Controller.ReplayBytes(seconds))} on disk while recording, and each clip is about as big",
+            $"A {ReplayLabel(seconds)} replay holds about {Formatter.FormatSize(bytes)} while recording, {held}, and each clip is about as big",
             everywhere: true
         );
         Controller.UpdateSettings(settings => settings with { ReplaySeconds = seconds });

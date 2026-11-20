@@ -26,6 +26,28 @@
                      Class="ellipsis">
                 @Game.Name
             </MudText>
+            @* Replay Length Select *@
+            <FieldDetail Color="@CostColors.Replay(_draft.Seconds ?? Controller.Settings.ReplaySeconds)"
+                         Detail="@(_draft.Seconds is null ? Formatter.FormatDuration(Controller.Settings.ReplaySeconds) : null)">
+                <ChoiceSelect T="int?"
+                              @bind-Value="Seconds"
+                              ToStringFunc="SecondsLabel"
+                              Label="Replay Length">
+                    <MudSelectItem T="int?"
+                                   Value="null">
+                        <ItemLabel Text="Default"
+                                   Detail="@Formatter.FormatDuration(Controller.Settings.ReplaySeconds)" />
+                    </MudSelectItem>
+                    @foreach (var seconds in UserSettings.ReplayChoices)
+                    {
+                        <MudSelectItem T="int?"
+                                       Value="seconds">
+                            <ItemLabel Text="@Formatter.FormatDuration(seconds)"
+                                       Color="@CostColors.Replay(seconds)" />
+                        </MudSelectItem>
+                    }
+                </ChoiceSelect>
+            </FieldDetail>
             @* Resolution Select *@
             <FieldDetail Color="@CostColors.Resolution(_draft.Resolution ?? Controller.Resolution)"
                          Detail="@(_draft.Resolution is null ? Formatter.FormatLines(Controller.Resolution) : null)">

@@ -3,7 +3,6 @@ using System.Globalization;
 using LetsClip.Data.Enums;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
-using LetsClip.Desktop.Components.Shared.Common;
 using LetsClip.Desktop.Components.Shared.Dialogs;
 using LetsClip.Desktop.Interop;
 using LetsClip.Services.Capture;
@@ -12,14 +11,11 @@ using LetsClip.Services.Storage;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using MudBlazor;
-using NLog;
 
 namespace LetsClip.Desktop.Components.Shared.Media;
 
 public partial class ExportPanel : IDisposable
 {
-    private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
-
     [Parameter]
     public required ClipInfo Clip { get; set; }
 

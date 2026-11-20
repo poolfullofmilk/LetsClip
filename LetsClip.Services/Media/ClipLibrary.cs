@@ -77,8 +77,13 @@ public sealed partial class ClipLibrary : IDisposable
     private readonly ConcurrentDictionary<string, byte> _gone = new(
         StringComparer.OrdinalIgnoreCase
     );
-    private int _filling;
-    private int _fillAgain;
+
+    // Pictures Waiting, Four Painters, The Cards Shown First
+    private const int Painters = 4;
+    private readonly Lock _picturesGate = new();
+    private readonly List<ClipInfo> _waitingPictures = [];
+    private int _painters;
+    private volatile HashSet<string> _shownFirst = [];
 
     // Leftovers Of Clips Gone While Closed, Swept Once Per Start
     private int _sweptLeftovers;
@@ -112,7 +117,16 @@ public sealed partial class ClipLibrary : IDisposable
     public string Folder { get; private set; }
 
     // True While A Picture Pass Runs
-    public bool IsMakingPictures => Volatile.Read(ref _filling) == 1;
+    public bool IsMakingPictures
+    {
+        get
+        {
+            lock (_picturesGate)
+            {
+                return _painters > 0;
+            }
+        }
+    }
 
     // Missing Or Unreadable, Never The Same As Empty
     public bool IsUnavailable { get; private set; }
@@ -175,45 +189,72 @@ public sealed partial class ClipLibrary : IDisposable
         return listed;
     }
 
+    public void ShowFirst(IEnumerable<string> paths)
+    {
+        // The Cards On Screen Get Their Pictures Before The Rest
+        _shownFirst = paths.ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
     private void FillThumbnails(List<ClipInfo> missing)
     {
-        // Clips Copied In Get Pictures In The Background, One Pass
-        if (missing.Count == 0)
+        // Pictures Come In The Background, Arrivals Join The Line
+        int starting;
+        lock (_picturesGate)
         {
-            return;
+            _waitingPictures.AddRange(
+                missing.Where(clip =>
+                    _waitingPictures.TrueForAll(waiting => waiting.Path != clip.Path)
+                )
+            );
+            starting = _waitingPictures.Count == 0 ? 0 : Painters - _painters;
+            _painters += starting;
         }
 
-        // A Clip Arriving Mid Pass Gets The Next One
-        if (Interlocked.Exchange(ref _filling, 1) == 1)
+        for (var painter = 0; painter < starting; painter++)
         {
-            Volatile.Write(ref _fillAgain, 1);
-            return;
+            _ = Task.Run(PaintAsync);
+        }
+    }
+
+    private async Task PaintAsync()
+    {
+        // One Bad Clip Keeps A Plain Tile, Others Go On
+        while (!_closing.IsCancellationRequested && NextPicture() is { } clip)
+        {
+            if (await ThumbnailAsync(clip.Path, clip.Duration) is { } picture)
+            {
+                PictureMade?.Invoke(clip.Path, picture);
+            }
+        }
+    }
+
+    private ClipInfo? NextPicture()
+    {
+        // An Empty Line Ends A Painter, The Last Says So
+        bool done;
+        lock (_picturesGate)
+        {
+            if (_waitingPictures.Count > 0 && !_closing.IsCancellationRequested)
+            {
+                var shown = _shownFirst;
+                var index = Math.Max(
+                    0,
+                    _waitingPictures.FindIndex(clip => shown.Contains(clip.Path))
+                );
+                var next = _waitingPictures[index];
+                _waitingPictures.RemoveAt(index);
+                return next;
+            }
+
+            done = --_painters == 0;
         }
 
-        _ = Task.Run(async () =>
+        if (done)
         {
-            try
-            {
-                // One Bad Clip Keeps A Plain Tile, Others Go On
-                foreach (var clip in missing.TakeWhile(_ => !_closing.IsCancellationRequested))
-                {
-                    if (await ThumbnailAsync(clip.Path, clip.Duration) is { } picture)
-                    {
-                        PictureMade?.Invoke(clip.Path, picture);
-                    }
-                }
-            }
-            finally
-            {
-                Interlocked.Exchange(ref _filling, 0);
-                if (Interlocked.Exchange(ref _fillAgain, 0) == 1)
-                {
-                    Changed?.Invoke();
-                }
+            PicturesDone?.Invoke();
+        }
 
-                PicturesDone?.Invoke();
-            }
-        });
+        return null;
     }
 
     public async Task<ClipInfo?> GetAsync(

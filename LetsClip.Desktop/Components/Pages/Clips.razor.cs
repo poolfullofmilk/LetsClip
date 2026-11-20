@@ -290,6 +290,9 @@ public partial class Clips : IDisposable
 
         s_fromTop = false;
 
+        // The Cards Drawn Get Their Pictures Before The Rest
+        Controller.Library.ShowFirst(ShownClips.Take(s_cards).Select(clip => clip.Path));
+
         // Ponytail: Each Batch Diffs Every Shown Card, Fine To Thousands
         if (ShownClips.Count > s_cards)
         {
@@ -300,7 +303,7 @@ public partial class Clips : IDisposable
     [JSInvokable]
     public void DragFile(string path)
     {
-        // Only A Shown Card's Clip, The Page Names No Other File
+        // Only A Shown Card's Clip, No Other File Is Named
         if (ShownClips.Any(clip => clip.Path == path))
         {
             DesktopShell.DragFile(path);
@@ -520,6 +523,9 @@ public partial class Clips : IDisposable
 
     private void Open(ClipInfo clip)
     {
+        // Coming Back Draws To This Clip And One Batch More
+        var index = ShownClips.ToList().FindIndex(shown => shown.Path == clip.Path);
+        s_cards = Math.Min(s_cards, ((Math.Max(index, 0) / BatchSize) + 2) * BatchSize);
         NavigationManager.NavigateTo(EditorOf(clip.Path));
     }
 

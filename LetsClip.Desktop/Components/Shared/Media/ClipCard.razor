@@ -81,71 +81,83 @@
                     Class="d-flex"
                     ClickPropagation="false">
             <Tooltip Text="More">
-                <MudMenu Icon="@Icons.Material.Rounded.MoreVert"
-                         AriaLabel="More"
-                         Size="Size.Small"
-                         Dense
-                         AnchorOrigin="Origin.BottomRight"
-                         TransformOrigin="Origin.TopRight">
-                    @* Rename Clip *@
-                    <MudMenuItem Icon="@Icons.Material.Rounded.DriveFileRenameOutline"
-                                 Label="Rename"
-                                 Disabled="Exporting"
-                                 OnClick="Rename" />
-                    @* Copy File *@
-                    <MudMenuItem Icon="@Icons.Material.Rounded.ContentCopy"
-                                 Label="Copy File"
-                                 OnClick="() => DesktopShell.CopyFile(Clip.Path, Snackbar)" />
-                    @* Copy For Discord Menu *@
-                    <MudMenu StartIcon="@Icons.Material.Rounded.Movie"
-                             Label="Copy for Discord"
-                             Disabled="@(Exporting || !s_plans.Any(Changes))"
-                             Dense>
-                        @foreach (var plan in s_plans)
-                        {
-                            @* Discord Plan Item *@
-                            <MudMenuItem Disabled="@(!Changes(plan))"
-                                         OnClick="() => CopyForDiscord.InvokeAsync(plan)">
-                                <ItemLabel Text="@SizeBudget.NameOf(plan)"
-                                           Detail="@SizeBudget.LimitTextOf(plan)" />
-                            </MudMenuItem>
-                        }
-                    </MudMenu>
-                    @if (Clip.Export is { } export)
-                    {
-                        @* Copy Export *@
+                @if (_menuBuilt)
+                {
+                    <MudMenu @ref="_menu"
+                             Icon="@Icons.Material.Rounded.MoreVert"
+                             AriaLabel="More"
+                             Size="Size.Small"
+                             Dense
+                             AnchorOrigin="Origin.BottomRight"
+                             TransformOrigin="Origin.TopRight">
+                        @* Rename Clip *@
+                        <MudMenuItem Icon="@Icons.Material.Rounded.DriveFileRenameOutline"
+                                     Label="Rename"
+                                     Disabled="Exporting"
+                                     OnClick="Rename" />
+                        @* Copy File *@
                         <MudMenuItem Icon="@Icons.Material.Rounded.ContentCopy"
-                                     Label="Copy Export"
-                                     OnClick="() => DesktopShell.CopyFile(export, Snackbar)" />
-                    }
-                    @* Show In Folder *@
-                    <MudMenuItem Icon="@Icons.Material.Rounded.FolderOpen"
-                                 Label="Show in Folder"
-                                 OnClick="() => Explorer.ShowFile(Clip.Path)" />
-                    @* Details Menu *@
-                    <MudMenu StartIcon="@AppTheme.InfoIcon"
-                             Label="Details"
-                             Dense>
-                        <MudElement HtmlTag="div"
-                                    Class="info-facts">
-                            @foreach (var fact in Facts)
+                                     Label="Copy File"
+                                     OnClick="() => DesktopShell.CopyFile(Clip.Path, Snackbar)" />
+                        @* Copy For Discord Menu *@
+                        <MudMenu StartIcon="@Icons.Material.Rounded.Movie"
+                                 Label="Copy for Discord"
+                                 Disabled="@(Exporting || !s_plans.Any(Changes))"
+                                 Dense>
+                            @foreach (var plan in s_plans)
                             {
-                                <MudText Typo="Typo.body2"
-                                         Class="mud-text-secondary">
-                                    @fact.Label
-                                </MudText>
-                                <MudText Typo="Typo.body2">@fact.Value</MudText>
+                                @* Discord Plan Item *@
+                                <MudMenuItem Disabled="@(!Changes(plan))"
+                                             OnClick="() => CopyForDiscord.InvokeAsync(plan)">
+                                    <ItemLabel Text="@SizeBudget.NameOf(plan)"
+                                               Detail="@SizeBudget.LimitTextOf(plan)" />
+                                </MudMenuItem>
                             }
-                        </MudElement>
+                        </MudMenu>
+                        @if (Clip.Export is { } export)
+                        {
+                            @* Copy Export *@
+                            <MudMenuItem Icon="@Icons.Material.Rounded.ContentCopy"
+                                         Label="Copy Export"
+                                         OnClick="() => DesktopShell.CopyFile(export, Snackbar)" />
+                        }
+                        @* Show In Folder *@
+                        <MudMenuItem Icon="@Icons.Material.Rounded.FolderOpen"
+                                     Label="Show in Folder"
+                                     OnClick="() => Explorer.ShowFile(Clip.Path)" />
+                        @* Details Menu *@
+                        <MudMenu StartIcon="@AppTheme.InfoIcon"
+                                 Label="Details"
+                                 Dense>
+                            <MudElement HtmlTag="div"
+                                        Class="info-facts">
+                                @foreach (var fact in Facts)
+                                {
+                                    <MudText Typo="Typo.body2"
+                                             Class="mud-text-secondary">
+                                        @fact.Label
+                                    </MudText>
+                                    <MudText Typo="Typo.body2">@fact.Value</MudText>
+                                }
+                            </MudElement>
+                        </MudMenu>
+                        <MudDivider />
+                        @* Delete Clip *@
+                        <MudMenuItem Icon="@Icons.Material.Rounded.Delete"
+                                     IconColor="Color.Error"
+                                     Label="Delete Clip"
+                                     Disabled="Exporting"
+                                     OnClick="Delete" />
                     </MudMenu>
-                    <MudDivider />
-                    @* Delete Clip *@
-                    <MudMenuItem Icon="@Icons.Material.Rounded.Delete"
-                                 IconColor="Color.Error"
-                                 Label="Delete Clip"
-                                 Disabled="Exporting"
-                                 OnClick="Delete" />
-                </MudMenu>
+                }
+                else
+                {
+                    @* More Button *@
+                    <MudIconButton Icon="@Icons.Material.Rounded.MoreVert"
+                                   aria-label="More"
+                                   Size="Size.Small"
+                                   OnClick="BuildMenu" />
+                }
             </Tooltip>
         </MudElement>
     </MudStack>

@@ -31,10 +31,12 @@ public sealed record SaveOutcome(ClipInfo? Clip, string? Error);
 
 public sealed class CaptureBlockedException(string message) : InvalidOperationException(message);
 
+public sealed class WindowRefusedException()
+    : InvalidOperationException("Windows refused to record the window");
+
 public sealed partial class ReplayRecorder : IDisposable
 {
-    // Free Space Needed To Start, And The Floor That Stops
-    private const long MinimumFreeBytes = 2_000_000_000;
+    // Room Beside What Spills, And The Floor That Stops Spilling
     private const long StopFreeBytes = 1_000_000_000;
 
     private static readonly Logger s_logger = LogManager.GetCurrentClassLogger();
@@ -75,6 +77,9 @@ public sealed partial class ReplayRecorder : IDisposable
 
     // Kept From Start Until Stopped, Its Session Holds Every Segment
     private ManualRecording? _manual;
+
+    // An Ended Session's Replay, Saveable For Its Own Length
+    private KeptReplay? _kept;
     private int _saves;
     private int _healthTicks;
     private int _problemTicks;
@@ -118,6 +123,18 @@ public sealed partial class ReplayRecorder : IDisposable
             lock (_gate)
             {
                 return _manual?.StartedAt;
+            }
+        }
+    }
+
+    // An Ended Session Still Saves, The Button Stays On
+    public bool HasKeptReplay
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _kept is { IsFresh: true };
             }
         }
     }
@@ -168,7 +185,12 @@ public sealed partial class ReplayRecorder : IDisposable
             // Whatever A Start Throws Ends On Error And Retries
             var message = exception.Message.TrimEnd('.');
             Failed?.Invoke(
-                exception is CaptureBlockedException ? CaptureFailure.Blocked : CaptureFailure.Brief
+                exception switch
+                {
+                    CaptureBlockedException => CaptureFailure.Blocked,
+                    WindowRefusedException => CaptureFailure.WindowRefused,
+                    _ => CaptureFailure.Brief,
+                }
             );
             SetStatus(Status with { State = CaptureState.Error, Message = message });
             s_logger.Warn($"Failed To Start Recording {exception.GetType().Name}, {message}");
@@ -179,7 +201,7 @@ public sealed partial class ReplayRecorder : IDisposable
         }
     }
 
-    public async Task StopAsync(string? reason)
+    public async Task StopAsync(string? reason, bool keepReplay = false)
     {
         await _transition.WaitAsync();
         try
@@ -202,13 +224,17 @@ public sealed partial class ReplayRecorder : IDisposable
             }
 
             UpdateStatus(session, CaptureState.Stopping);
-            await Task.Run(session.Shutdown);
+            await Task.Run(() => session.Shutdown(keepReplay));
             lock (_gate)
             {
                 _session = null;
             }
 
             FinishRecordingOf(session);
+            if (keepReplay)
+            {
+                Keep(session);
+            }
 
             _health.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
 
@@ -282,24 +308,25 @@ public sealed partial class ReplayRecorder : IDisposable
                 ? FitInside(box, client)
                 : box;
 
-        // The Margin Plus The Whole Replay
+        // Only What Outgrows Memory Waits On Disk, With Room Beside
         Directory.CreateDirectory(AppInfo.CacheDirectory);
-        var needed =
-            MinimumFreeBytes
-            + (
+        var spills =
+            (
                 VideoEncoders.AverageBytesPerSecond(
                     width,
                     height,
                     options.FrameRate,
                     options.Quality
                 ) * options.Seconds
-            );
-        if (FreeBytes(AppInfo.CacheDirectory) < needed)
+            ) - SegmentMemory.Budget;
+        var needed = spills + StopFreeBytes;
+        if (spills > 0 && FreeBytes(AppInfo.CacheDirectory) < needed)
         {
             throw new CaptureBlockedException(
                 $"Less than {Formatter.FormatSize(needed)} free for a {Formatter.FormatDuration(options.Seconds)} replay, free some space or pick a shorter one"
             );
         }
+
         var skipped = new List<string>();
 
         // AMF Can Hang After A Killed Session, Two Starts
@@ -348,6 +375,13 @@ public sealed partial class ReplayRecorder : IDisposable
                     $"Failed To Capture With {encoder.Name}{(encoder.GpuFrames ? " On The GPU" : "")}, {exception.Message}"
                 );
                 session.Shutdown();
+
+                // No Encoder Records A Window Windows Refused
+                if (session.Video?.WindowRefused == true)
+                {
+                    throw new WindowRefusedException();
+                }
+
                 if (!encoder.IsHardware)
                 {
                     throw;
@@ -391,7 +425,7 @@ public sealed partial class ReplayRecorder : IDisposable
         bool blocked = false
     )
     {
-        // A Broken Session Ends Whole, Its History Untrusted
+        // A Broken Session Ends, Its Finished Segments Kept A While
         await _transition.WaitAsync();
         try
         {
@@ -405,9 +439,10 @@ public sealed partial class ReplayRecorder : IDisposable
                 _session = null;
             }
 
-            await Task.Run(session.Shutdown);
+            await Task.Run(() => session.Shutdown(keepReplay: true));
             _health.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
             FinishRecordingOf(session);
+            Keep(session);
 
             // The Controller Hears First, A Quick Retry Shows No Error
             Failed?.Invoke(
@@ -481,7 +516,12 @@ public sealed partial class ReplayRecorder : IDisposable
             _ = EndRecordingAsync();
         }
 
-        if (++_healthTicks % 10 == 0 && FreeBytes(session.Folder) < StopFreeBytes)
+        // A Nearly Full Disk Matters Only While Segments Spill
+        if (
+            ++_healthTicks % 10 == 0
+            && SegmentMemory.SpilledWithin(TimeSpan.FromMinutes(1))
+            && FreeBytes(session.Folder) < StopFreeBytes
+        )
         {
             _ = FailAsync(
                 session,
@@ -604,6 +644,7 @@ public sealed partial class ReplayRecorder : IDisposable
         }
 
         session?.Shutdown();
+        DiscardKeptReplay();
         GC.SuppressFinalize(this);
     }
 }

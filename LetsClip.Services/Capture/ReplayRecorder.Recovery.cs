@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using LetsClip.Services.Media;
 
 namespace LetsClip.Services.Capture;
@@ -51,14 +50,13 @@ public sealed partial class ReplayRecorder
     private async Task<bool> TryMoveToAsync(CaptureSession current, VideoEncoder encoder)
     {
         // Runs Beside The Fallback For A Replay, Never Mid Recording
-        var (width, height) = current.Size;
         var options = current.Options;
         if (
             RecordingSince is not null
             || !await VideoEncoders.WorksAsync(
                 encoder,
-                width,
-                height,
+                current.Size.Width,
+                current.Size.Height,
                 options.FrameRate,
                 CancellationToken.None
             )
@@ -67,12 +65,13 @@ public sealed partial class ReplayRecorder
             return false;
         }
 
-        var standby = new CaptureSession(options, encoder, width, height);
-        try
-        {
-            await standby.LaunchAsync();
-            using (var waited = new CancellationTokenSource())
+        return await TryStandbyAsync(
+            current,
+            encoder,
+            async standby =>
             {
+                // A Whole Replay Beside It, The Change Costs No History
+                using var waited = new CancellationTokenSource();
                 await Task.WhenAny(
                     Task.Delay(
                         TimeSpan.FromSeconds(options.Seconds + CaptureSession.SegmentSeconds),
@@ -82,16 +81,39 @@ public sealed partial class ReplayRecorder
                     current.Ended
                 );
                 waited.Cancel();
-            }
+                return !standby.HasEnded;
+            },
+            isUpgrade: true,
+            $"Stayed On {current.Encoder.Name},"
+        );
+    }
 
-            if (!standby.HasEnded && await SwapAsync(current, standby, isUpgrade: true))
+    private async Task<bool> TryStandbyAsync(
+        CaptureSession current,
+        VideoEncoder encoder,
+        Func<CaptureSession, Task<bool>> readyAsync,
+        bool isUpgrade,
+        string failure
+    )
+    {
+        // Launched Beside The Running Session, Swapped In Only Once Ready
+        var standby = new CaptureSession(
+            current.Options,
+            encoder,
+            current.Size.Width,
+            current.Size.Height
+        );
+        try
+        {
+            await standby.LaunchAsync();
+            if (await readyAsync(standby) && await SwapAsync(current, standby, isUpgrade))
             {
                 return true;
             }
         }
         catch (Exception exception) when (IsStartFailure(exception))
         {
-            s_logger.Info($"Stayed On {current.Encoder.Name}, {encoder.Name}: {exception.Message}");
+            s_logger.Info($"{failure} {encoder.Name}: {exception.Message}");
         }
 
         standby.Shutdown();
@@ -135,7 +157,7 @@ public sealed partial class ReplayRecorder
             _ = UpgradeAsync(standby);
             UpdateStatus(standby, null);
             FinishRecordingOf(current);
-            await Task.Run(current.Shutdown);
+            await Task.Run(() => current.Shutdown());
             s_logger.Info($"Moved Recording From {current.Encoder.Name} To {standby.Encoder.Name}");
             return true;
         }
@@ -148,7 +170,6 @@ public sealed partial class ReplayRecorder
     private async Task ProbeWindowAsync(CaptureSession current)
     {
         // Only A Hung Encoder Loses To A Fresh Capture
-        var (width, height) = current.Size;
         var encoders = VideoEncoders
             .Candidates()
             .Where(encoder => encoder == current.Encoder || !encoder.IsHardware);
@@ -159,39 +180,33 @@ public sealed partial class ReplayRecorder
                 return;
             }
 
-            var standby = new CaptureSession(current.Options, encoder, width, height);
-            try
-            {
-                await standby.LaunchAsync();
-                using (var waited = new CancellationTokenSource())
+            var swapped = await TryStandbyAsync(
+                current,
+                encoder,
+                async standby =>
                 {
-                    await Task.WhenAny(
-                        standby.Video!.FirstSegment,
-                        Task.Delay(s_windowProbe, waited.Token),
-                        current.Ended
-                    );
-                    waited.Cancel();
-                }
+                    using (var waited = new CancellationTokenSource())
+                    {
+                        await Task.WhenAny(
+                            standby.Video!.FirstSegment,
+                            Task.Delay(s_windowProbe, waited.Token),
+                            current.Ended
+                        );
+                        waited.Cancel();
+                    }
 
-                // A Window That Just Moved Reaches The Old One Too
-                await Task.Delay(s_windowWait);
-                if (
-                    standby.Video.FirstSegment.IsCompletedSuccessfully
-                    && current.Video!.SinceLastSegment > s_stallTimeout
-                    && await SwapAsync(current, standby)
-                )
-                {
-                    return;
-                }
-            }
-            catch (Exception exception) when (IsStartFailure(exception))
+                    // A Window That Just Moved Reaches The Old One Too
+                    await Task.Delay(s_windowWait);
+                    return standby.Video.FirstSegment.IsCompletedSuccessfully
+                        && current.Video!.SinceLastSegment > s_stallTimeout;
+                },
+                isUpgrade: false,
+                "Failed To Probe The Window With"
+            );
+            if (swapped)
             {
-                s_logger.Info(
-                    $"Failed To Probe The Window With {encoder.Name}: {exception.Message}"
-                );
+                return;
             }
-
-            standby.Shutdown();
         }
 
         s_logger.Debug("Kept The Capture Of A Still Window");

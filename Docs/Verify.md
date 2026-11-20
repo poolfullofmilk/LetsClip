@@ -23,6 +23,46 @@ How each kind of change is checked, the tools that do it and the baseline number
 - Look at the app over CDP: start it with `LETSCLIP_ROOT` set to a scratch folder and `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333`; `http://127.0.0.1:9333/json` lists the page. `Emulation.setDeviceMetricsOverride` lasts only while its WebSocket stays open, so size, act and shoot in one session. A `MudSelect` opens only on real `Input.dispatchMouseEvent` presses; its items and buttons take a script `click()`, and so do a `MudMenu`'s activator, its items and a `MudCheckBox`'s input. A text field takes a set `value` plus dispatched `input` and `change` events, and a dispatched `keydown` reaches `OnKeyDown`. `Runtime.evaluate` keeps top level `const` names between calls, so wrap each script in an arrow function called at once or the second call fails as `Uncaught`. A dialog's scrim takes every click. Sweep at the three sizes of `CLAUDE.md` step 6 (`1920 x 1009`, `1600 x 845`, `1264 x 680`) for anything past its panel or a sideways page scroll, and measure rather than eyeball: the rects of every `.mud-paper`, `.header-row` and `.setting-row`, computed paddings and radii, and each switch's track and thumb against its row's right edge found the 9 px switch inset, the 24 px editor header gap and the zeroed select padding of v1.8. Build a copy with `-p:Version=0.9 -p:BaseOutputPath=<scratch>\` to see the Update dialog without touching `bin`.
 - With the displays asleep the display hold keeps a sandboxed app from recording; check capture while someone is at the PC.
 
+## The Sandbox
+
+- A Debug build with `LETSCLIP_ROOT` on a scratch folder, `TestClips` copied into its clips folder, a 30 MB noisy clip and a 110 MB 1440p one made with `testsrc2` and `noise` so every Discord plan has work, and settings whose `RemovedGames` holds any game that is running, so nothing records the owner's game. Seed its `Window` on the owner's second monitor (he plays on the first and watches the sandbox there), a third of that screen's height, exactly centred, then 8 px taken off every side, the owner's pick of 12 November 2026 since it looks cleaner (the top of the screen and the whole screen were tried and turned down): `"Window": { "Left": 2560, "Top": 336, "Right": 4000, "Bottom": 1153, "IsMaximized": false }` on the portrait 1440 x 2560 monitor (work area 2560, -510, 1440 x 2500), 846 px above and 845 below. The sides' 8 px is measured on the visible frame (`DwmGetWindowAttribute` 9): the window's minimum width there is the screen's own 1440 px, whose invisible resize borders leave 8 px each side, and a wider side margin pushes it off the right edge (40 px was tried). Seed it with `SaveSound` off and `PlayerMuted` on; a sandboxed window never takes focus. Recording the first monitor for a test is allowed.
+- Sweep over CDP at 1920 x 1009, 1600 x 845 and 1264 x 680 (the smallest page the window allows), the owner's pick of 15 November 2026 over six sizes: the widest common page, the narrowest one above the 1440 px step where the navigation and gutters slim down, and the smallest below it, on Clips, the filter popover, the editor with a landscape and a portrait clip, Settings, the Games and Apps dialog, the More menu and About. Measure each state: the page never scrolls sideways, nothing sits past its panel, no label or button wraps, no two children of a row overlap, panels never overlap each other (the stacked editor once drew Export over the clip), and every text cut off in dots is one meant to be (a long name, the sandbox path).
+- Take screenshots of every state at 1920 x 1009 and 1264 x 680 at least and look at each one, plus zooms at scale 4 to 6 of anything about alignment, shadows, radii or spacing.
+- Use every control the round touched for real: selects through real mouse presses, typed times with Enter and with leaving the field, drags, the filter, a delete and its Undo, Export and Save, Save Cut, Restore Original, hotkey picking and the games search. The page console stays free of errors.
+- A media change (capture, audio filters, exports) gets a measured test on FFmpeg's own sources before it ships, never a guess.
+- Each sandbox starts with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=<port> --disable-features=CalculateNativeWinOcclusion`, a port of its own, and exits through its own signal, the named event `AppInfo.SignalName(Updater.ExitSignal)` gives it (`LetsClip Debug.<key of its LETSCLIP_ROOT>.Exit`), so its replay, a Record and a save end cleanly.
+- Lock, sleep and display changes are sent to the sandbox's own `.NET-BroadcastEventWindow` (`WM_WTSSESSION_CHANGE` 7 and 8, `WM_POWERBROADCAST` 4 and 7, `WM_DISPLAYCHANGE`), never made for real; a real display mode change only with the owner's go ahead (see `Docs/History.md`, Verify: The Work Laptop's Log).
+- A process a test script starts dies with the foreground command that ran the script, so a stand-in game meant to outlive one runs as a background task of its own: on 19 November 2026 a stress script that ended early took its game with it, which read like the game closing.
+- Stop everything a test started before the turn ends, with PowerShell's `Stop-Process -Id`: sandboxes through their signal, stand-in games, `ffmpeg.exe` and `node.exe`. Git Bash's `taskkill` returns without doing anything, so three stand-in games played their tone for hours on 19 November 2026.
+
+## Standard Test Pass
+
+Run it whole for a round that touches capture, saves, the replay, the games list or the Clips page, and the rows of its corner for anything else. The numbers are what the 7800X3D and RX 9070 XT gave on 19 November 2026; a result well off one is a finding. The drivers are throwaway Node scripts over CDP in the scratchpad: each press is a real `Input.dispatchMouseEvent` after `elementFromPoint` showed the button itself under the pointer, and each result is read from the app bar, the cards and the log.
+
+- The stand-in game is a file-based WinForms app, added as the sandbox's only app, that draws moving dots every frame on the first monitor and plays a quiet tone; its command line picks how its windows behave: a plain window, an odd first window (cloaked, zero sized, a tool window, transparent, disabled, minimised, excluded from capture), a splash before the game, a window made anew every few seconds, windows that live 0.6 s before a steady one, or a storm (minimise and 40 resizes every 9 s). A test window needs a taskbar entry, or .NET reports no main window.
+
+| Scenario | Expected |
+|---|---|
+| The game starts | Recording in 0.25 s, a save in about 1.1 s |
+| The game closes, then Save | Waiting for a Game or App within 0.8 s; the press saves the kept replay (19 s, 0.1 s) |
+| Closed and reopened within 2 s | Recording again 2.1 s later |
+| A window made anew every 15 s, then Save | Capture follows each window; the press gives two clips, the kept replay and the new one (24 s and 4.1 s) |
+| A splash, then the game | The game window recorded 2.1 s after the splash closed |
+| Only a cloaked window | Never recorded, Waiting for a Game or App |
+| Windows that blink, then a steady one | Refused windows passed over quietly (nine tries), no Recording Error, the steady one recorded |
+| Minimised, then restored | Waiting, then Recording 2.1 s after the restore |
+| The video or audio FFmpeg killed, then Save | Recording again within 4 s, the press gives the kept replay and the new session's clip |
+| The video FFmpeg killed during a save | The save still ends with its clip |
+| Save pressed 12 times in 2 s | One clip, eleven presses logged as ignored |
+| Record pressed during a save, and right as a saved card lands | Both clips; Record starts at once |
+| A lock with a kept replay | No Save button, nothing saved, the kept replay gone |
+| 16 CPU burners for 70 s | No audio dropped, frames even, a save in about 5 s |
+| The page's browser crashed | Page rebuilt, recording untouched |
+| A replay past the memory budget (`LETSCLIP_MEMORY_MB=150`), Record 3 minutes at Max | Oldest segments spill past 157 MB, Stop saves 3m10.6s (182.2 MB) in about 1.1 s, the clip decodes clean |
+| A thousand clips in the library | First cards in about 10 s, every thumbnail in 12.4 s, back from the editor near the top in under 150 ms |
+| The storm for an hour | Recording throughout, FFmpeg handles and memory flat |
+| A soak of 25 minutes or more: a save every 2.5 minutes, an editor visit every third, a Record every fifth | No full collection after the start (generation 2 stays where it began), heap about 150 MB, native replay about 92 MB for a minute at 1080p60, private about 495 MB with the window open, handles flat about 1900; the video FFmpeg about 74 MB and 1170 handles |
+
 ## Baselines On The 7800X3D, 10 November 2026
 
 Published exe in a sandbox, RX 9070 XT with AMF, one 2560 x 1440 monitor at 240 Hz, nothing else running. Throwaway tools as in the handoff's appendices plus a WinForms test window redrawn every compositor frame.
@@ -34,137 +74,3 @@ Published exe in a sandbox, RX 9070 XT with AMF, one 2560 x 1440 monitor at 240 
 - The hotkey, the display hold and the first open were checked on the plain window: an injected key press saved a clip in 1.4 s, the display turned off and on logged the hold and the release, and the page showed its cards 0.5 s after the first open. The tray's right click menu was not clicked by a script, check it by hand.
 - Windows restarts a crashed LetsClip 5.1 s after the crash (see `Docs/Recovery.md`); a throwaway app measured 4.9 s.
 - `FitToScreen` sets the WebView2 zoom only when it differs, it ran on every step of a window drag.
-
-## On .NET 11, 11 November 2026
-
-The same tools on the published .NET 11 exe with the plain WebView2 host, 7800X3D.
-
-- Recording 1080p60 Normal: the monitor 60.9% of a core with a still screen and 63.4% with the moving test window on it, the test window 30.1%, 1800 of 1800 frames each, the app 0.2%. Nothing moved against .NET 10.
-- The Clips page at 1,000 clips: back to Clips 60 to 68 ms, a sort 0.22 to 0.28 s, the filter opens in 25 ms.
-- A tray start waiting for a game: 37.4 MB private, 576 handles; recording a monitor in the tray 37.1 MB. The first open showed its cards after 0.26 s.
-- Editor playback: LetsClip 0.2 to 2.7% of a core (5.5 to 10.2% on .NET 10), see `Docs/Release.md`.
-- Three saves and three refused presses in a row, the display off and on, the six size sweep (no sideways scroll, every batch loads, a sort starts over at the top, no console or log error), the lone exe, the hover preview, the overlays, a renderer and a browser crash: all as before.
-- Not repeated on .NET 11: the output meter for the chimes (its throwaway needed a runtime the PC does not have machine wide) and the timed page release; both ran on the same code on .NET 10 the day before.
-- The demo and the three stills were taken from the v2.0.4 exe alone in an empty folder with the library in `C:\LetsClip`: 38.4 s, 1479 frames, MP4 4.2 MB, WebP 1.2 MB; Settings at 1123 CSS pixels high. The demo script must reset the named clip's trim first (the throwaway that names the clips), or a second take starts from the last cut.
-
-## The Press On The Real Tray App, 11 November 2026
-
-- The hotkey without a key: post `WM_HOTKEY` (`0x0312`, wParam 1) to the sandboxed process's windows whose class starts with `WindowsForms` (the `WindowMessages` window and the tray icon's, which ignores it). Nothing is injected, so no other program sees a key and a game keeps its focus.
-- What sounded: a throwaway file-based app on `LetsClip.Services` (for NAudio) reads `AudioMeterInformation.MasterPeakValue` of every session on the default output every 10 ms, refreshing the sessions every 100 ms, and names each program that sounded with its peak and bursts. It works with the owner's own audio playing, where a loopback of the whole output cannot. A program recording the output (LetsClip while it records system audio, Discord) shows the whole mix on its own session.
-- What showed: `CopyFromScreen` of the primary screen's bottom right corner 1.5 s after the press, after `SetProcessDPIAware`.
-- Results are in `Docs/Capture.md`. v2.0.5 kept v2.0.4's demo and stills, taken that morning: the round changed no page, style or page script.
-
-## The Evening Round, 11 November 2026
-
-- A sweep run with the window on the zoomed second monitor must scale its sizes by `cssVisualViewport.zoom`, or 1264 emulated is really 1404 CSS pixels wide. Run that way the six sizes were clean on Clips, Settings and the editor with a landscape and a portrait clip.
-- Window memory: `MoveWindow` from a throwaway PowerShell, `WM_CLOSE` to hide, then the saved `Window` in `settings.json` and `GetWindowRect` after a restart; four restarts in a row came back on the same rectangle. While `WindowPlacement.Apply` runs, `MainWindow.FitToScreen` stays out (`_placing`): it fitted mid placement with WPF's stale size and undid the restored height.
-- Player volume: the slider set to 0.3 and mute pressed on one clip, the next clip opened muted at 0.3 and `settings.json` held both.
-- Spinners: Save Cut and Restore Original showed theirs within 100 ms of the press on a 248 MB clip, the timeline's showed while a new clip's strip was made, the Save button's while a save ran.
-- Ponytail audit over the whole repository: every style class, token, page script export and declared member is named somewhere else, no component is a bare wrapper, no package is spare. Cut: the capture panel's leftover styles (`game-row`, `icon-left`, `button-hint`, `--side-width`, the stretched split), the jump icons and their colours, `SourceChip`'s class parameter, stale build folders. Left alone: four components each subscribe to the controller's events by hand, the usual Blazor way, a shared base class would hide three lines each.
-
-## On The Work Laptop, 12 November 2026
-
-Where the round ran (i5-1335U, Iris Xe, Quick Sync, .NET 11.0.100 from `%LocalAppData%\Microsoft\dotnet11`).
-
-- Two sandboxes at once: give each its own `LETSCLIP_ROOT` and its own `--remote-debugging-port` in `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` (9333 and 9334 here); they never share a single instance handle. A build needs both stopped, since they run the same Debug exe.
-- A long replay test: both sandboxes recording the primary monitor at 1080p60 Normal for 11 minutes, Save pressed over CDP at 5 and 10 minutes, each clip probed for picture and sound length and frame count (`Docs/Capture.md`).
-- The number check: a CDP driver setting the editor through ranges, plans and Audio with real presses on the plan select, reading every row, exporting and comparing each file with FFprobe, then pressing Restore Original after any Export and Save, since a shorter selection's Export cuts the clip (`Docs/Export.md`).
-- Per frame recorders: a `requestAnimationFrame` loop started in the same evaluation as the press, logging each new state with its time, for spinners (size, button size before and while busy) and for which controls are disabled during a cut or restore (`Docs/Layout.md`).
-- CPU: a PowerShell sampler reading `TotalProcessorTime` of the sandbox's LetsClip (its pid file) and of the WebView2 processes whose command line holds the sandbox's folder, over 10 or 20 s (`Docs/Measurements.md`). Playback stops at the end point, so a window measuring playback must start from the clip's start and be shorter than the clip.
-- A sweep measures the busy state too: a button's spinner must not change its size, and a menu with a custom activator must open on a real mouse press (`Input.dispatchMouseEvent`), never only on a scripted `click()`.
-
-## On The Gaming PC, 12 November 2026
-
-- The sweep is one Node script over CDP: per state and size it lists a sideways scroll, anything past its panel, wrapped labels, overlapping row children, overlapping panels and text in dots, and shoots 1920 and 1264 wide. Sizes are multiplied by `cssVisualViewport.zoom` (0.9 on the second monitor).
-- Waiting on an element from `Runtime.evaluate` must return a boolean: an element returned by value never reads as true.
-- A long replay on one sandbox: raise Replay Length live and press Save only once the history is that long, the cache keeps what the shorter length held at the pick.
-- A copy's weight is checked by a throwaway that reads `ffprobe -show_entries packet=stream_index,pts_time,size,flags`, weighs like `SizeBudget.CopyBytes` and makes the real `-ss` before `-i`, `-c copy` file beside it for a list of ranges, with and without sound (`Docs/Export.md`).
-- Export and Save on a long clip locks the editor until its new strip is made: a script must wait for Restore Original to be enabled before pressing it.
-- The window's place is set with `MoveWindow` from a per monitor DPI aware PowerShell and read back with `DwmGetWindowAttribute` 9, the visible frame: `GetWindowRect` includes 8 px of invisible border on the left, right and bottom.
-- A script through the session's shell loses backslashes inside a heredoc: write throwaway scripts with the file tool.
-- Tests read copies, never the owner's own clips: on 12 November 2026 a benchmark's hung AMF process kept one of his clips open for two hours and his Save Cut failed with the clip may be in use. Copy a clip into the sandbox first, and give every test FFmpeg a time limit.
-
-## Card Menu And Install Round, 13 November 2026
-
-- The second monitor was off, so the sandbox sat on the first at 125%: a window of 1920 x 1080 reads 1522 x 827 CSS pixels with a zoom of 1, so the sweep's emulated sizes need no scaling there.
-- Clips with games for the filter: start the sandbox once so it writes each clip's metadata, stop it, then set `Game` (or `Monitor`) in those JSON files; a long name such as The Elder Scrolls V: Skyrim Special Edition checks the chip's dots.
-- The install from a download, for real: publish with the next version (`-p:Version=2.0.10`) to a scratch folder, copy the exe into a `Downloads` folder under the repository's parent, back up the owner's `settings.json`, Run key and shortcut through an `explorer.exe`-started `.cmd`, start the exe through `explorer.exe`, then read the install folder, the Run value, each shortcut's target and the log from a probe script started the same way. A sandbox holding F10 makes the real copy log `Failed To Register Hotkey F10`; stop the sandbox, wait 10 s and start the real copy again.
-- `Input.dispatchKeyEvent` for Enter needs `text: "\r"` to press a focused button; without it nothing is clicked.
-
-## Own FFmpeg, Names And Install Round, 14 November 2026
-
-- A new FFmpeg build is checked by running every command form LetsClip uses against its folder before anything else (`Docs/FFmpeg.md`, Making A New Build), each under a time limit.
-- Saving without touching a key: post `WM_HOTKEY` (0x0312, wParam 1) to the sandbox's own message window, the `WindowsForms` class window of the sandbox's process (`FindWindowEx` over top level and message only windows, matched by process id). The owner's own copy never sees it.
-- A sandboxed window never takes focus, so a script's `.blur()` does nothing: commit a typed name by dispatching both `blur` and `focusout` on the input; either alone did not commit it.
-- Three tracks: `ffprobe -show_entries stream=index,codec_type:stream_tags=handler_name:stream_disposition=default` on a saved clip lists `Game and Microphone` (default 1), `Game` and `Microphone` (default 0); an export of one track holds exactly one.
-- While a monitor is recorded the toast cannot be screenshotted, by design; while a game window is recorded it can since 15 November 2026 (sample the monitor's top band before and after a save). Its window checks from a script either way: top most, `WS_EX_TRANSPARENT`, `WS_EX_TOOLWINDOW` and `WS_EX_NOACTIVATE` set and `GetWindowDisplayAffinity` reading `0x11`, over a full screen test window in front.
-- Moving the clips folder to another drive without one: `subst X: <scratch folder>` gives a second drive letter, so the move takes the copy path with its progress; remove it with `subst X: /d` from PowerShell, since Git Bash turns `/d` into a path.
-- The install, takeover and uninstall run on the real profile only through `explorer.exe`-started `.cmd` files in a folder outside `AppData`, with the owner's Run value, shortcuts, settings, clip details and logs backed up there first and put back after, and his released version installed again at the end. A message box the test raises closes with `WM_COMMAND` carrying its button's control id (2 for the uninstall's OK); `IDOK` itself was ignored.
-- Uninstalling keeps the clips, their details and `settings.json`, so a reinstall picks up where it left; check that `%LocalAppData%\Programs\LetsClip`, `%LocalAppData%\LetsClip`, `%AppData%\LetsClip\WebView2` (deleted by a `cmd` after the exit), the logs, the Run value, the shortcuts, the Uninstall key and the unpacked folder are gone.
-
-## Process Trees And The Sweep, 14 November 2026, Evening
-
-- One throwaway WinForms app (a small csproj, `net11.0-windows`, built once and copied under other names, the apphost still loads `tone.dll`): `<hz> <window|full|hidden|still> [--at x y w h] [--spawn exe args]`. It plays a looping tone at -40 dBFS with `SoundPlayer`, shows a window that never takes focus and redraws every millisecond or two (`timeBeginPeriod(1)`), and can start a child, so `Legcord.exe 0 hidden --spawn pattern.exe 440 window` is a voice app that started the game. `pattern` is the sandbox's only added app. Real Steam is older than any copy named `steam.exe`, so name the fake voice app after one that is not running.
-- Read each tone from a saved clip per track with `bandpass=f=F:width_type=h:width=20,astats`: a tone recorded once reads -43 dB, absent about -70 dB, recorded twice about -66 dB at 440 Hz (a comb, never +6 dB).
-- A fresh install is a sandbox root with no settings file; read every Settings row over CDP against the owner's page.
-- An unedited clip must show no changed row: open every clip of the sandbox in turn and list each `changed-value` carrying `data-changed`.
-
-## Edge Cases, 14 November 2026, Night
-
-- A press right after typing: set the Name field's value with an `input` event, then a real press on the button over CDP (`mousePressed`, then `blur` and `focusout` dispatched on the field as the sandbox never takes focus, then `mouseReleased` 110 ms later), and poll the app bar chip, snackbars and buttons every 250 ms. Before the fix the clip was renamed and nothing exported; the export also needs the editor to have swapped in the renamed clip before it reads the path.
-- Exit mid export: a 90 s noisy 1080p60 clip (`testsrc2` with `noise=alls=30:allf=t`, 25 Mbps through AMF, 298 MB) exported for Free, then the sandbox's own exit event set from PowerShell, named `LetsClip Debug.<first 32 hex of SHA-256 of the upper case sandbox root>.Exit` (`AppInfo.SignalName`); Windows PowerShell 5.1 has no `SHA256.HashData`, use `Create().ComputeHash`. Count `.LetsClip-*` files in Exports before and after (`-Force`, they are not hidden but start with a dot).
-- The pixel sweep script measures wrapping per text node: a range over a whole element counts its icon and text boxes as separate lines. Text in dots is width for `text-overflow` and height only for a line clamp, since a field's floating label is taller than its box.
-- A card's drag: dispatch a `dragstart` on a card over CDP; the page cancels it and the log reads `Skipped Dragging <clip>, The Button Was Up`, which proves the page to host path without moving a file. A real drop into Explorer or Discord needs a real mouse, so it is left to the owner unless he allows injected input.
-- Delete with Undo: delete a throwaway copy, move the pointer off the snackbar (it waits while the pointer rests on it), and watch the file: kept while Undo shows, in the Recycle Bin about 5 s after. Exiting the sandbox recycles any clip still waiting.
-- A save with the probe gone: compare the clip's details (`Duration`, `Width`, `Height` in its JSON) with ffprobe of the file; they agreed to 8 ms on a minute.
-- The settle delay: change a capture setting twice within 2 s and read the log for one `Step Wants` or none, never one per change.
-
-## Picks Round, 15 November 2026, Evening
-
-- The owner's OLED stays black during tests: a black top most window covers each monitor and WebView2 still renders under it with `--disable-features=CalculateNativeWinOcclusion` beside the debugging port in `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`, so CDP screenshots and presses work.
-- A Git Bash launcher must join the sandbox root with a quoted backslash (`"$S"'\'"$1"`): `"$S\$1"` reads as a literal `$1`, and the sandbox ran on a `scratchpad$1` root with default settings, which only showed as an empty Clips page. Look at the root before trusting a run.
-- The slim FFmpeg decodes no PNG, so contact sheets of screenshots are drawn with `System.Drawing`; it has `psnr` and `ssim`, which checked where a vertical crop landed.
-- The window soak ran from a scratch folder outside the repository: a stress window, four FFmpeg captures writing `-progress` files, a log line every 10 minutes, all deleted afterwards.
-
-## The Handoff Round, 16 November 2026
-
-How fifteen fixes written elsewhere were verified on the gaming PC, each tool throwaway and deleted with the session's scratch folder.
-
-- The release to compare with comes from `git archive master | tar -x -C <scratch>` plus the FFmpeg folder: a plain copy of the source that builds beside the round's, no branch and no worktree. Each build's output is copied to its own folder, so a build never waits for a running sandbox and the stand in is swapped in a copy.
-- One harness on `LetsClip.Services`, built once against each source, with modes for the packet listing (the old JSON listing reimplemented beside the new probe), the save (segments made with the capture's own segment arguments, a held temporary file for the blocked rename, inflated sizes for the full drive), black verdicts, a library listing, details, the version check by reflection, a zoomed waveform hashed, a cut and a folder move with every file hashed before and after.
-- The stand in for `ffmpeg.exe` and `ffprobe.exe` is one single file exe copied under both names beside `<name>.real.exe`; `LC_FAULTS` names a file of `pattern&&pattern|hang, fail, delay or kill|ms|count` lines read at each start. Patterns used: `ffprobe&&packet=stream_index` (the listing), `ffprobe&&-show_streams` (the plain probe), `ffmpeg&&hstack` (a strip), `-copyts&&+faststart` (a save's remux), `gfxcapture&&h264_amf` with a count of 3 (the GPU route once and the CPU route twice, which lands a window session on x264). `FFmpeg.HoldFiles` keeps the folder's files open, so swap it only while the sandbox is stopped; a missing `ffmpeg.exe` with `ffprobe.exe` in place is how an export fails to start while the editor still opens.
-- A test window keyed as a game needs a taskbar entry: `ShowInTaskbar = false` gives a WinForms window a hidden owner, .NET then reports no main window and `GameWatcher` never finds it. The owner saw the window sit unrecorded and asked.
-- A driver checks what sits under the pointer before every press and scrolls its target into view first (`elementFromPoint`): a plan select that had scrolled under the editor's header was pressed where Copy File sat, which put a test clip on the owner's clipboard. Copy File and Copy for Discord write the real clipboard and a delete fills the real Recycle Bin, so use them as little as a test needs and say so in the report.
-- Blazor caches each page script function it has called, so a wrapper meant to delay one (the player's `attach`) goes in right after a reload, before the first call.
-- The session's question at shutdown: `SendMessageTimeout` with `WM_QUERYENDSESSION` (0x11) to every top level window of the sandbox's own process, found by its path under the scratch folder, printing each answer. Only WPF's hidden window answers no; nothing is sent to another process.
-- What only the screen shows (a tray balloon) is read from one `CopyFromScreen` of the primary monitor's bottom right corner 2.6 s after the event, and looked at once.
-- A background update is checked in copies of both sources whose idle time is 20 s and whose install only logs, built with `-p:Version=0.9` so the real release reads as newer; the condition under test stays the unchanged line.
-- Two sandboxes at once need a stop that never ends the other: each is asked to exit through its own event (`LetsClip Debug.<key of its root>.Exit`) and nothing is ended by name. A coarse timestamp is `LastWriteTimeUtc` rounded up to the next even second; a zip round trip through `System.IO.Compression.ZipFile` stores two second times.
-- A sweep script is trusted once it has caught faults put in on purpose: a 3000 px element, a 40 px title and a negative margin gave a sideways scroll, an element past its panel, a wrap and an overlap.
-- The editor's numbers are read by one driver from the Clips page each time (a seamless swap keeps the last clip's rows on screen for a moment), every Details row whole and over five handle drags mid drag and at rest, written as JSON per build and compared value by value.
-- Left for the owner, as a session cannot do them: a real shutdown and sign out during Record, the tray's right click menu, a card dragged into Discord, the clips folder's native folder picker (the move itself ran through `ClipLibrary.MoveAllAsync` across a `subst` drive), Save Sound's own chime, the next real self update and a live match with his microphone.
-
-## Scrolling And The Export Ladder, 17 November 2026
-
-- Scroll smoothness: a `requestAnimationFrame` recorder and a `long-animation-frame` observer started in the page, then 14 `Input.dispatchMouseEvent` wheel ticks 400 ms apart with the pointer resting over the cards and again over the scrollbar, counting frames over 1.8 times the median, the worst frames and the preview videos added to the grid. Run each case three times or more, nothing else using the GPU: one run alone swings by half.
-- A shadow is checked by brightness per row from a screenshot, under the element against the page's own 32 (`System.Drawing`), not by eye; a shadow masked away and one shown differ by 7 to 9 levels at the edge.
-- Encoder floors and quality at low bitrates: a throwaway shell sweep encodes 20 s and 12 s Overwatch cuts with the export's own AMF arguments at each size, frame rate and bitrate, records the bitrate it really wrote and scores `xpsnr` and `ssim` against the source with the encode upscaled to 1080p. Comparing frame rates this way does not work: a 30 FPS encode scored against the source decimated by `fps=30` still reads low at 800 kbps, its frames misaligned.
-- A dialog closes by its X only, so a sweep that opens About must press `[aria-label='Close']` before the next state, or every later shot sits under its scrim.
-- The sandbox's details keep the frame rate its first listing read: after changing the probe, fix or delete that clip's JSON in `.Details` before comparing.
-- A sandbox records whatever game is running: on 17 November 2026 the owner started Overwatch while a sandbox ran with GamesOnly and it began recording his game. Check for a running game before every start, and add it to `RemovedGames` (its key is the exe name in lower case without dashes or underscores, `GameScanner.NormalizeProcessKey`, `overwatch`). While he plays, keep tests off the graphics card's encoder: no exports or encoder sweeps, since a second AMF session once hung.
-- With the window on the zoomed second monitor (page zoom 0.9), `Input.dispatchMouseEvent` coordinates and a screenshot's `clip` are the CSS rect times that zoom (`1600 / innerWidth` after emulating 1600 wide), and an emulated size is lost when the CDP connection closes, so a later script reading `innerWidth` sees the real window.
-
-## Round 3, 17 November 2026
-
-- The sweep's probe now also faults any box that scrolls sideways inside (`overflow-x` auto or scroll with content wider than the box).
-- With the second monitor off the sandbox sat on the first under the black overlay; CDP clicks there need no zoom factor (that was the second monitor's 0.9).
-- The exporter was checked without the UI by a throwaway file based app referencing the Services project (`#:project`), with `JsonSerializerIsReflectionEnabledByDefault` set and the FFmpeg folder copied beside it.
-
-## The Work Laptop's Log, 18 November 2026
-
-- Sound holes are measured without the encoder: a file based harness on `LetsClip.Services` builds the real `AudioMixer` on the only active output (the owner's G522), writes its raw output to a file, and FFmpeg's `silencedetect=noise=-110dB:d=0.002` from the second second on lists every stretch of digital silence. A separate unconfined tone process plays 1 kHz at -80 dBFS on that output, which nobody hears, since a tone player inside the starved harness underruns and leaves holes of its own. The same harness is built once against `git archive master` and once against the round, and an optional second recorder in the harness reports how late each packet arrives (loopback stamps run about 10 ms ahead of now, so normal reads -20 ms at a packet's end).
-- Starvation: the harness takes two CPUs (`ProcessorAffinity`, this PC reports 8) and a load process puts four to six threads at `ThreadPriority.Highest` on the same two, spinning 400 to 600 ms and resting 50 to 100. Whole process stalls: a throwaway calls `NtSuspendProcess` and `NtResumeProcess` on the harness every 4 s. Reconnects: a timer in the harness calls each source's `Connect` through reflection every 3 s, on the default device and on a process loopback of the tone process (a game session, which follows the running Discord and Steam as voice apps too).
-- A sandbox's microphone and loopback deliver no packets when started from the Claude app (the G522 microphone is silent there and nothing played), so its freezes only show that the session survives; the harness is the proof for sound.
-- A process's `WEBVIEW2_` variables are read from its environment block (`NtQueryInformationProcess`, the PEB's `ProcessParameters` at 0x20, `Environment` at 0x80 and its size at 0x3F0 on x64), for the app and its FFmpeg children.
-- A display change is made with `ChangeDisplaySettingsEx` on the second monitor (`\\.\DISPLAY2`, 165 to 144 Hz, flags 0 so nothing reaches the registry) and undone after 5 s with a null mode, the owner's go ahead given first; it blinks that monitor twice. The sandbox records the first monitor with Record running for 65 s first, then saves and stops 10 s after the change.
-- GPU priority: `D3DKMTGetProcessSchedulingPriorityClass` on running processes; it answers only for a process with a D3D device.

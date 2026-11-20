@@ -18,6 +18,10 @@ public sealed class CaptureController : IDisposable
     // A Save Waits This Long For A Start To Finish
     private static readonly TimeSpan s_startWait = TimeSpan.FromSeconds(15);
 
+    // Presses Closer Than This Are One, Hammering Saves One Clip
+    private static readonly TimeSpan s_pressGap = TimeSpan.FromSeconds(2);
+    private long _lastPress;
+
     // Failures In A Row Wait Longer, At Most A Minute
     private static readonly int[] s_retrySeconds = [2, 5, 15, 30, 60];
 
@@ -44,6 +48,9 @@ public sealed class CaptureController : IDisposable
 
     // A Recorded Game's Own Monitor Sets Its Limits
     private MonitorInfo? _gameMonitor;
+
+    // The Window Last Asked For, Skipped When Windows Refuses It
+    private nint _wantedWindow;
     private CaptureHolds _holds;
     private string? _lastGame;
     private IReadOnlyDictionary<string, AddedGame>? _installedGames;
@@ -66,6 +73,7 @@ public sealed class CaptureController : IDisposable
         Recorder = new ReplayRecorder(Library);
         Recorder.Failed += failure => _ = RetryAsync(failure);
         Games.GameChanged += name => _ = OnGameChangedAsync(name);
+        Games.WindowChanged += () => _ = StepAsync(null);
         RefreshMonitors();
         _ = ScanGamesAsync();
     }
@@ -92,12 +100,17 @@ public sealed class CaptureController : IDisposable
         ?? Monitors.FirstOrDefault(monitor => monitor.IsPrimary);
 
     // Up To The Monitor's Rounded Refresh Rate, 30 Always Offered
-    public IReadOnlyList<int> FrameRateChoices =>
+    public IReadOnlyList<int> FrameRateChoices => RatesFor(_gameMonitor ?? SelectedMonitor);
+
+    private static int[] RatesFor(MonitorInfo? monitor)
+    {
+        return
         [
             .. UserSettings.FrameRateChoices.Where(rate =>
-                rate <= Math.Max(30, (_gameMonitor ?? SelectedMonitor)?.RefreshRate ?? 60)
+                rate <= Math.Max(30, monitor?.RefreshRate ?? 60)
             ),
         ];
+    }
 
     public int FrameRate => FrameRateChoices.Where(rate => rate <= Settings.FrameRate).Max();
 
@@ -152,7 +165,8 @@ public sealed class CaptureController : IDisposable
         };
 
     // Written Like Every Other Length, Save Last 2m
-    public string SaveText => $"Save Last {Formatter.FormatDuration(Settings.ReplaySeconds)}";
+    public string SaveText =>
+        $"Save Last {Formatter.FormatDuration(Recorder.Options?.Seconds ?? Settings.ReplaySeconds)}";
 
     public long ReplayBytes(int seconds)
     {
@@ -430,6 +444,15 @@ public sealed class CaptureController : IDisposable
 
     public async Task<SaveOutcome> SaveAsync()
     {
+        // Each Press Holds The Next Off, Ignored Ones Too
+        var pressed = Stopwatch.GetTimestamp();
+        var previous = Interlocked.Exchange(ref _lastPress, pressed);
+        if (Stopwatch.GetElapsedTime(previous, pressed) < s_pressGap)
+        {
+            s_logger.Info("Ignored A Press, Pressed Again Within 2 s");
+            return new SaveOutcome(null, null);
+        }
+
         // A Press During A Restart Saves What Follows It
         var waited = Stopwatch.StartNew();
         while (
@@ -444,7 +467,7 @@ public sealed class CaptureController : IDisposable
             await Task.Delay(100);
         }
 
-        var outcome = await Recorder.SaveAsync(MonitorNumber());
+        var outcome = await Recorder.SaveAsync(MonitorNumberOf);
         if (outcome.Error is not null)
         {
             SaveFailed?.Invoke();
@@ -453,12 +476,15 @@ public sealed class CaptureController : IDisposable
         return outcome;
     }
 
+    // Recording, Or An Ended Session's Replay Still Kept
+    public bool CanSave => IsRecording || Recorder.HasKeptReplay;
+
     // Set While A Recording Runs Until Stopped
     public DateTimeOffset? RecordingSince => Recorder.RecordingSince;
 
     public bool StartRecording()
     {
-        return Recorder.StartRecording(MonitorNumber());
+        return Recorder.StartRecording(MonitorNumberOf(Recorder.Options));
     }
 
     public async Task<SaveOutcome> StopRecordingAsync()
@@ -472,10 +498,10 @@ public sealed class CaptureController : IDisposable
         return outcome;
     }
 
-    private int? MonitorNumber()
+    private int? MonitorNumberOf(CaptureOptions? recorded)
     {
         // A Monitor Clip Is Named By Its Monitor's Place
-        var number = Recorder.Options is { GameWindow: 0 } options
+        var number = recorded is { GameWindow: 0 } options
             ? Monitors
                 .ToList()
                 .FindIndex(monitor =>
@@ -498,9 +524,8 @@ public sealed class CaptureController : IDisposable
         var now = MonitorCatalog.Find(Monitors, running?.DevicePath);
         var reason =
             running is null || now == running ? null
-            : now is null
-                ? $"Stopped because {running.FriendlyName} was disconnected, history was cleared"
-            : $"Stopped because the display settings of {running.FriendlyName} changed, history was cleared";
+            : now is null ? $"Stopped because {running.FriendlyName} was disconnected"
+            : $"Stopped because the display settings of {running.FriendlyName} changed";
 
         // The Step Restarts Only What Differs
         return StepAsync(null, reason);
@@ -532,18 +557,24 @@ public sealed class CaptureController : IDisposable
     {
         // The Game Closing Ends The Recording It Started
         return game is null
-            ? StepAsync(
-                null,
-                $"Stopped because {_lastGame ?? "the app"} closed, history was cleared"
-            )
+            ? StepAsync(null, $"Stopped because {_lastGame ?? "the app"} closed")
             : StepAsync(() => _lastGame = game);
     }
 
     private async Task RetryAsync(CaptureFailure failure)
     {
+        // A Refused Window Is Skipped, The Next One Tried
+        if (failure == CaptureFailure.WindowRefused)
+        {
+            Games.Refuse(_wantedWindow);
+        }
+
         // Every Failure Starts Over By Itself, Set Once And Forget
         var failures =
-            failure is CaptureFailure.RanLong or CaptureFailure.WindowClosed
+            failure
+                is CaptureFailure.RanLong
+                    or CaptureFailure.WindowClosed
+                    or CaptureFailure.WindowRefused
             || Stopwatch.GetElapsedTime(_lastFailure) > s_failuresForgotten
                 ? 1
                 : _failures + 1;
@@ -561,11 +592,17 @@ public sealed class CaptureController : IDisposable
                     s_retrySeconds[Math.Min(failures, s_retrySeconds.Length) - 1]
                 );
 
-        // A Closed Window Is No Failure, Its Game Closed Too
+        // A Closed Or Refused Window Is No Failure Of LetsClip
         s_logger.Info(
-            failure == CaptureFailure.WindowClosed
-                ? $"Starting Again In {wait.TotalSeconds:0.#} s If The Game Still Runs"
-                : $"Retrying In {wait.TotalSeconds:0.#} s, Failure {failures} In A Row, {failure}{(_quietRetry ? ", Out Of Sight" : "")}"
+            failure switch
+            {
+                CaptureFailure.WindowClosed =>
+                    $"Starting Again In {wait.TotalSeconds:0.#} s If The Game Still Runs",
+                CaptureFailure.WindowRefused =>
+                    $"Trying Another Window Of The Game In {wait.TotalSeconds:0.#} s",
+                _ =>
+                    $"Retrying In {wait.TotalSeconds:0.#} s, Failure {failures} In A Row, {failure}{(_quietRetry ? ", Out Of Sight" : "")}",
+            }
         );
         try
         {
@@ -604,6 +641,12 @@ public sealed class CaptureController : IDisposable
             ApplyGames();
             var wanted = _holds == CaptureHolds.None ? WantedOptions() : null;
 
+            // Locked, Asleep, Dark Or Closing, No Replay Is Kept
+            if (_holds != CaptureHolds.None)
+            {
+                Recorder.DiscardKeptReplay();
+            }
+
             // Nothing To Do Unless Options Differ Or An Error Clears
             var running = Recorder.Options;
             var clearsError = wanted is null && Recorder.Status.State == CaptureState.Error;
@@ -636,11 +679,12 @@ public sealed class CaptureController : IDisposable
             {
                 // A Running Save Gets Its Last Segments First
                 await Recorder.WaitForSavesAsync(TimeSpan.FromSeconds(5));
-                await Recorder.StopAsync(stopReason);
+                await Recorder.StopAsync(stopReason, keepReplay: _holds == CaptureHolds.None);
             }
 
             if (wanted is not null && Recorder.Status.CanStart)
             {
+                _wantedWindow = wanted.GameWindow;
                 await Recorder.StartAsync(wanted);
 
                 // The Recorder Names The Monitor, This Names The Game
@@ -692,6 +736,12 @@ public sealed class CaptureController : IDisposable
             shown = running;
         }
 
+        // The Same Window Keeps Recording Through Its Monitor's Mode Changes
+        if (Recorder.Options is { GameWindow: not 0 } recorded && recorded.GameWindow == window)
+        {
+            shown = recorded.Monitor;
+        }
+
         // Only The Game's And Discord's Sound, Else Everything Windows Plays
         var gameAudio =
             window != 0
@@ -705,8 +755,8 @@ public sealed class CaptureController : IDisposable
         var own = window != 0 ? GameSettingsOf(Games.GameKey) : null;
         return new CaptureOptions(
             shown,
-            settings.ReplaySeconds,
-            FrameRateChoices.Where(rate => rate <= (own?.FrameRate ?? settings.FrameRate)).Max(),
+            own?.Seconds ?? settings.ReplaySeconds,
+            RatesFor(shown).Where(rate => rate <= (own?.FrameRate ?? settings.FrameRate)).Max(),
             own?.Resolution ?? settings.Resolution,
             own?.Quality ?? settings.Quality,
             settings.SystemAudio ? settings.SystemAudioDeviceId : null,
