@@ -108,7 +108,7 @@ public partial class MainLayout : IDisposable
 
         if (latest is null)
         {
-            Snackbar.Add("Unable to check for updates right now", Severity.Warning);
+            Snackbar.Add("Could not check for updates right now", Severity.Warning);
             return;
         }
 

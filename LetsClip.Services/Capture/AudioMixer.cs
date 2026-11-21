@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using System.Runtime.Versioning;
 using LetsClip.Services.Games;
 using NAudio.CoreAudioApi;
 using NLog;
@@ -149,10 +148,6 @@ public sealed partial class AudioMixer : IDisposable
             _voiceWatch.Change(TimeSpan.Zero, Timeout.InfiniteTimeSpan);
         }
     }
-
-    // Windows 10 2004 And Later Record One Process Tree
-    [SupportedOSPlatformGuard("windows10.0.19041")]
-    public static bool CanRecordProcesses => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041);
 
     public string? Problem =>
         _sources.Select(source => source.Problem).FirstOrDefault(problem => problem is not null);

@@ -746,10 +746,7 @@ public sealed class CaptureController : IDisposable
 
         // Only The Game's And Discord's Sound, Else Everything Windows Plays
         var gameAudio =
-            window != 0
-            && settings.SystemAudio
-            && settings.OnlyGameAndDiscord
-            && AudioMixer.CanRecordProcesses
+            window != 0 && settings.SystemAudio && settings.OnlyGameAndDiscord
                 ? Games.GameProcessId
                 : 0;
 

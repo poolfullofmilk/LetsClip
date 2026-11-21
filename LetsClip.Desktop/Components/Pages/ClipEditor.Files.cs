@@ -111,8 +111,8 @@ public partial class ClipEditor
 
     private bool CanSaveCut()
     {
-        // Only A Shorter Selection Has Anything To Cut
-        return Editable && !Exporting && _range.CutsShort(_duration);
+        // Only A Shorter Selection Cuts, Live While Dragged
+        return Editable && !Exporting && (_liveRange ?? _range).CutsShort(_duration);
     }
 
     private async Task RestoreOriginalAsync()

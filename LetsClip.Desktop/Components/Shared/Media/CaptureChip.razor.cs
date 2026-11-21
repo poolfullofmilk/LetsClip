@@ -10,6 +10,8 @@ namespace LetsClip.Desktop.Components.Shared.Media;
 
 public partial class CaptureChip : IDisposable
 {
+    private static readonly TimeSpan s_tick = TimeSpan.FromSeconds(1);
+
     [Inject]
     public required CaptureController Controller { get; set; }
 
@@ -20,6 +22,18 @@ public partial class CaptureChip : IDisposable
     public required NavigationManager Navigation { get; set; }
 
     private bool IsError => Controller.ShowsError;
+
+    // Recording With Nothing Wrong, The Dot Pulses
+    private bool IsRecordingFine => Controller.IsRecording && !IsError;
+
+    // Ticks Each Second Only While The Replay Fills
+    private Timer? _filling;
+
+    // How Much A Save Gives Right Now
+    private string? HeldText =>
+        IsRecordingFine && Controller.Recorder.HeldSeconds is >= 1 and var held
+            ? $"Holds the Last {Formatter.FormatDuration(Math.Floor(held))}"
+            : null;
 
     private string Icon =>
         IsError ? Icons.Material.Rounded.Error
@@ -78,10 +92,26 @@ public partial class CaptureChip : IDisposable
         _ = InvokeAsync(StateHasChanged);
     }
 
+    protected override void OnAfterRender(bool firstRender)
+    {
+        // Full, The Tooltip Stays Until The Next Start
+        var filling =
+            IsRecordingFine
+            && Controller.Recorder.HeldSeconds < (Controller.Recorder.Options?.Seconds ?? 0);
+        if (filling == _filling is not null)
+        {
+            return;
+        }
+
+        _filling?.Dispose();
+        _filling = filling ? new Timer(_ => OnStatusChanged(), null, s_tick, s_tick) : null;
+    }
+
     public void Dispose()
     {
         Controller.Recorder.StatusChanged -= OnStatusChanged;
         Controller.Changed -= OnStatusChanged;
+        _filling?.Dispose();
         GC.SuppressFinalize(this);
     }
 }

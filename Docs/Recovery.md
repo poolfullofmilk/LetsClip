@@ -59,7 +59,7 @@ The owner's rule: consistent on every kind of system, and anything that can fix 
 | LetsClip dies with segments spilled to disk | The next start's cleanup deletes the session folders, older versions' `join-video.ts` and `join-audio.ts` among them; the memory goes with the process | Nothing |
 | FFmpeg's pipes outlive their process | Every run lets go of its redirected pipes once read (`FFmpeg.Release`, `ReleaseAsync`), so handles stay flat over thousands of thumbnails, probes and saves; before 19 November 2026 a run's pipe handles waited for the garbage collector | Nothing |
 | The save key is hammered | One clip: a press within 2 s of the last one is ignored, and one during a save does nothing | One chime, one clip |
-| A hardware export misses its limit twice | A third try along the line of the first two (`NextBitrate`), then the next encoder | The export, a little later |
+| A hardware export misses its limit twice | A third try along the line of the first two (`NextBitrate`), or the proportional step when the miss was more than twice the limit (that threw an `ArgumentException` and failed the export until 21 November 2026), then the next encoder | The export, a little later |
 | A clip comes out black, a game hiding its picture | Said whatever Notifications says (`WarnIfBlackAsync`), logged | `Clip is Black` with its fix |
 | A clip renamed or moved in Explorer loses its details | Details whose clip left are adopted by size and a write time within 2 s (`Adopt`), else the game comes from the name | The clip with its name, trim and game |
 | The clips folder is copied to a FAT32 or exFAT drive, or unzipped from a backup | A clip's details count while its size matches and its write time is within 2 s, and are stamped again with the file's own time (`ClipLibrary.IsSameTime`); they were ignored and overwritten by a fresh probe before | Every name, trim, crop and date as before |
@@ -74,6 +74,9 @@ The owner's rule: consistent on every kind of system, and anything that can fix 
 | The release an install found is gone (replaced and deleted while GitHub still named it) | Every install checks again before downloading and takes the newer release (Tray.InstallUpdateAsync, since v2.0.20); until then each Update Now failed with a 404 until the next check | Nothing, the newer version installs |
 | An app opened through LetsClip (a folder, a link, a file, the next version) would inherit its WebView2 profile and flags | Every process LetsClip starts gets an environment without `WEBVIEW2_` variables (`ProcessStarts.WithoutWebView`), links and files open through `explorer.exe`; until 18 November 2026 each child carried `WEBVIEW2_USER_DATA_FOLDER`, and a WebView2 app started from one would have used LetsClip's profile | Nothing |
 | A cut's full clip cannot go to the Recycle Bin (another app holds it) | It stays in `.Originals` with its cut's place (`ClipLibrary.CutAsync`), logged | The snackbar names Restore Original instead of the Recycle Bin |
+| A clip is deleted by mistake | Recently Deleted lists it from the Recycle Bin and puts it back with its details and whole clip, a name taken since getting (2) (`ClipLibrary.Restore`) | The card again |
+| The Recycle Bin cannot be read (a drive without one, a record in use) | Logged once, the list shows what it read; Open Recycle Bin still opens Windows' own | Fewer rows, or No Deleted Clips |
+| A restore fails (the file in use, the folder gone) | Restore All stops there, nothing half moved | `The clip could not be restored, it may be in use` |
 
 ## Reliability Research And Tests
 

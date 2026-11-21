@@ -26,6 +26,8 @@
     --page-gutter: 28px;
     --page-top: 80px;
     --page-bottom: 28px;
+    /* Every Field, Compact Row And The Player's Controls Line */
+    --field-height: 40px;
     --nav-width: 240px;
     --glass-opacity: 66%;
     --glass-blur: blur(12px);
@@ -56,7 +58,9 @@
     --preview-bar-height: 6px;
     --preview-bar-bottom: 10px;
     --quick: 120ms ease-out;
-    --fade: 150ms ease-out;
+    /* Every Crossfade, Popover And Card Move Takes This Long */
+    --fade-time: 150ms;
+    --fade: var(--fade-time) ease-out;
 }
 
 /* Scaled 1080p Screens Get A Slimmer Frame */
@@ -67,9 +71,9 @@
     }
 }
 
-/* Popovers Open And Close In The Crossfades' 150 Ms */
+/* Popovers Open And Close In The Crossfades' Time */
 .mud-popover {
-    transition-duration: 150ms !important;
+    transition-duration: var(--fade-time) !important;
 }
 
     /* A Waiting Tooltip Still Closes At Once */
@@ -332,9 +336,9 @@
         margin-inline: -9px;
     }
 
-/* Editor Panels Sit Closer, Every Row 40 Px, Fields Too */
+/* Editor Panels Sit Closer, Rows As Tall As Fields */
 .compact .setting-row {
-    min-height: 40px;
+    min-height: var(--field-height);
     padding-block: 0;
 }
 
@@ -415,8 +419,9 @@
     border-radius: var(--radius-pill);
 }
 
+/* A Held Or Focused Thumb Rings In The Tonal Blue */
 .mud-slider.mud-slider-info .mud-slider-input:is(:active, :focus-visible)::-webkit-slider-thumb {
-    box-shadow: 0 0 0 8px rgba(var(--mud-palette-info-rgb), 0.24);
+    box-shadow: 0 0 0 8px var(--tonal-info);
 }
 
 /* Header Actions Keep One Line, Only The Title Gives Way */
@@ -494,7 +499,7 @@
     background-color: var(--lifted-surface);
     color: var(--mud-palette-text-primary);
     box-shadow: var(--mud-elevation-4);
-    font-size: 13px;
+    font-size: var(--mud-typography-caption-size);
     font-weight: 400;
 }
 

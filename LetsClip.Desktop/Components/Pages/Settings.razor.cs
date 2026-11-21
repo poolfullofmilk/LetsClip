@@ -88,14 +88,13 @@ public partial class Settings : IDisposable
 
     // Only A Game Window's Recording Knows Its Game's Sound
     private bool CanRecordOnlyGameAndDiscord =>
-        Controller.Settings.GamesOnly
-        && Controller.Settings.SystemAudio
-        && AudioMixer.CanRecordProcesses;
+        Controller.Settings.GamesOnly && Controller.Settings.SystemAudio;
 
     // The Game's Own Sound Ignores The Output Device
-    private bool PlaybackDeviceDisabled =>
-        !Controller.Settings.SystemAudio
-        || (CanRecordOnlyGameAndDiscord && Controller.Settings.OnlyGameAndDiscord);
+    private bool PlaybackDeviceDisabled => !Controller.Settings.SystemAudio || RecordsVoiceChat;
+
+    private string? PlaybackDeviceReason =>
+        Controller.Settings.SystemAudio && RecordsVoiceChat ? "Not Used" : null;
 
     // The Saved Keys, Or While Picking The Last Keys Pressed
     private string HotkeyButtonText =>

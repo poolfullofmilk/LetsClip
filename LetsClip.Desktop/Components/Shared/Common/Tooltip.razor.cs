@@ -20,4 +20,12 @@ public partial class Tooltip
     // Most Tooltips Wrap One Button In A Row
     [Parameter]
     public string RootClass { get; set; } = "d-flex";
+
+    // A Hint Over A Large Surface Waits Before Showing
+    [Parameter]
+    public double Delay { get; set; }
+
+    // On The Tooltip Itself
+    [Parameter]
+    public string? Class { get; set; }
 }

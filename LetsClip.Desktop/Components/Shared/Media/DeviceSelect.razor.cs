@@ -33,8 +33,15 @@ public partial class DeviceSelect
     private string Shown =>
         Listed.Any(device => device.Id == SavedId) ? SavedId : AudioDevices.AutomaticId;
 
-    // The Closed Field Reads Like Its Item
-    private string? Detail => Listed.FirstOrDefault(device => device.Id == SavedId)?.Adapter;
+    // Why A Greyed Field Is Not Used
+    [Parameter]
+    public string? Reason { get; set; }
+
+    // The Closed Field Reads Like Its Item, Or Says Why
+    private string? Detail =>
+        Devices is []
+            ? null
+            : Reason ?? Listed.FirstOrDefault(device => device.Id == SavedId)?.Adapter;
 
     private string LabelOf(string? id)
     {

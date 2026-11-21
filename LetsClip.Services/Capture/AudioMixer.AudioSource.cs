@@ -193,7 +193,7 @@ public sealed partial class AudioMixer
         private MMDevice? Target()
         {
             // A Process Tree Has No Device, Else Picked Or Default
-            if (processId != 0 && CanRecordProcesses)
+            if (processId != 0)
             {
                 return null;
             }
@@ -206,7 +206,7 @@ public sealed partial class AudioMixer
         private (WasapiRecorder Recorder, string From) Build(MMDevice? endpoint)
         {
             var format = WaveFormat.CreateIeeeFloatWaveFormat(SampleRate, Channels);
-            if (processId != 0 && CanRecordProcesses)
+            if (processId != 0)
             {
                 // Any Device They Play On, Activation Waited For Here
                 var recorder = new WasapiRecorderBuilder()

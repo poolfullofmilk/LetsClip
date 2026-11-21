@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using LetsClip.Data.Helpers;
-using LetsClip.Services.Media;
 using NLog;
 
 namespace LetsClip.Desktop.Interop;
@@ -33,24 +32,6 @@ public static class Explorer
     {
         Directory.CreateDirectory(folder);
         Start(new ProcessStartInfo("explorer.exe", $"\"{folder}\""));
-    }
-
-    public static bool Recycle(string path)
-    {
-        // To The Recycle Bin, So A Mistake Comes Back
-        var original = ClipLibrary.OwnedOriginalOf(path);
-        if (!ClipLibrary.Recycle(path))
-        {
-            return false;
-        }
-
-        // Its Hidden Original Follows, The Clip Is Gone Either Way
-        if (original is not null)
-        {
-            _ = ClipLibrary.Recycle(original);
-        }
-
-        return true;
     }
 
     private static void Start(ProcessStartInfo startInfo)

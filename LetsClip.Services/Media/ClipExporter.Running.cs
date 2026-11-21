@@ -75,10 +75,7 @@ public static partial class ClipExporter
         var video = request.Video || !withAudio;
 
         // A Crop Always Encodes, Only The Part It Keeps
-        var cropped =
-            video
-            && request.Crop is { } box
-            && CropBox.Changes(box.Shape, source.Width, source.Height);
+        var cropped = video && request.Crop is { } box && box.Changes(source.Width, source.Height);
         var (frameWidth, frameHeight, cropLeft, cropTop) = cropped
             ? request.Crop!.PixelsOf(source.Width, source.Height)
             : (source.Width, source.Height, 0, 0);

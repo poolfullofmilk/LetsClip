@@ -35,16 +35,28 @@
         @* Top Chips *@
         <MudElement HtmlTag="div"
                     Class="clip-top-chips">
-            @if (IsNew)
-            {
-                <MudChip T="string"
-                         Size="Size.Small"
-                         Variant="Variant.Filled"
-                         Color="Color.Dark"
-                         Class="new-chip ml-0 my-0 mr-auto">
-                    New
-                </MudChip>
-            }
+            <MudElement HtmlTag="div"
+                        Class="clip-marks">
+                @if (IsNew)
+                {
+                    <MudChip T="string"
+                             Size="Size.Small"
+                             Variant="Variant.Filled"
+                             Color="Color.Dark"
+                             Class="new-chip ma-0">
+                        New
+                    </MudChip>
+                }
+                @if (Clip.IsEdited)
+                {
+                    <MudChip T="string"
+                             Icon="@Icons.Material.Rounded.ContentCut"
+                             Size="Size.Small"
+                             Variant="Variant.Filled"
+                             Color="Color.Dark"
+                             Class="edited-chip ma-0" />
+                }
+            </MudElement>
             <SourceChip Clip="Clip"
                         OnPicture />
         </MudElement>
@@ -117,7 +129,7 @@
                         @if (Clip.Export is { } export)
                         {
                             @* Copy Export *@
-                            <MudMenuItem Icon="@Icons.Material.Rounded.ContentCopy"
+                            <MudMenuItem Icon="@Icons.Material.Rounded.IosShare"
                                          Label="Copy Export"
                                          OnClick="() => DesktopShell.CopyFile(export, Snackbar)" />
                         }

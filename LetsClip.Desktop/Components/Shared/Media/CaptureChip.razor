@@ -18,13 +18,16 @@
 else
 {
     @* Capture Chip *@
-    <MudChip T="string"
-             Icon="@Icon"
-             IconColor="@IconColor"
-             Color="@ChipColor"
-             Size="Size.Small"
-             Variant="Variant.Text"
-             Class="@(Controller.IsRecording && !IsError ? "recording" : null)">
-        @Controller.StatusText
-    </MudChip>
+    <Tooltip Text="@HeldText"
+             Placement="Placement.Bottom">
+        <MudChip T="string"
+                 Icon="@Icon"
+                 IconColor="@IconColor"
+                 Color="@ChipColor"
+                 Size="Size.Small"
+                 Variant="Variant.Text"
+                 Class="@(IsRecordingFine ? "recording" : null)">
+            @Controller.StatusText
+        </MudChip>
+    </Tooltip>
 }

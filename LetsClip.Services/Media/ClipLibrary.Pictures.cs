@@ -147,7 +147,7 @@ public sealed partial class ClipLibrary
         var outline =
             $"atrim={FFmpeg.Seconds(from - seek)}:{FFmpeg.Seconds(to - seek)},showwavespic=s={WaveSize}:scale=sqrt:draw=full:filter=peak";
 
-        // Separate Tracks Draw The Game White, The Microphone Blue
+        // Separate Tracks Draw The Game White, The Microphone Grey
         var graph = separate
             ? $"[0:a:1]{outline}:colors=white[game];[0:a:2]{outline}:colors={VoiceColor}[voice];[game][voice]overlay"
             : $"[0:a:0]{outline}:colors=white";

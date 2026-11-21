@@ -145,6 +145,11 @@
     transition: background-color var(--quick), color var(--quick), opacity var(--quick);
 }
 
+/* Small Buttons Keep Their Padding, Not Their Smaller Text */
+:is(.mud-button-text-size-small, .mud-button-filled-size-small, .mud-button-outlined-size-small) {
+    font-size: var(--mud-typography-button-size);
+}
+
 /* Filled Buttons Take The Theme Shadow Instead Of Material's Own */
 .mud-button-filled,
 .mud-button-filled:hover,
@@ -241,7 +246,7 @@
 ::view-transition-group(*),
 ::view-transition-old(*),
 ::view-transition-new(*) {
-    animation-duration: 150ms;
+    animation-duration: var(--fade-time);
 }
 
 @keyframes fade-in {
@@ -308,10 +313,12 @@
             height: 20px;
         }
 
-/* Fields Sit Inset, Blue Edge On Focus */
+/* Fields Sit Inset At Row Size, Blue Edge On Focus */
 .mud-input.mud-input-outlined {
+    min-height: var(--field-height);
     border-radius: var(--mud-default-borderradius);
     background-color: var(--inset-fill);
+    font-size: var(--mud-typography-body2-size);
 }
 
     .mud-input.mud-input-outlined .mud-input-outlined-border,

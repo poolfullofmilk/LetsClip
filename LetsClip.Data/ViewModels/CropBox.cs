@@ -1,49 +1,63 @@
 using System.Diagnostics;
-using LetsClip.Data.Enums;
 
 namespace LetsClip.Data.ViewModels;
 
-public sealed record CropBox(CropShape Shape, double X, double Y, double Size)
+public sealed record CropBox(double Left, double Top, double Width, double Height)
 {
-    // Half The Largest Box, Its Corner Grips Still Apart
-    public const double SmallestSize = 0.5;
+    // A Tenth Of Each Side, The Grips Still Apart
+    public const double SmallestSide = 0.1;
+
+    public static readonly CropBox Whole = new(0, 0, 1, 1);
 
     static CropBox()
     {
         Debug.Assert(SelfTestPasses());
     }
 
-    // Width Over Height Of The Part Kept
-    public double Aspect => Shape == CropShape.Square ? 1 : 9 / 16.0;
-
-    public static CropBox Centred(CropShape shape)
+    public static CropBox OfShape(
+        double aspect,
+        double x,
+        double y,
+        double size,
+        int width,
+        int height
+    )
     {
-        return new(shape, 0.5, 0.5, 1);
+        // Older Clips Kept A Vertical Or Square Part, Placed
+        var fullHeight = aspect <= width / (double)height;
+        var cropWidth = (fullHeight ? height * aspect : width) * size;
+        var cropHeight = (fullHeight ? height : width / aspect) * size;
+        return new CropBox(
+            (width - cropWidth) * x / width,
+            (height - cropHeight) * y / height,
+            cropWidth / width,
+            cropHeight / height
+        ).Clamped();
     }
 
-    public static bool Changes(CropShape shape, int width, int height)
+    public CropBox Clamped()
     {
-        // A Frame Already That Shape Or Narrower Keeps Everything
-        return shape switch
-        {
-            CropShape.Vertical => width * 16 > height * 9,
-            CropShape.Square => width != height,
-            _ => false,
-        };
+        // Inside The Frame, Never Smaller Than The Grips Allow
+        var width = Math.Clamp(Width, SmallestSide, 1);
+        var height = Math.Clamp(Height, SmallestSide, 1);
+        return new(Math.Clamp(Left, 0, 1 - width), Math.Clamp(Top, 0, 1 - height), width, height);
+    }
+
+    public bool Changes(int width, int height)
+    {
+        // A Box Over Every Pixel Keeps The Whole Frame
+        var (cropWidth, cropHeight, _, _) = PixelsOf(width, height);
+        return cropWidth < EvenDown(width) || cropHeight < EvenDown(height);
     }
 
     public (int Width, int Height, int Left, int Top) PixelsOf(int width, int height)
     {
-        // The Largest Part Of This Shape, Scaled, Placed, All Even
-        var fullHeight = Aspect <= width / (double)height;
-        var cropWidth = EvenDown(fullHeight ? height * Aspect * Size : width * Size);
-        var cropHeight = EvenDown(fullHeight ? height * Size : width / Aspect * Size);
-        return (
-            cropWidth,
-            cropHeight,
-            EvenDown((width - cropWidth) * X, 0),
-            EvenDown((height - cropHeight) * Y, 0)
-        );
+        // Even Sizes Moving Never Changes, Placed From The Far Edge
+        var cropWidth = Math.Min(EvenDown(width * Width), EvenDown(width));
+        var cropHeight = Math.Min(EvenDown(height * Height), EvenDown(height));
+        var right = Math.Clamp(EvenDown(width * (Left + Width)), cropWidth, EvenDown(width));
+        var bottom = Math.Clamp(EvenDown(height * (Top + Height)), cropHeight, EvenDown(height));
+        return (cropWidth, cropHeight, right - cropWidth, bottom - cropHeight);
     }
 
     private static int EvenDown(double value, int smallest = 2)
@@ -53,15 +67,18 @@ public sealed record CropBox(CropShape Shape, double X, double Y, double Size)
 
     private static bool SelfTestPasses()
     {
-        return Centred(CropShape.Vertical).PixelsOf(1920, 1080) == (606, 1080, 656, 0)
-            && new CropBox(CropShape.Square, 0, 0, 1).PixelsOf(1920, 1080) == (1080, 1080, 0, 0)
-            && new CropBox(CropShape.Square, 0.5, 1, 1).PixelsOf(1080, 1920) == (1080, 1080, 0, 840)
-            && new CropBox(CropShape.Vertical, 1, 1, 0.5).PixelsOf(1920, 1080)
+        return Whole.PixelsOf(1920, 1080) == (1920, 1080, 0, 0)
+            && !Whole.Changes(1920, 1080)
+            && !Whole.Changes(1365, 767)
+            && new CropBox(0.25, 0.5, 0.5, 0.5).PixelsOf(1920, 1080) == (960, 540, 480, 540)
+            && new CropBox(0.25, 0, 0.5, 1).Changes(1920, 1080)
+            && new CropBox(0.9, 0.9, 0.5, 0.01).Clamped() == new CropBox(0.5, 0.9, 0.5, 0.1)
+            && OfShape(9 / 16.0, 0.5, 0.5, 1, 1920, 1080).PixelsOf(1920, 1080)
+                == (606, 1080, 656, 0)
+            && OfShape(1, 0.5, 1, 1, 1080, 1920).PixelsOf(1080, 1920) == (1080, 1080, 0, 840)
+            && OfShape(9 / 16.0, 1, 1, 0.5, 1920, 1080).PixelsOf(1920, 1080)
                 == (302, 540, 1618, 540)
-            && Changes(CropShape.Vertical, 1920, 1080)
-            && !Changes(CropShape.Vertical, 1080, 1920)
-            && !Changes(CropShape.Square, 1080, 1080)
-            && Changes(CropShape.Square, 1080, 1920)
-            && !Changes(CropShape.Off, 1920, 1080);
+            && new CropBox(0.3, 0.2, 0.5, 0.5).PixelsOf(1920, 1080).Width
+                == new CropBox(0.31, 0.21, 0.5, 0.5).PixelsOf(1920, 1080).Width;
     }
 }

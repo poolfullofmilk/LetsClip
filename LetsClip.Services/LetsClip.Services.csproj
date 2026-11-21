@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <TargetFramework>net11.0-windows</TargetFramework>
+        <GenerateSupportedOSPlatformAttribute>false</GenerateSupportedOSPlatformAttribute>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -13,5 +14,10 @@
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\LetsClip.Data\LetsClip.Data.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Runtime.Versioning.SupportedOSPlatformAttribute">
+            <_Parameter1>windows10.0.22000</_Parameter1>
+        </AssemblyAttribute>
     </ItemGroup>
 </Project>

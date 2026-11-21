@@ -24,6 +24,9 @@ public partial class VolumeRow : IDisposable
 
     private double Shown => _slid ?? Value;
 
+    // A Greyed Slider Says Why, Its Track Keeps The Level
+    private string ShownText => Disabled ? "Not Used" : $"{Shown * 100:0}%";
+
     private void Slide(double level)
     {
         // Shown At Once, Applied Once The Slider Rests

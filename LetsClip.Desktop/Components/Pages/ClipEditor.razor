@@ -100,22 +100,23 @@ else
                             <MudElement HtmlTag="canvas"
                                         Class="player-frozen"
                                         aria-hidden="true" />
-                            @if (_crop is { } crop && ShowsCrop)
+                            @if (ShowsCrop)
                             {
                                 @* Crop Frame *@
                                 <MudElement HtmlTag="div"
                                             Class="crop-box">
                                     <MudElement HtmlTag="div"
                                                 Class="crop-frame"
-                                                Style="@CropStyle(crop)"
-                                                data-smallest="@Exact(CropBox.SmallestSize)"
+                                                Style="@CropStyle(_crop ?? CropBox.Whole)"
+                                                data-smallest="@Exact(CropBox.SmallestSide)"
+                                                data-whole="@(_crop is null)"
                                                 aria-label="Crop">
                                         @* Crop Grips *@
-                                        @foreach (var corner in s_cropCorners)
+                                        @foreach (var grip in s_cropGrips)
                                         {
                                             <MudElement HtmlTag="div"
                                                         Class="crop-grip"
-                                                        data-corner="@corner" />
+                                                        data-grip="@grip" />
                                         }
                                     </MudElement>
                                 </MudElement>
@@ -184,8 +185,10 @@ else
                         </MudElement>
 
                         @* Timeline *@
-                        <MudElement HtmlTag="div"
-                                    Class="timeline-lift">
+                        <Tooltip Text="Scroll to Zoom, Shift and Scroll to Pan"
+                                 Delay="TimelineTipDelay"
+                                 Class="timeline-tip"
+                                 RootClass="timeline-lift d-block">
                             <MudElement HtmlTag="div"
                                         Class="@(_ready ? "timeline" : "timeline loading")">
                                 @if (_stripUrl is { } strip)
@@ -251,7 +254,7 @@ else
                                                 aria-valuetext="@Formatter.FormatDuration(_range.End)" />
                                 </MudElement>
                             </MudElement>
-                        </MudElement>
+                        </Tooltip>
 
                     </MudStack>
                 </MudPaper>
@@ -269,9 +272,9 @@ else
                                  CanSaveCut="@CanSaveCut()"
                                  Cutting="_cutting"
                                  Busy="_swapping"
-                                 Range="_range"
-                                 Crop="_crop"
-                                 CropChanged="SetCrop"
+                                 Range="_liveRange ?? _range"
+                                 Crop="_liveCrop ?? _crop"
+                                 CropReset="ResetCrop"
                                  StreamsChanged="OnStreamsChanged"
                                  Media="media">
                         <SettingRow Title="Name">

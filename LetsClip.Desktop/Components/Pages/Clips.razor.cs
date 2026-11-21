@@ -363,6 +363,12 @@ public partial class Clips : IDisposable
         return Formatter.FormatGroup(clip.RecordedAt, DateTime.Today);
     }
 
+    private Dictionary<string, int> GroupCounts(IReadOnlyList<ClipInfo> shown)
+    {
+        // Each Header Counts Its Shown Clips, Drawn Or Not
+        return IsGrouped ? shown.CountBy(GroupOf).ToDictionary() : [];
+    }
+
     private string TimeOf(ClipInfo clip)
     {
         // Today Or Yesterday Shows The Time, Elsewhere The Date Too
@@ -610,7 +616,7 @@ public partial class Clips : IDisposable
     private static void Recycle(string path, ISnackbar snackbar)
     {
         // Exit May Have Recycled It, Or The File Moved
-        if (!s_deleting.Remove(path) || !File.Exists(path) || Explorer.Recycle(path))
+        if (!s_deleting.Remove(path) || !File.Exists(path) || ClipLibrary.RecycleClip(path))
         {
             return;
         }
@@ -625,7 +631,7 @@ public partial class Clips : IDisposable
         foreach (var path in s_deleting.ToList())
         {
             s_deleting.Remove(path);
-            _ = Explorer.Recycle(path);
+            _ = ClipLibrary.RecycleClip(path);
         }
     }
 

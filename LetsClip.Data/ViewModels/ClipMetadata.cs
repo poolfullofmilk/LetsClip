@@ -1,5 +1,4 @@
 using System.Text.Json.Serialization;
-using LetsClip.Data.Enums;
 using LetsClip.Data.Helpers;
 
 namespace LetsClip.Data.ViewModels;
@@ -23,33 +22,48 @@ public sealed record ClipMetadata(
     bool Cut = false,
     string? Export = null,
     double? Crop = null,
-    CropShape? CropShape = null,
+    int? CropShape = null,
     double? CropY = null,
-    double? CropSize = null
+    double? CropSize = null,
+    CropBox? CropArea = null
 )
 {
-    // Older Clips Kept Only Where A Full Height Vertical Sat
+    // Older Clips Kept A Shape, CropShape 2 Is Square
     [JsonIgnore]
     public CropBox? Box =>
-        Crop is { } x
-            ? new CropBox(CropShape ?? Enums.CropShape.Vertical, x, CropY ?? 0.5, CropSize ?? 1)
-            : null;
+        CropArea?.Clamped()
+        ?? (
+            Crop is { } x && Width > 0 && Height > 0
+                ? CropBox.OfShape(
+                    CropShape == 2 ? 1 : 9 / 16.0,
+                    x,
+                    CropY ?? 0.5,
+                    CropSize ?? 1,
+                    Width,
+                    Height
+                )
+                : null
+        );
 
     public ClipMetadata WithBox(CropBox? box)
     {
         return this with
         {
-            Crop = box?.X,
-            CropY = box?.Y,
-            CropSize = box?.Size,
-            CropShape = box?.Shape,
+            CropArea = box,
+            Crop = null,
+            CropShape = null,
+            CropY = null,
+            CropSize = null,
         };
     }
 
-    // Named, Cut Or Trimmed Short, Only Unedited Leaves It Out
+    // Named, Cut, Cropped Or Trimmed, Only Unedited Leaves It Out
+    [JsonIgnore]
     public bool IsEdited =>
         Title is not null
         || Cut
+        || CropArea is not null
+        || Crop is not null
         || (
             TrimStart is { } start
             && TrimEnd is { } end

@@ -16,9 +16,5 @@ public partial class ChangedValue
     [Parameter]
     public string? Prefix { get; set; }
 
-    // On The Value Itself, For The Page Script's Live Drag
-    [Parameter(CaptureUnmatchedValues = true)]
-    public Dictionary<string, object>? Attributes { get; set; }
-
     private bool IsChanged => Was != Value;
 }

@@ -2,7 +2,7 @@
 
 ## Features
 - Keeps the last 30 seconds to 10 minutes of your game, app or monitor, ready to save with one key
-- Starts with Windows in the tray and records by itself, and the status says what it records and opens the fix when something is wrong
+- Starts with Windows in the tray and records by itself, and the status says what it records, how much a save holds, and opens the fix when something is wrong
 - Games and Apps Only records just the game's window, so chats and notifications stay out
 - Finds your games from Steam, Epic, Riot, Rockstar, Roblox and the Xbox app, and the ones Windows saw you play from Battle.net, Ubisoft or EA, even ones installed while it runs
 - Add any other app or game from one list, and a game it does not know yet is offered once it fills your screen or when you press the key in it
@@ -22,22 +22,22 @@
 - Turn on Notifications for a small toast over your full screen game when a clip is saved or a game starts recording
 - A clip that comes out black always tells you, with the fix
 - Clips are named after their game and time, and renaming a clip renames its file, so it shares under that name
-- Clips sit under Today, Yesterday, This Week, Last Week and then each month, each tagged with its game, app or monitor
+- Clips sit under Today, Yesterday, This Week, Last Week and then each month, each header with its count and each clip tagged with its game, app or monitor
 - Search, sort and filter clips by game, app or monitor, or to the ones you have not edited yet
-- Clips saved since you last looked are marked New, and resting the pointer on one previews it
+- Clips saved since you last looked are marked New, edited ones show scissors, and resting the pointer on one previews it
 - Copy any clip as a file and paste it straight into Discord, or drag its card into Discord or a folder
 - Copy a clip sized for your Discord plan straight from its card, and copy its last export again any time
-- Deleting a clip can be undone for a moment, then it goes to the Recycle Bin
+- Deleting a clip can be undone for a moment, and Recently Deleted brings it back from the Recycle Bin with its trim and name, like the full clip a cut set aside
 - Stays quick with thousands of clips, the pictures on screen made first
 - Trim to the exact frame by dragging, typing or stepping, over a strip with the game and your voice drawn in their own colours that the mouse wheel zooms
 - Keep just the trimmed part without losing any quality, the full clip kept to bring back or sent to the Recycle Bin
 - Export an exact copy, or fit Discord's Free, Nitro Basic or Nitro limit as HEVC at the size that looks sharpest, even for long selections
-- Crop to vertical for phones or square, dragging the box where you want it and making it smaller to zoom in
+- Crop to any part of the picture by dragging the box's corners or sides, move it anywhere, and reset it in one click
 - Leave out your voice or the game, or balance the two, and exports even out the sound so it is never too quiet in Discord
 - Share only the sound, like a long voice chat, as a file Discord plays right in the chat
-- The length, size, bitrate and time shown before an export are what you get
+- The length, size, bitrate and time shown before an export are what you get, and follow every drag as you make it
 - Exports keep going when you leave the editor and wait their turn, with their progress in the top bar
-- A problem, like keys another app already uses or an almost full drive, shows as a small chip next to where you fix it
+- A problem, like keys another app already uses or an almost full drive, shows as a small chip next to where you fix it, and a setting that does not apply right now says Not Used
 - Changing the clips folder moves every clip with its details, with a progress bar
 - Moving or renaming clips in Explorer, to a USB drive or out of a backup, keeps their names, trims and games
 - Keeps recording through a dock, a monitor switched off or on, or another monitor changing its refresh rate
@@ -58,7 +58,7 @@
 - Nothing leaves your PC, and nothing is kept until you save a clip
 - Locking Windows, sleep or the display turning off clears the unsaved replay
 - HDR is not supported yet, and exclusive fullscreen may not be captured: play borderless
-- Windows 10 needs the Microsoft Edge WebView2 Runtime, Windows 11 already has it
+- Made and tested for Windows 11
 - Windows may warn on the first run because the app is not signed: click More info, then Run anyway
 
 ## Technical details

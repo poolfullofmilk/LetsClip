@@ -93,7 +93,7 @@ public static class SizeBudget
         return 8 * IndexBytesPerPacket * (frameRate + (hasAudio ? AudioPacketsPerSecond : 0));
     }
 
-    public static double SoundBytesPerSecond(PacketMap packets)
+    private static double SoundBytesPerSecond(PacketMap packets)
     {
         // The Sound's Packets And Their Index Entries
         return packets.AudioBytesPerSecond + (IndexBytesPerPacket * packets.AudioPacketsPerSecond);
@@ -143,6 +143,33 @@ public static class SizeBudget
             * Math.Round(rung.Lines * 16 / 9.0)
             * rung.Lines
             * Math.Min(rung.FrameRate, frameRate);
+    }
+
+    public static double KeepingMegabytes(ExportShape clip)
+    {
+        // The Smallest Rung Holding The Frame, And A Good Picture
+        var frameRate = clip.HasVideo ? clip.FrameRate : 0;
+        var (shortSide, longSide) = (
+            Math.Min(clip.Width, clip.Height),
+            Math.Max(clip.Width, clip.Height)
+        );
+        var holding = s_rungs.Last(rung =>
+            rung == s_rungs[0]
+            || (
+                rung.FrameRate >= frameRate
+                && shortSide <= rung.Lines
+                && longSide <= rung.Lines * 16 / 9.0
+            )
+        );
+        var video = clip.HasVideo
+            ? Math.Max(
+                GoodBitsPerPixel * clip.Width * clip.Height * frameRate,
+                LeastVideoOf(holding, frameRate)
+            )
+            : 0;
+        var audio = clip.HasAudio ? AudioBitsPerSecond : 0;
+        var bits = (video + audio + IndexBitsPerSecond(frameRate, clip.HasAudio)) * clip.Seconds;
+        return Math.Ceiling(((bits / 8) + ReservedHeaderBytes) / (1 - SafetyMargin)) / 1_000_000;
     }
 
     public static double LongestSeconds(double megabytes, ExportShape clip)
@@ -241,7 +268,14 @@ public static class SizeBudget
         var silent = Plan(20, clip with { Seconds = 60, HasAudio = false });
         var totalBits = (minute.VideoBitsPerSecond + minute.AudioBitsPerSecond) * 60;
         var tenMinutes = Plan(20, clip with { Seconds = 600 });
+        var small = new ExportShape(30, 600, 400, 60, true);
+        var kept = Plan(KeepingMegabytes(small), small);
+        var square = new ExportShape(30, 1080, 1080, 60, true);
         return copies
+            && kept is { Verdict: BudgetVerdict.Good, Lines: 540, FrameRate: 60 }
+            && Plan(KeepingMegabytes(square), square)
+                is { Verdict: BudgetVerdict.Good, Lines: FullLines }
+            && KeepingMegabytes(new ExportShape(30, 192, 166, 60, true)) < 2
             && longestHolds
             && soundHolds
             && longest > 1200

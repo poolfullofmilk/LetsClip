@@ -5,6 +5,7 @@
 
 @{
     var shown = ShownClips;
+    var counts = GroupCounts(shown);
     var group = default(string?);
 }
 
@@ -153,6 +154,8 @@
             <IconButton Icon="@Icons.Material.Rounded.FolderOpen"
                         Text="Open Clips Folder"
                         OnClick="OpenFolder" />
+            @* Recently Deleted *@
+            <DeletedClips />
         </TitleContent>
         <ChildContent>
             <CaptureNotice />
@@ -199,11 +202,17 @@
                         @if (IsGrouped && GroupOf(clip) is var next && next != group)
                         {
                             group = next;
-                            <MudText @key="next"
-                                     Typo="Typo.h6"
-                                     Class="clip-day">
-                                @next
-                            </MudText>
+                            <MudStack @key="next"
+                                      Row
+                                      AlignItems="AlignItems.Center"
+                                      Spacing="3"
+                                      Class="clip-day">
+                                <MudText Typo="Typo.h6">@next</MudText>
+                                <MudText Typo="Typo.subtitle1"
+                                         Class="mud-text-secondary">
+                                    @counts[next]
+                                </MudText>
+                            </MudStack>
                         }
 
                         @* Clip Card *@

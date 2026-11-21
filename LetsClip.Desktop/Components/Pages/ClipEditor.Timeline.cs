@@ -1,5 +1,4 @@
 using System.Globalization;
-using LetsClip.Data.Enums;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
 using LetsClip.Desktop.Interop;
@@ -27,14 +26,24 @@ public partial class ClipEditor
     public void OnRange(double start, double end)
     {
         // The Page Script Dragged The Handles, Here The Range Settles
+        _liveRange = null;
         SetRange(TrimRange.Fit(start, end, _duration));
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void OnRanging(double start, double end)
+    {
+        // Mid Drag The Export's Numbers Follow, Nothing Is Saved
+        _liveRange = TrimRange.Fit(start, end, _duration);
+        StateHasChanged();
     }
 
     [JSInvokable]
     public void OnPlayerReady()
     {
         // Controls Wait For The First Frame
-        (_ready, _placeCrop) = (true, _crop is not null);
+        (_ready, _placeCrop) = (true, true);
         StateHasChanged();
     }
 
@@ -88,55 +97,45 @@ public partial class ClipEditor
     }
 
     [JSInvokable]
-    public void OnCrop(double x, double y, double size)
+    public void OnCrop(double left, double top, double width, double height)
     {
         // Moved Or Sized In The Page, Remembered With The Clip
-        if (_crop is not { } crop)
+        if (_path is not { } path || _media is not { } media)
         {
             return;
         }
 
-        _crop = crop with
-        {
-            X = Math.Clamp(x, 0, 1),
-            Y = Math.Clamp(y, 0, 1),
-            Size = Math.Clamp(size, CropBox.SmallestSize, 1),
-        };
-        SaveCrop();
+        // Over The Whole Frame, Nothing Is Cropped
+        var box = new CropBox(left, top, width, height).Clamped();
+        var crop = box.Changes(media.Width, media.Height) ? box : null;
+        (_crop, _liveCrop) = (crop, null);
+        _ = Task.Run(() => ClipLibrary.UpdateMetadata(path, metadata => metadata.WithBox(crop)));
         StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void OnCropping(double left, double top, double width, double height)
+    {
+        // Mid Drag Only The Export's Numbers Follow
+        _liveCrop = new CropBox(left, top, width, height).Clamped();
+        StateHasChanged();
+    }
+
+    private void ResetCrop()
+    {
+        // Back To The Whole Picture In One Click
+        OnCrop(0, 0, 1, 1);
     }
 
     private void OnStreamsChanged()
     {
         // A Crop Box Shown Again Is Placed Again
-        _placeCrop = _crop is not null;
-    }
-
-    private void SetCrop(CropShape shape)
-    {
-        // Another Shape Keeps Where The Box Sat And Its Size
-        _crop =
-            shape == CropShape.Off ? null
-            : _crop is { } crop ? crop with { Shape = shape }
-            : CropBox.Centred(shape);
-        _placeCrop = _crop is not null;
-        SaveCrop();
-    }
-
-    private void SaveCrop()
-    {
-        if (_path is { } path)
-        {
-            var crop = _crop;
-            _ = Task.Run(() =>
-                ClipLibrary.UpdateMetadata(path, metadata => metadata.WithBox(crop))
-            );
-        }
+        _placeCrop = true;
     }
 
     private static string CropStyle(CropBox crop)
     {
-        return $"--crop-x:{Exact(crop.X)}; --crop-y:{Exact(crop.Y)}; --crop-size:{Exact(crop.Size)}; --crop-aspect:{Exact(crop.Aspect)}";
+        return $"--crop-left:{Exact(crop.Left)}; --crop-top:{Exact(crop.Top)}; --crop-width:{Exact(crop.Width)}; --crop-height:{Exact(crop.Height)}";
     }
 
     [JSInvokable]

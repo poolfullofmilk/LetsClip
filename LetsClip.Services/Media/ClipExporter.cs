@@ -145,7 +145,9 @@ public static partial class ClipExporter
         var bytesPerBit = (size - earlierSize) / (bitrate - earlierBitrate);
         var aimed =
             bytesPerBit > 0 ? bitrate - ((size - (target * 0.97)) / bytesPerBit) : bitrate / 2;
-        return Math.Clamp(aimed, bitrate / 2, proportional);
+
+        // Never Below Half, Unless Even The Proportional Step Is
+        return Math.Clamp(aimed, Math.Min(bitrate / 2, proportional), proportional);
     }
 
     public static long CropBytes(
@@ -159,7 +161,20 @@ public static partial class ClipExporter
         // Off Keeps The Clip's Bits Per Pixel Over The Crop
         var (width, height, _, _) = crop.PixelsOf(media.Width, media.Height);
         var kept = width * height / (double)(media.Width * media.Height);
-        return (long)(clipBytes / clipSeconds * seconds * kept);
+
+        // A Still Window's Few Bits Keep Full Size And Rate
+        var (outputWidth, outputHeight) = OutputSize(width, height);
+        var shape = new ExportShape(
+            seconds,
+            outputWidth,
+            outputHeight,
+            FrameRateOf(media, encodes: true),
+            media.HasAudio
+        );
+        return Math.Max(
+            (long)(clipBytes / clipSeconds * seconds * kept),
+            (long)Math.Round(SizeBudget.KeepingMegabytes(shape) * 1_000_000)
+        );
     }
 
     public static double FrameRateOf(MediaInfo media, bool encodes)
@@ -228,8 +243,7 @@ public static partial class ClipExporter
         var track = TrackOf(media, game, microphone);
         var keepsVideo = KeepsVideo(media, video, game, microphone);
         var limit = SizeBudget.LimitOf(plan) ?? double.MaxValue;
-        var cropped =
-            keepsVideo && crop is { } box && CropBox.Changes(box.Shape, media.Width, media.Height);
+        var cropped = keepsVideo && crop is { } box && box.Changes(media.Width, media.Height);
         var balanced =
             media.HasSeparateTracks && track == 0 && (gameVolume != 1 || microphoneVolume != 1);
         var copied = CopyBytes(clip.SizeBytes, media, range, track is null ? 0 : 1, keepsVideo);
@@ -293,6 +307,9 @@ public static partial class ClipExporter
             && second >= first / 2
             && NextBitrate([(10_000_000, 30_000_000), (9_000_000, 31_000_000)], 20_000_000)
                 == 4_500_000
+            && NextBitrate([(10_000_000, 45_900_000), (4_200_000, 41_800_000)], 18_400_000)
+                is var noisy
+            && Math.Abs(noisy - (4_200_000.0 * 18_400_000 / 41_800_000 * 0.97)) < 1
             && FrameRateOf(new MediaInfo(5, "h264", null, 0, 0, 239.9, null, null), true) == 60
             && FrameRateOf(new MediaInfo(5, "h264", null, 0, 0, 0, null, null), false) == 60
             && Rounded(0.2) == 1

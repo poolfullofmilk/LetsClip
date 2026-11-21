@@ -76,10 +76,19 @@ public partial class ClipEditor : IAsyncDisposable
     private double _duration;
     private TrimRange _range;
 
-    // An Export's Crop, Placed Once Shown, Sized From Any Corner
+    // The Export's Crop, Null Keeps The Whole Frame
     private CropBox? _crop;
-    private static readonly string[] s_cropCorners = ["nw", "ne", "sw", "se"];
     private bool _placeCrop;
+
+    // Corners Size Freely, Sides Move One Edge
+    private static readonly string[] s_cropGrips = ["nw", "ne", "sw", "se", "n", "e", "s", "w"];
+
+    // Mid Drag, Only The Export's Numbers Follow, The Page Paints
+    private TrimRange? _liveRange;
+    private CropBox? _liveCrop;
+
+    // The Timeline's Hint Waits, Trimming Never Meets It At Once
+    private const double TimelineTipDelay = 1000;
 
     // The Timeline's Shown Window, The Whole Clip Unless Zoomed
     private double _viewStart;
@@ -114,12 +123,10 @@ public partial class ClipEditor : IAsyncDisposable
     // A Cut Or Restore Swapping The File Locks Every Edit
     private bool Editable => _ready && !_swapping;
 
-    // Shown While The Export Keeps A Picture The Crop Changes
+    // Always Over The Picture While The Export Keeps One
     private bool ShowsCrop =>
         _ready
         && _media is { } media
-        && _crop is { } crop
-        && CropBox.Changes(crop.Shape, media.Width, media.Height)
         && ClipExporter.KeepsVideo(
             media,
             Controller.Settings.ExportVideo,
@@ -276,7 +283,7 @@ public partial class ClipEditor : IAsyncDisposable
         Controller.Exports.Editor = (loaded.Path, CutHereAsync);
         (_stripUrl, _duration, _range) = (loaded.StripUrl, loaded.Media.Duration, loaded.Range);
         (_viewStart, _viewEnd) = (0, loaded.Media.Duration);
-        (_crop, _placeCrop) = (loaded.Crop, loaded.Crop is not null);
+        (_crop, _placeCrop, _liveRange, _liveCrop) = (loaded.Crop, true, null, null);
         _waveUrl = null;
         if (loaded.Media.HasAudio)
         {
@@ -370,8 +377,6 @@ public partial class ClipEditor : IAsyncDisposable
             _muted,
             CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator,
             _media?.Packets?.Times ?? [],
-            _media?.Packets?.Sizes ?? [],
-            _media?.Packets?.Keys ?? [],
             _autoPlay
         );
     }

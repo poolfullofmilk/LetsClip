@@ -132,6 +132,24 @@ public sealed partial class ReplayRecorder : IDisposable
         }
     }
 
+    // What A Save Gives Now, Growing Until Full
+    public double HeldSeconds
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _session is { } session
+                    ? Math.Clamp(
+                        session.MediaNow() - CaptureSession.LeadSeconds,
+                        0,
+                        session.Options.Seconds
+                    )
+                    : 0;
+            }
+        }
+    }
+
     // An Ended Session Still Saves, The Button Stays On
     public bool HasKeptReplay
     {

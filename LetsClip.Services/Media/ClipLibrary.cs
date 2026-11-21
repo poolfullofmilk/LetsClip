@@ -38,15 +38,15 @@ public sealed partial class ClipLibrary : IDisposable
     private static readonly string s_stripSuffix = $".strip{StripCells}.jpg";
 
     // The Sound's Outline, Drawn Under The Strip Once Per File
-    private const string WaveSuffix = ".waves.jpg";
+    private const string WaveSuffix = ".sound.jpg";
 
     // A Zoomed Timeline's Window, Only The Newest Kept Per Clip
     private const string ZoomMark = ".zoom-";
-    private const string ZoomWaveMark = ".zoomwaves-";
+    private const string ZoomWaveMark = ".zoomsound-";
     private const string WaveSize = "1600x64";
 
-    // The Accent's Light Blue, The Microphone Apart From The Game
-    private const string VoiceColor = "0xb1d1fe";
+    // A Darker Grey, The Microphone Apart From The Game
+    private const string VoiceColor = "0x999999";
 
     // Decoded Before A Zoomed Window, An Exact Seek Shifts
     private const double WaveLead = 2;

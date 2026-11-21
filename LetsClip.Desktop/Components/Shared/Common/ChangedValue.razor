@@ -1,6 +1,5 @@
 @* Changed Value *@
-<MudText @key="Value"
-         Typo="Typo.body2"
+<MudText Typo="Typo.body2"
          Class="changed-value"
          data-changed="@IsChanged">
     @if (Prefix is not null)
@@ -13,8 +12,7 @@
                 Class="mud-error-text">
         @Was
     </MudElement>
-    <MudElement HtmlTag="span"
-                @attributes="Attributes">
+    <MudElement HtmlTag="span">
         @Value
     </MudElement>
 </MudText>

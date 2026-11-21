@@ -2,6 +2,7 @@
     <PropertyGroup>
         <OutputType>WinExe</OutputType>
         <TargetFramework>net11.0-windows</TargetFramework>
+        <GenerateSupportedOSPlatformAttribute>false</GenerateSupportedOSPlatformAttribute>
         <UseWPF>true</UseWPF>
         <UseWindowsForms>true</UseWindowsForms>
         <Nullable>enable</Nullable>
@@ -15,7 +16,7 @@
         <DebugType>embedded</DebugType>
         <Description>Saves What Just Happened on Screen as a Clip Ready to Share</Description>
         <Copyright>Copyright (c) 2026 poolfullofmilk</Copyright>
-        <Version>2.0.22</Version>
+        <Version>2.0.23</Version>
         <AssemblyTitle>LetsClip</AssemblyTitle>
         <Product>LetsClip</Product>
         <Company>poolfullofmilk</Company>
@@ -92,5 +93,10 @@
     <ItemGroup>
         <ProjectReference Include="..\LetsClip.Data\LetsClip.Data.csproj" />
         <ProjectReference Include="..\LetsClip.Services\LetsClip.Services.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Runtime.Versioning.SupportedOSPlatformAttribute">
+            <_Parameter1>windows10.0.22000</_Parameter1>
+        </AssemblyAttribute>
     </ItemGroup>
 </Project>

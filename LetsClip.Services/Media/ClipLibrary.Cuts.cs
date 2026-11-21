@@ -8,7 +8,7 @@ namespace LetsClip.Services.Media;
 
 public sealed partial class ClipLibrary
 {
-    public static string? OwnedOriginalOf(string path)
+    private static string? OwnedOriginalOf(string path)
     {
         // A Replaced Clip's Old Backup Is Left Where It Is
         var original = OriginalPathOf(path);
@@ -95,7 +95,7 @@ public sealed partial class ClipLibrary
         }
     }
 
-    public static bool Recycle(string file)
+    private static bool Recycle(string file)
     {
         // To The Recycle Bin, So A Mistake Comes Back
         try

@@ -25,29 +25,6 @@
             </ChoiceSelect>
         </MudElement>
     </SettingRow>
-    <SettingRow Title="Crop">
-        @* Crop Select *@
-        <MudElement HtmlTag="div"
-                    Class="content-field">
-            <ChoiceSelect T="CropShape"
-                          Value="CropShown"
-                          ValueChanged="CropChanged"
-                          ToStringFunc="@(shape => shape.ToString())"
-                          Disabled="@(IsExporting || Busy || !KeepsVideo || !AnyCropChanges)"
-                          RelativeWidth="@DropdownWidth.Adaptive"
-                          aria-label="Crop">
-                @foreach (var shape in Enum.GetValues<CropShape>())
-                {
-                    <MudSelectItem T="CropShape"
-                                   Value="shape"
-                                   Disabled="@(!CropChanges(shape))">
-                        <ItemLabel Text="@shape.ToString()"
-                                   Detail="@CropDetailOf(shape)" />
-                    </MudSelectItem>
-                }
-            </ChoiceSelect>
-        </MudElement>
-    </SettingRow>
     <SettingRow Title="Video">
         @* Video Button *@
         <IconButton Icon="@(KeepsVideo ? Icons.Material.Rounded.Videocam : Icons.Material.Rounded.VideocamOff)"
@@ -93,19 +70,23 @@
     }
     <SettingRow Title="Length">
         <ChangedValue Was="@Formatter.FormatDuration(Media.Duration)"
-                      Value="@Formatter.FormatDuration(Range.Length)"
-                      data-length />
+                      Value="@Formatter.FormatDuration(Range.Length)" />
     </SettingRow>
     <SettingRow Title="Size">
         <ChangedValue Was="@ClipSizeText"
                       Value="@ExportSizeText"
-                      Prefix="About"
-                      data-copy-audio="@CopyAudioText"
-                      data-copy-file="@Clip.SizeBytes"
-                      data-copy-video="@KeepsVideo"
-                      data-copy-whole="@CopiesFile(CopiedTracks)" />
+                      Prefix="About" />
     </SettingRow>
     <SettingRow Title="Resolution">
+        @if (IsCropped)
+        {
+            @* Reset Crop Button *@
+            <IconButton Icon="@Icons.Material.Rounded.CropFree"
+                        Text="Reset Crop"
+                        Filled
+                        Disabled="@(IsExporting || Busy)"
+                        OnClick="CropReset" />
+        }
         <ChangedValue Was="@ClipResolutionText"
                       Value="@ExportResolutionText" />
     </SettingRow>
@@ -212,8 +193,12 @@
         <SettingRow Title="File">
             <MudText Typo="Typo.body2"
                      Align="Align.Center"
-                     Class="mud-text-secondary two-lines">
-                @Path.GetFileName(result)
+                     Class="mud-text-secondary two-lines file-name">
+                @foreach (var word in WordsOf(result))
+                {
+                    @(" ")
+                    <MudElement HtmlTag="span">@word</MudElement>
+                }
             </MudText>
         </SettingRow>
         @if (_changes.Count > 0)

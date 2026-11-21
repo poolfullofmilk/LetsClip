@@ -51,7 +51,7 @@ Object.assign(
         };
 
         // Opening A Clip Plays It, A Cut Or Restore Waits
-        const attach = (video, source, playhead, timeline, dotnet, length, start, end, volume, muted, separator, frames, sizes, keys, autoPlay) => {
+        const attach = (video, source, playhead, timeline, dotnet, length, start, end, volume, muted, separator, frames, autoPlay) => {
             detach();
             // Detach Removed The Source Behind Blazor's Back
             if (video.getAttribute("src") !== source) video.setAttribute("src", source);
@@ -60,11 +60,7 @@ Object.assign(
             // One Signal Takes Every Listener Off On Detach
             const listening = new AbortController();
             const { signal } = listening;
-            // Running Totals Of Frame Bytes, A Copy Weighs At Once
-            const totals = [0];
-            for (const size of sizes) totals.push(totals[totals.length - 1] + size);
-            const packets = { times: frames, totals, keys };
-            state = { video, playhead, timeline, dotnet, separator, bounds, packets, listening, duration: length, view: { start: 0, end: length }, viewTimer: 0, reported: 0, sent: -1, paused: true, stopAt: null, frame: 0, drag: null };
+            state = { video, playhead, timeline, dotnet, separator, bounds, listening, duration: length, view: { start: 0, end: length }, viewTimer: 0, reported: 0, sent: -1, paused: true, stopAt: null, frame: 0, drag: null, live: { busy: false, next: null } };
             // Points Saved Before Snapping Move Onto Their Frames
             const range = { start, end };
             setEdge(range, "start", start);
@@ -90,8 +86,9 @@ Object.assign(
             video.addEventListener("loadeddata", loaded, { signal, once: true });
             if (hadData || video.readyState >= 2) loaded();
             if (video.error) failed();
-            video.addEventListener("click", toggle, { signal });
-            video.addEventListener("dblclick", fullScreen, { signal });
+            // The Crop Covers The Picture, So The Player Hears Clicks
+            video.parentElement.addEventListener("click", click, { signal });
+            video.parentElement.addEventListener("dblclick", fullScreen, { signal });
             // The Crop Follows The Picture, Dragged To Move Or Size
             video.parentElement.addEventListener("pointerdown", cropDown, { signal });
             cropSizes.observe(video);
@@ -210,7 +207,7 @@ Object.assign(
             return rest > 0 || !text ? `${text}${String(rest).replace(".", state.separator)}s` : text;
         };
 
-        // Start, End And Length Follow A Drag Live
+        // Start And End Follow A Drag, Blazor Writes The Rest
         const showTimes = ({ start, end }) => {
             for (const [edge, time] of [["Start", start], ["End", end]]) {
                 const field = document.querySelector(`.trim-field[data-edge="${edge}"]`);
@@ -219,58 +216,35 @@ Object.assign(
                 input.value = formatTime(time);
                 field.dataset.seconds = String(Math.round(time * 10) / 10).replace(".", state.separator);
             }
-            // Length, And A Copy's Size, Struck Live Once They Differ
-            showValue(document.querySelector("[data-length]"), formatTime(end - start));
-            const size = document.querySelector("[data-copy-audio]");
-            if (size) showValue(size, formatSize(copyBytes(start, end, size.dataset)));
         };
 
-        // Weighed Like SizeBudget.CopyBytes: From The Keyframe Before The Seek
-        const copyBytes = (start, end, { copyAudio, copyFile, copyWhole, copyVideo }) => {
-            // The Whole Clip With Every Track Is The File Itself
-            const file = Number(copyFile);
-            if (copyWhole !== undefined && end - start >= duration() - step / 2) return file;
-            const soundPerSecond = Number(copyAudio);
-            const video = copyVideo !== undefined;
-            const { times, totals, keys } = state.packets;
-            // No Packet List, A Share Like ClipExporter.CopyBytes
-            if (!times.length) return Math.min(file, Math.floor(video ? (file * (end - start)) / duration() : (end - start) * 16000));
-            const seek = Math.max(0, start - 0.001);
-            const stop = seek + (end - start);
-            let first = 0;
-            for (const key of keys) {
-                if (times[key] > seek) break;
-                first = key;
+        // Blazor Hears A Drag Live, One Call At A Time
+        const tell = (method, ...values) => {
+            const live = state?.live;
+            if (!live) return;
+            if (live.busy) {
+                live.next = [method, values];
+                return;
             }
-            // The First Frame At Or After The Stop
-            let low = first;
-            let high = times.length;
-            while (low < high) {
-                const middle = (low + high) >> 1;
-                if (times[middle] < stop) low = middle + 1;
-                else high = middle;
-            }
-            // The Sound Is Copied From That Keyframe On Too
-            const lead = times.length ? Math.max(0, seek - times[first]) : 0;
-            const sound = Math.round((end - start + lead) * soundPerSecond);
-            // 12 Index Bytes A Packet, Never More Than The Clip
-            const pictures = video ? totals[low] - totals[first] + 12 * (low - first) : 0;
-            return Math.min(file, pictures + sound + 1000);
+            live.busy = true;
+            state.dotnet
+                .invokeMethodAsync(method, ...values)
+                .catch(() => {})
+                .finally(() => {
+                    live.busy = false;
+                    const next = live.next;
+                    live.next = null;
+                    if (next && state?.live === live) tell(next[0], ...next[1]);
+                });
         };
 
-        // Its Own Text Node, Which Blazor Keeps Writing To
-        const showValue = (value, text) => {
-            if (!value?.firstChild) return;
-            value.firstChild.nodeValue = text;
-            const row = value.parentElement;
-            row.toggleAttribute("data-changed", text !== row.querySelector("s")?.textContent.trim());
+        // A Settled Value Drops The Live One Still Waiting
+        const settle = (method, ...values) => {
+            state.live.next = null;
+            state.dotnet.invokeMethodAsync(method, ...values).catch(() => {});
         };
 
-        // Decimal Units Without ,0, Like Formatter.FormatSize
-        const formatSize = (bytes) =>
-            (bytes >= 1e9 ? `${Number((bytes / 1e9).toFixed(2))} GB` : bytes >= 1e6 ? `${Number((bytes / 1e6).toFixed(1))} MB` : `${Math.max(1, Math.round(bytes / 1e3))} KB`).replace(".", state.separator);
-
-        const commit = (range) => state.dotnet.invokeMethodAsync("OnRange", range.start, range.end).catch(() => {});
+        const commit = (range) => settle("OnRange", range.start, range.end);
 
         // Arrows Step 0.1 s, Shift 1 s, Held Keys Build
         const key = (event) => {
@@ -300,6 +274,7 @@ Object.assign(
         const wheel = (event) => {
             if (!state) return;
             event.preventDefault();
+            used();
             const { view } = state;
             const span = view.end - view.start;
             if (event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
@@ -337,9 +312,13 @@ Object.assign(
             setView(time - span / 10, span);
         };
 
+        // Once Used, The Timeline's Zoom Hint Stays Away
+        const used = () => (state.timeline.dataset.used = "");
+
         // A Handle Drags From Where It Was Grabbed, Else Seeks
         const down = (event) => {
             if (!state || event.button !== 0) return;
+            used();
             const handle = event.target instanceof Element ? event.target.closest("[data-handle]") : null;
             state.drag = handle ? handle.dataset.handle : "seek";
             state.range = readRange();
@@ -372,6 +351,7 @@ Object.assign(
             if (!state?.drag) return;
             state.moved = true;
             apply(timeAt(event) - state.grip);
+            if (state.drag !== "seek") tell("OnRanging", state.range.start, state.range.end);
         };
 
         const up = (event) => {
@@ -543,6 +523,13 @@ Object.assign(
             play(start, end);
         };
 
+        // The Click Ending A Crop Drag Plays Nothing
+        const click = () => {
+            if (!state) return;
+            if (state.cropMoved) state.cropMoved = false;
+            else toggle();
+        };
+
         document.addEventListener("fullscreenchange", () => {
             if (state) state.video.controls = document.fullscreenElement === state.video;
         });
@@ -552,29 +539,6 @@ Object.assign(
             if (event.key === "Escape" && document.fullscreenElement) document.exitFullscreen().catch(() => {});
         });
 
-        // While Picking A Hotkey Every Press Goes To The Page
-        let stopKeys = () => {};
-        const watchKeys = (dotnet) => {
-            stopKeys();
-            const done = (keep) => dotnet.invokeMethodAsync("OnKeysDone", keep).catch(() => {});
-            const listener = (event) => {
-                if (["Control", "Shift", "Alt", "Meta"].includes(event.key)) return;
-                event.preventDefault();
-                event.stopPropagation();
-                const plain = !event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey;
-                if (plain && event.key === "Escape") done(false);
-                else if (plain && event.key === "Enter") done(true);
-                else dotnet.invokeMethodAsync("OnKeys", event.code, event.key, event.ctrlKey, event.altKey, event.shiftKey, event.metaKey).catch(() => {});
-            };
-            const listening = new AbortController();
-            const { signal } = listening;
-            window.addEventListener("keydown", listener, { signal, capture: true });
-            document.addEventListener("visibilitychange", () => document.hidden && done(false), { signal });
-            stopKeys = () => {
-                listening.abort();
-                stopKeys = () => {};
-            };
-        };
         // The Crop Box Lies Exactly Over The Picture
         const placeCrop = () => {
             if (!state) return;
@@ -590,59 +554,73 @@ Object.assign(
         };
         const cropSizes = new ResizeObserver(() => placeCrop());
 
-        // Dragged To Move, Corners Size It, Blazor Hears On Release
+        // Dragged To Move, Grips Size It, Blazor Hears It Live
         const cropDown = (event) => {
+            if (state) state.cropMoved = false;
             const frame = event.target instanceof Element ? event.target.closest(".crop-frame") : null;
             if (!state || !frame || event.button !== 0) return;
             const box = frame.parentElement.getBoundingClientRect();
             const start = frame.getBoundingClientRect();
-            const size = parseFloat(frame.style.getPropertyValue("--crop-size")) || 1;
-            const smallest = parseFloat(frame.dataset.smallest) || 1;
-            const [fullWidth, fullHeight] = [start.width / size, start.height / size];
-            const corner = event.target.closest(".crop-grip")?.dataset.corner;
+            const grip = event.target.closest(".crop-grip")?.dataset.grip;
+            // A Share Of Each Side, Room For Every Grip
+            const share = parseFloat(frame.dataset.smallest) || 0.1;
+            const smallestWidth = Math.min(box.width, Math.max(box.width * share, 80));
+            const smallestHeight = Math.min(box.height, Math.max(box.height * share, 80));
             const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
-            const share = (offset, room) => (room > 0.5 ? clamp(offset / room, 0, 1) : 0.5);
-            const placed = (left, top, width, height) => ({
-                x: share(left - box.left, box.width - width),
-                y: share(top - box.top, box.height - height),
-                size: width / fullWidth,
-            });
+            // Shares Of The Picture, Its Own Edges Exact
+            const snap = (value) => (value < 0.001 ? 0 : value > 0.999 ? 1 : value);
+            const placed = (left, top, right, bottom) => {
+                const crop = { left: snap((left - box.left) / box.width), top: snap((top - box.top) / box.height) };
+                crop.width = snap((right - box.left) / box.width) - crop.left;
+                crop.height = snap((bottom - box.top) / box.height) - crop.top;
+                return crop;
+            };
             const at = (clientX, clientY) => {
-                if (!corner) {
-                    const left = clamp(start.left + clientX - event.clientX, box.left, box.right - start.width);
-                    const top = clamp(start.top + clientY - event.clientY, box.top, box.bottom - start.height);
-                    return placed(left, top, start.width, start.height);
+                const [across, down] = [clientX - event.clientX, clientY - event.clientY];
+                if (!grip) {
+                    const left = clamp(start.left + across, box.left, box.right - start.width);
+                    const top = clamp(start.top + down, box.top, box.bottom - start.height);
+                    return placed(left, top, left + start.width, top + start.height);
                 }
 
-                // The Opposite Corner Stays Put, The Box Keeps Its Shape
-                const [east, south] = [corner.includes("e"), corner.includes("s")];
-                const anchorX = east ? start.left : start.right;
-                const anchorY = south ? start.top : start.bottom;
-                const room = Math.min(1, (east ? box.right - anchorX : anchorX - box.left) / fullWidth, (south ? box.bottom - anchorY : anchorY - box.top) / fullHeight);
-                const wanted = Math.max(Math.abs(clientX - anchorX) / fullWidth, Math.abs(clientY - anchorY) / fullHeight);
-                const scale = clamp(wanted, smallest, Math.max(smallest, room));
-                const [width, height] = [fullWidth * scale, fullHeight * scale];
-                return placed(east ? anchorX : anchorX - width, south ? anchorY : anchorY - height, width, height);
+                // Only The Grip's Own Sides Follow, The Others Stay Put
+                const moves = (side) => grip.includes(side);
+                const left = moves("w") ? clamp(start.left + across, box.left, start.right - smallestWidth) : start.left;
+                const right = moves("e") ? clamp(start.right + across, start.left + smallestWidth, box.right) : start.right;
+                const top = moves("n") ? clamp(start.top + down, box.top, start.bottom - smallestHeight) : start.top;
+                const bottom = moves("s") ? clamp(start.bottom + down, start.top + smallestHeight, box.bottom) : start.bottom;
+                return placed(left, top, right, bottom);
             };
             const show = (crop) => {
-                frame.style.setProperty("--crop-x", crop.x);
-                frame.style.setProperty("--crop-y", crop.y);
-                frame.style.setProperty("--crop-size", crop.size);
+                for (const side of ["left", "top", "width", "height"]) frame.style.setProperty(`--crop-${side}`, crop[side]);
+                frame.toggleAttribute("data-whole", crop.width === 1 && crop.height === 1);
             };
             frame.setPointerCapture(event.pointerId);
             event.preventDefault();
             const dragged = new AbortController();
-            frame.addEventListener("pointermove", (move) => show(at(move.clientX, move.clientY)), { signal: dragged.signal });
+            // A Few Pixels Of Wobble Still Count As A Click
+            const moved = (pointer) => state && (state.cropMoved ||= Math.hypot(pointer.clientX - event.clientX, pointer.clientY - event.clientY) > 3);
+            frame.addEventListener(
+                "pointermove",
+                (move) => {
+                    if (!moved(move)) return;
+                    const crop = at(move.clientX, move.clientY);
+                    show(crop);
+                    tell("OnCropping", crop.left, crop.top, crop.width, crop.height);
+                },
+                { signal: dragged.signal }
+            );
             const done = (up) => {
                 dragged.abort();
+                if (!moved(up)) return;
                 const crop = at(up.clientX, up.clientY);
                 show(crop);
-                state?.dotnet.invokeMethodAsync("OnCrop", crop.x, crop.y, crop.size).catch(() => {});
+                settle("OnCrop", crop.left, crop.top, crop.width, crop.height);
             };
             frame.addEventListener("pointerup", done, { signal: dragged.signal, once: true });
             frame.addEventListener("pointercancel", done, { signal: dragged.signal, once: true });
         };
 
-        return { attach, detach, play, pause, place, stepEdge, mark, showStrip, showWave, setVolume, fullScreen, placeCrop, showZoom, watchKeys, stopKeys: () => stopKeys() };
+        return { attach, detach, play, pause, place, stepEdge, mark, showStrip, showWave, setVolume, fullScreen, placeCrop, showZoom };
     })()
 );

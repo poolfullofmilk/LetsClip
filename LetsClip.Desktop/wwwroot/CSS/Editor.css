@@ -1,7 +1,7 @@
 /* Rows Under The Player Keep Fixed Heights For The Sizing */
 .editor {
-    /* One 40 Px Line Of Fields And Buttons */
-    --controls-height: 40px;
+    /* One Line Of Fields And Buttons */
+    --controls-height: var(--field-height);
     --timeline-height: 72px;
     /* Cut Start And End Fit 1m59,9s, Icon And Arrows */
     --trim-field-width: 150px;
@@ -14,9 +14,10 @@
     container-type: size;
     /* The Selection Lines And The Crop Frame Share One Width */
     --bar-width: round(5px, var(--device-pixel));
-    /* Grips Of The Trim Handles And The Crop's Corners */
+    /* Grips Of The Trim Handles And The Crop Frame */
     --grip-gap: round(5px, var(--device-pixel));
     --grip-width: round(3px, var(--device-pixel));
+    --grip-height: round(22px, calc(2 * var(--device-pixel)));
     /* The Height Left For The Clip In A Full Panel */
     --clip-room: calc(100cqh - 48px - 32px - var(--controls-height) - var(--timeline-height));
 }
@@ -100,15 +101,13 @@
     pointer-events: none;
 }
 
-/* Its Shape's Largest Box, Scaled, Shade Spread Round It */
+/* Any Part Of The Picture, Shade Spread Round It */
 .crop-frame {
-    --crop-width: calc(100% * var(--crop-size) * min(1, var(--crop-aspect) / var(--clip-aspect)));
-    --crop-height: calc(100% * var(--crop-size) * min(1, var(--clip-aspect) / var(--crop-aspect)));
     position: absolute;
-    top: calc((100% - var(--crop-height)) * var(--crop-y));
-    left: calc((100% - var(--crop-width)) * var(--crop-x));
-    width: var(--crop-width);
-    height: var(--crop-height);
+    top: calc(100% * var(--crop-top));
+    left: calc(100% * var(--crop-left));
+    width: calc(100% * var(--crop-width));
+    height: calc(100% * var(--crop-height));
     overflow: hidden;
     border-radius: var(--radius-inner);
     box-shadow: var(--picture-shadow), 0 0 0 200vmax var(--shade);
@@ -116,6 +115,11 @@
     pointer-events: auto;
     touch-action: none;
 }
+
+    /* Over The Whole Picture Nothing Moves, A Click Plays */
+    .crop-frame[data-whole] {
+        cursor: pointer;
+    }
 
     /* The Kept Part, Rounded Less, Its Spread Paints The Frame */
     .crop-frame::before {
@@ -141,7 +145,7 @@
     filter: drop-shadow(var(--icon-shadow));
 }
 
-    .crop-grip[data-corner="nw"] {
+    .crop-grip[data-grip="nw"] {
         --grip-x: left;
         --grip-y: top;
         top: 0;
@@ -150,7 +154,7 @@
         cursor: nwse-resize;
     }
 
-    .crop-grip[data-corner="ne"] {
+    .crop-grip[data-grip="ne"] {
         --grip-x: right;
         --grip-y: top;
         top: 0;
@@ -159,7 +163,7 @@
         cursor: nesw-resize;
     }
 
-    .crop-grip[data-corner="sw"] {
+    .crop-grip[data-grip="sw"] {
         --grip-x: left;
         --grip-y: bottom;
         bottom: 0;
@@ -168,13 +172,55 @@
         cursor: nesw-resize;
     }
 
-    .crop-grip[data-corner="se"] {
+    .crop-grip[data-grip="se"] {
         --grip-x: right;
         --grip-y: bottom;
         right: 0;
         bottom: 0;
         padding: 0 var(--inset) var(--inset) 0;
         cursor: nwse-resize;
+    }
+
+    /* A Bar Mid Each Side Moves That Side Alone */
+    .crop-grip:is([data-grip="n"], [data-grip="e"], [data-grip="s"], [data-grip="w"]) {
+        --reach: calc(var(--arm) - var(--grip-width));
+        background: linear-gradient(var(--grip), var(--grip)) no-repeat content-box;
+    }
+
+    .crop-grip:is([data-grip="n"], [data-grip="s"]) {
+        left: 50%;
+        width: var(--grip-height);
+        height: var(--grip-width);
+        translate: -50% 0;
+        cursor: ns-resize;
+    }
+
+    .crop-grip:is([data-grip="e"], [data-grip="w"]) {
+        top: 50%;
+        width: var(--grip-width);
+        height: var(--grip-height);
+        translate: 0 -50%;
+        cursor: ew-resize;
+    }
+
+    .crop-grip[data-grip="n"] {
+        top: 0;
+        padding: var(--inset) var(--grip-gap) var(--reach);
+    }
+
+    .crop-grip[data-grip="s"] {
+        bottom: 0;
+        padding: var(--reach) var(--grip-gap) var(--inset);
+    }
+
+    .crop-grip[data-grip="w"] {
+        left: 0;
+        padding: var(--grip-gap) var(--reach) var(--grip-gap) var(--inset);
+    }
+
+    .crop-grip[data-grip="e"] {
+        right: 0;
+        padding: var(--grip-gap) var(--inset) var(--grip-gap) var(--reach);
     }
 
 /* A Held Frame Covers A File Change, Then Fades */
@@ -206,10 +252,19 @@
     box-shadow: var(--mud-elevation-4);
 }
 
+/* Its Zoom Hint Goes Once The Timeline Is Used */
+body:has(.timeline-track[data-used]) .mud-tooltip.timeline-tip {
+    display: none;
+}
+
+/* An Export's Name Breaks Between Words, Never Inside A Time */
+.file-name > span {
+    white-space: nowrap;
+}
+
 /* Thumbnails In A Track, Handles Outside The Kept Part */
 .timeline {
     /* Whole Screen Pixels, Every Part Snaps Alike At Any Scale */
-    --grip-height: round(22px, calc(2 * var(--device-pixel)));
     --handle-width: calc(2 * var(--grip-gap) + var(--grip-width));
     height: var(--timeline-height);
     position: relative;
@@ -403,10 +458,8 @@
         margin-right: 22px;
     }
 
-    /* Typed Times At Label Size, As Tall As Every Field */
+    /* Typed Times Keep Their Digits In Place */
     .trim-field .mud-input {
-        min-height: var(--controls-height);
-        font-size: var(--mud-typography-body2-size);
         font-variant-numeric: tabular-nums;
     }
 

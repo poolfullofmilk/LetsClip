@@ -37,11 +37,11 @@ public partial class CaptureSettings : IDisposable
         return monitor?.FriendlyName ?? "";
     }
 
-    private static string? MonitorDetail(MonitorInfo? monitor)
+    private string? MonitorDetail(MonitorInfo? monitor)
     {
-        // The Closed Field Shows Its Item's Detail On One Line
-        return monitor is null
-            ? null
+        // Its Item's Detail, Or Why Nothing Uses It
+        return Controller.Settings.GamesOnly ? "Not Used"
+            : monitor is null ? null
             : $"{Formatter.FormatResolution(monitor.Width, monitor.Height)} · {monitor.RefreshRate} Hz";
     }
 
