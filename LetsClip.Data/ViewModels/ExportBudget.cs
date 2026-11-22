@@ -12,6 +12,6 @@ public sealed record ExportBudget(
     double AudioBitsPerSecond = SizeBudget.AudioBitsPerSecond
 )
 {
-    // Where Encodes Land, Measured 86 To 95% Of The Limit
-    public long TypicalBytes => (long)(TargetBytes * 0.92);
+    // Pictures Land At 86 To 95%, Opus On Its Bitrate
+    public long TypicalBytes => VideoBitsPerSecond > 0 ? (long)(TargetBytes * 0.92) : TargetBytes;
 }

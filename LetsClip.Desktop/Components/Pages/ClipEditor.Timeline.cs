@@ -120,12 +120,6 @@ public partial class ClipEditor
         _panel?.ShowLive(null, new CropBox(left, top, width, height).Clamped());
     }
 
-    private void ResetCrop()
-    {
-        // Back To The Whole Picture In One Click
-        OnCrop(0, 0, 1, 1);
-    }
-
     private void OnStreamsChanged()
     {
         // A Crop Box Shown Again Is Placed Again

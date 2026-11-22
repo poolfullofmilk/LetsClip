@@ -51,10 +51,6 @@ public partial class ExportPanel : IDisposable
     [Parameter]
     public CropBox? KeptCrop { get; set; }
 
-    // Back To The Whole Picture
-    [Parameter]
-    public EventCallback CropReset { get; set; }
-
     // Video, Game Audio Or Microphone Kept Or Left Out
     [Parameter]
     public EventCallback StreamsChanged { get; set; }
@@ -83,9 +79,13 @@ public partial class ExportPanel : IDisposable
 
     private bool CanSaveCut => CanCut && Range.CutsShort(Media.Duration);
 
-    // The Shown Export's Changes And Which File They Came From
-    private string? _changesOf;
-    private IReadOnlyList<(string Icon, string Text, bool LeftOut)> _changes = [];
+    // The Shown Export's Facts And Lost Sound, Read Once
+    private string? _shownExport;
+    private string _exportFacts = NoFacts;
+    private (string Icon, string Text)? _leftOut;
+
+    // Holds The Facts Line's Height Until They Are Read
+    private const string NoFacts = " ";
 
     private ExportRunner Exports => Controller.Exports;
 
@@ -155,7 +155,17 @@ public partial class ExportPanel : IDisposable
         : WithAudio ? 1
         : 0;
 
-    private double ClipBitsPerSecond => Clip.SizeBytes * 8 / Media.Duration;
+    // What Plays, Never A Cut's Hidden Pre-Roll, Unlisted The File's
+    private double ClipBitsPerSecond =>
+        Media.Packets is { } packets
+            ? 8
+                * (
+                    (
+                        SizeBudget.PictureBytes(packets, TrimRange.Whole(Media.Duration))
+                        / Media.Duration
+                    ) + (Media.AudioTrackCount * packets.AudioBytesPerSecond)
+                )
+            : Clip.SizeBytes * 8 / Media.Duration;
 
     // A Copy's Packets, Weighed Once Per Range, Sound And Picture
     private readonly Dictionary<(int Tracks, bool Video), long> _copies = [];
@@ -247,13 +257,13 @@ public partial class ExportPanel : IDisposable
         get
         {
             // Every Row Reads It, Only New Inputs Work It Out
-            var key = (Plan, Shape, CropBytes: IsCropped ? CropBytes : 0L);
+            var key = (Plan, Shape, CropBytes);
             if (key != _budgetFor)
             {
                 _budgetFor = key;
                 field =
                     SizeBudget.LimitOf(key.Plan) is { } limit ? SizeBudget.Plan(limit, key.Shape)
-                    : key.CropBytes > 0 ? SizeBudget.Keep(key.CropBytes / 1e6, key.Shape)
+                    : IsCropped ? SizeBudget.Keep(key.CropBytes / 1e6, key.Shape)
                     : null;
             }
 
@@ -261,11 +271,15 @@ public partial class ExportPanel : IDisposable
         }
     }
 
+    // What A Crop Weighs Under Off, None Without One
     private long CropBytes =>
-        ClipExporter.CropBytes(Clip.SizeBytes, Media.Duration, Media, Range.Length, Crop!);
+        IsCropped ? ClipExporter.CropBytes(Clip.SizeBytes, Media, Range, Crop!, WithAudio) : 0;
 
-    // A Copy's Weight, Or Where An Encode Lands
-    private long ExportBytes => Budget?.TypicalBytes ?? CopyBytesOf(CopiedTracks);
+    // Ponytail: Never Above Its Source, Thin Foreign Sound Reads Low
+    private long ExportBytes =>
+        Budget is not { } budget
+            ? CopyBytesOf(CopiedTracks)
+            : Math.Min(budget.TypicalBytes, IsCropped ? CropBytes : CopyBytesOf(CopiedTracks));
 
     // Too Long Exports Nothing, So The Rows Show The Clip
     private string ClipSizeText => Formatter.FormatSize(Clip.SizeBytes);
@@ -295,7 +309,7 @@ public partial class ExportPanel : IDisposable
         IsTooLong ? "-"
         : OnlyCopies && !IsCut ? NoneText
         : Budget is not null
-            ? $"About {Formatter.FormatDuration(ClipExporter.EncodeSeconds(OutputSize.Width, OutputSize.Height, ExportFrameRate, Range.Length, KeepsVideo))}"
+            ? $"About {Formatter.FormatDuration(ClipExporter.EncodeSeconds((OutputSize.Width, OutputSize.Height, ExportFrameRate), ClipFrameRate, Range.Length, KeepsVideo, WithAudio))}"
         : $"About {Formatter.FormatDuration(ClipExporter.CopySeconds(ExportBytes))}";
 
     private const string NoneText = "None";
@@ -308,10 +322,18 @@ public partial class ExportPanel : IDisposable
         return Path.GetFileName(file).Split(' ');
     }
 
-    // A Copy Keeps The Clip's Rate, An Encode Its Most
+    private static bool IsSoundOnly(string file)
+    {
+        // Sound Alone Is Named .ogg Or .m4a, Pictures .mp4
+        return !file.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Copies Keep The Clip's Rate, Opus Its Sound's, Encodes Theirs
     private string BitrateText =>
         IsTooLong ? ClipBitrateText
-        : Budget is null ? Formatter.FormatBitrate(CopyBitsPerSecond)
+        : Budget is not { } budget ? Formatter.FormatBitrate(CopyBitsPerSecond)
+        : !KeepsVideo
+            ? Formatter.FormatBitrate(Math.Min(budget.AudioBitsPerSecond, SoundBitsPerSecond))
         : Formatter.FormatBitrate(ExportBytes * 8 / Range.Length);
 
     // The Whole Clip's Rate, Less Each Stream Left Out
@@ -326,7 +348,10 @@ public partial class ExportPanel : IDisposable
             ? packets.AudioBytesPerSecond * 8
             : SizeBudget.AudioBitsPerSecond;
 
-    private bool IsTooLong => Budget?.Verdict == BudgetVerdict.TooSmall;
+    // Off Keeps The Clip's Bits, Never Too Long Or Soft
+    private BudgetVerdict? Verdict => Plan == DiscordPlan.Off ? null : Budget?.Verdict;
+
+    private bool IsTooLong => Verdict == BudgetVerdict.TooSmall;
 
     // Names What The Plan Fits And How To Fit More
     private string TooLongText =>
@@ -335,7 +360,7 @@ public partial class ExportPanel : IDisposable
     // A Waiting Turn Or A Soft Picture, Under The Rows
     private string? HintText =>
         OtherExporting && !OnlyCopies ? "Another clip is exporting, this one waits its turn"
-        : Budget?.Verdict == BudgetVerdict.Soft
+        : Verdict == BudgetVerdict.Soft
             ? "Fast motion will look soft at this size, a shorter selection keeps it sharper"
         : null;
 
@@ -462,7 +487,7 @@ public partial class ExportPanel : IDisposable
         // Read Before A Rename Replaces This Panel
         var (cut, keepOriginal) = (IsCut, !Controller.Settings.DeleteOriginals);
         var (range, plan, frameRate, track, video) = (Range, Plan, FrameRate, Track, KeepsVideo);
-        var crop = IsCropped ? Crop : null;
+        var (crop, cropBytes) = (IsCropped ? Crop : null, CropBytes);
         var (game, microphone) = IsBalanced ? (GameVolume, MicrophoneVolume) : (1.0, 1.0);
         var folder = Controller.Settings.ExportsDirectory;
         if (await SettledPath() is not { } path)
@@ -481,7 +506,8 @@ public partial class ExportPanel : IDisposable
             Crop: crop,
             Video: video,
             GameVolume: game,
-            MicrophoneVolume: microphone
+            MicrophoneVolume: microphone,
+            CropBytes: cropBytes
         );
         _ = Exports.RunAsync(request, cut, keepOriginal);
     }
@@ -494,77 +520,48 @@ public partial class ExportPanel : IDisposable
             await JavaScript.CallAsync("letsClip.reveal", "exported");
         }
 
-        // The Shown Export's Changes, Read From Its Own File Once
-        if (ExportedFile != _changesOf)
+        // The Shown Export's Facts, Read From Its Own File Once
+        if (ExportedFile != _shownExport)
         {
-            _changesOf = ExportedFile;
-            MediaInfo? export = null;
-            try
-            {
-                export = _changesOf is { } file
-                    ? await Task.Run(() => MediaProbe.ProbeAsync(file, CancellationToken.None))
-                    : null;
-            }
-            catch (Exception exception) when (exception is TimeoutException or Win32Exception)
-            {
-                // An Unreadable Export Just Shows No Changes
-            }
-
-            _changes = export is null ? [] : [.. ChangesOf(export)];
+            _shownExport = ExportedFile;
+            (_exportFacts, _leftOut) = _shownExport is { } file
+                ? await FactsOfAsync(file)
+                : (NoFacts, null);
             StateHasChanged();
         }
     }
 
-    private IEnumerable<(string Icon, string Text, bool LeftOut)> ChangesOf(MediaInfo export)
+    private async Task<(string Facts, (string Icon, string Text)? LeftOut)> FactsOfAsync(
+        string file
+    )
     {
-        // What The Export Left Out Or Made Smaller
-        if (!export.HasVideo)
+        try
         {
-            yield return (Icons.Material.Rounded.VideocamOff, "Sound Only", true);
+            var size = Formatter.FormatSize(new FileInfo(file).Length);
+            var export = await Task.Run(() => MediaProbe.ProbeAsync(file, CancellationToken.None));
+            var facts =
+                IsSoundOnly(file) ? $"{size} · Sound Only"
+                : export is null ? size
+                : $"{size} · {Formatter.FormatResolution(export.Width, export.Height)} · {Formatter.FormatFrameRate(export.FrameRate)}";
+            return (facts, export is null ? null : LeftOutOf(export));
         }
-        else
+        catch (Exception exception)
+            when (exception is TimeoutException or Win32Exception or IOException)
         {
-            // A Crop Changed The Frame's Shape, So Its Size Too
-            var cropped =
-                Math.Abs(
-                    (export.Width / (double)export.Height) - (Media.Width / (double)Media.Height)
-                ) > 0.02;
-            if (cropped)
-            {
-                yield return (Icons.Material.Rounded.Crop, "Cropped", false);
-            }
+            // An Unreadable Export Shows Only Its Name
+            return (NoFacts, null);
+        }
+    }
 
-            if (cropped || export.Width < Media.Width)
-            {
-                yield return (
-                    Icons.Material.Rounded.PhotoSizeSelectSmall,
-                    Formatter.FormatResolution(export.Width, export.Height),
-                    false
-                );
-            }
-
-            if (Math.Round(export.FrameRate) < ClipFrameRate)
-            {
-                yield return (
-                    Icons.Material.Rounded.SlowMotionVideo,
-                    Formatter.FormatFrameRate(export.FrameRate),
-                    false
-                );
-            }
-        }
-
-        if (Media.HasAudio && !export.HasAudio)
-        {
-            yield return (Icons.Material.Rounded.VolumeOff, "No Sound", true);
-        }
-        else if (Media.HasSeparateTracks && export.AudioName == AudioTracks.Game)
-        {
-            yield return (Icons.Material.Rounded.MicOff, "No Microphone", true);
-        }
-        else if (Media.HasSeparateTracks && export.AudioName == AudioTracks.Microphone)
-        {
-            yield return (Icons.Material.Rounded.VolumeOff, "No Game Audio", true);
-        }
+    private (string Icon, string Text)? LeftOutOf(MediaInfo export)
+    {
+        // What The Export Left Out Of The Clip's Sound
+        return Media.HasAudio && !export.HasAudio ? (Icons.Material.Rounded.VolumeOff, "No Sound")
+            : Media.HasSeparateTracks && export.AudioName == AudioTracks.Game
+                ? (Icons.Material.Rounded.MicOff, "No Microphone")
+            : Media.HasSeparateTracks && export.AudioName == AudioTracks.Microphone
+                ? (Icons.Material.Rounded.VolumeOff, "No Game Audio")
+            : null;
     }
 
     private void Cancel()

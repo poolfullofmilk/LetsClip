@@ -78,15 +78,6 @@
                       Prefix="About" />
     </SettingRow>
     <SettingRow Title="Resolution">
-        @if (IsCropped)
-        {
-            @* Reset Crop Button *@
-            <IconButton Icon="@Icons.Material.Rounded.CropFree"
-                        Text="Reset Crop"
-                        Filled
-                        Disabled="@(IsExporting || Busy)"
-                        OnClick="CropReset" />
-        }
         <ChangedValue Was="@ClipResolutionText"
                       Value="@ExportResolutionText" />
     </SettingRow>
@@ -182,36 +173,55 @@
     <Panel Title="Exported"
            Id="exported"
            Class="compact fade-in mt-6">
-        <SettingRow Title="File">
-            <MudText Typo="Typo.body2"
-                     Align="Align.Center"
-                     Class="mud-text-secondary two-lines file-name">
-                @foreach (var word in WordsOf(result))
-                {
-                    @(" ")
-                    <MudElement HtmlTag="span">@word</MudElement>
-                }
-            </MudText>
-        </SettingRow>
-        @if (_changes.Count > 0)
+        @* Exported File *@
+        <MudStack Row
+                  AlignItems="AlignItems.Center"
+                  Spacing="3"
+                  Class="py-2">
+            @if (IsSoundOnly(result) || Clip.ThumbnailPath is null)
+            {
+                <MudElement HtmlTag="div"
+                            Class="export-picture d-flex align-center justify-center">
+                    <MudIcon Icon="@(IsSoundOnly(result) ? Icons.Material.Rounded.VolumeUp : Icons.Material.Rounded.Movie)"
+                             Class="mud-text-secondary" />
+                </MudElement>
+            }
+            else
+            {
+                <MudImage Src="@DesktopShell.ThumbnailUrl(Clip.ThumbnailPath)"
+                          Alt="@Path.GetFileName(result)"
+                          Class="export-picture"
+                          draggable="false" />
+            }
+            <MudElement HtmlTag="div"
+                        Class="export-text">
+                <MudText Typo="Typo.subtitle2"
+                         Class="two-lines file-name">
+                    @foreach (var word in WordsOf(result))
+                    {
+                        @(" ")
+                        <MudElement HtmlTag="span">@word</MudElement>
+                    }
+                </MudText>
+                <MudText Typo="Typo.caption"
+                         Class="mud-text-secondary">
+                    @_exportFacts
+                </MudText>
+            </MudElement>
+        </MudStack>
+        @if (_leftOut is { } leftOut)
         {
-            @* Export Changes *@
+            @* Left Out Chip *@
             <MudStack Row
-                      Wrap="Wrap.Wrap"
-                      Justify="Justify.Center"
-                      Spacing="2"
-                      Class="appear pt-2">
-                @foreach (var (icon, text, leftOut) in _changes)
-                {
-                    <MudChip T="string"
-                             Icon="@icon"
-                             IconColor="@(leftOut ? Color.Error : Color.Default)"
-                             Size="Size.Small"
-                             Variant="Variant.Text"
-                             Class="ma-0">
-                        @text
-                    </MudChip>
-                }
+                      Class="appear pt-1">
+                <MudChip T="string"
+                         Icon="@leftOut.Icon"
+                         IconColor="Color.Error"
+                         Size="Size.Small"
+                         Variant="Variant.Text"
+                         Class="ma-0">
+                    @leftOut.Text
+                </MudChip>
             </MudStack>
         }
         <MudStack Row

@@ -120,8 +120,9 @@ public static class MediaProbe
                     {
                         frames.Add((packet.Time, packet.Size, packet.Key));
                     }
-                    else if (packet.Stream == probed.AudioIndex)
+                    else if (packet.Stream == probed.AudioIndex && packet.Time >= 0)
                     {
+                        // Sound Before Zero Is Hidden Pre-Roll, Not The Clip
                         audioBytes += packet.Size;
                         audioPackets++;
                     }

@@ -211,6 +211,12 @@ public static partial class ClipExporter
                 "-ar",
                 "48000",
             ]);
+
+            // Its Track's Name, So Exported Knows What Was Left Out
+            if (track > 0)
+            {
+                output.AddRange(["-metadata:s:a:0", $"handler_name={AudioTracks.Separate[track]}"]);
+            }
         }
 
         // Sound Alone Goes In Ogg, Discord's Own Voice Message Format

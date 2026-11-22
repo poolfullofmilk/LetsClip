@@ -111,12 +111,10 @@ public static partial class ClipExporter
             withAudio,
             video
         );
+        // Off Aims Where The Editor Showed, Weighed From Its Packets
         var budget = limit is { } megabytes
             ? SizeBudget.Plan(megabytes, clip)
-            : SizeBudget.Keep(
-                CropBytes(sourceBytes, source.Duration, source, duration, request.Crop!) / 1e6,
-                clip
-            );
+            : SizeBudget.Keep(request.CropBytes / 1e6, clip);
         var (width, height) = OutputSize(frameWidth, frameHeight, budget.Lines);
         var frameRate = Math.Min(request.FrameRate, budget.FrameRate);
         var shown = video
@@ -125,7 +123,8 @@ public static partial class ClipExporter
         s_logger.Info(
             $"Exporting {Path.GetFileName(request.SourcePath)} From {Formatter.FormatDuration(request.Range.Start)} To {Formatter.FormatDuration(request.Range.End)} {shown}, Aiming Under {Formatter.FormatSize(budget.TargetBytes)}, {budget.Verdict}"
         );
-        if (budget.Verdict == BudgetVerdict.TooSmall)
+        // Off Never Refuses, It Keeps The Clip's Own Bits
+        if (budget.Verdict == BudgetVerdict.TooSmall && limit is not null)
         {
             throw new ExportException(TooSmallMessage);
         }
@@ -174,6 +173,7 @@ public static partial class ClipExporter
             gain,
             balanced
         );
+        var encoding = Stopwatch.StartNew();
         try
         {
             var attempts = 0;
@@ -231,15 +231,15 @@ public static partial class ClipExporter
 
                     if (size <= budget.TargetBytes)
                     {
-                        // The Next Estimate Takes This Export's Pace
+                        // The Next Estimate Takes This Encode's Pace
                         if (video)
                         {
                             s_pixelsPerSecond =
-                                width
-                                * (double)height
-                                * frameRate
-                                * duration
-                                / Math.Max(0.5, started.Elapsed.TotalSeconds - StartSeconds);
+                                PixelsOf(
+                                    (width, height, frameRate),
+                                    FrameRateOf(source, planned: false),
+                                    duration
+                                ) / Math.Max(0.5, encoding.Elapsed.TotalSeconds);
                         }
 
                         var finalPath = Keep(request, temporary, video ? ".mp4" : ".ogg");

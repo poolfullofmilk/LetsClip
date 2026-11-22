@@ -257,6 +257,25 @@ body:has(.timeline-track[data-used]) .mud-tooltip.timeline-tip {
     display: none;
 }
 
+/* An Export's Picture Or Sound Tile Beside Its Name */
+.export-picture {
+    width: 72px;
+    aspect-ratio: 16 / 9;
+    flex-shrink: 0;
+    object-fit: cover;
+    border-radius: var(--radius-thumb);
+    background: var(--inset-fill);
+}
+
+    img.export-picture {
+        box-shadow: var(--mud-elevation-1);
+    }
+
+.export-text {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
 /* An Export's Name Breaks Between Words, Never Inside A Time */
 .file-name > span {
     white-space: nowrap;

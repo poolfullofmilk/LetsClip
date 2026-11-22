@@ -17,7 +17,8 @@ public sealed record ExportRequest(
     CropBox? Crop = null,
     bool Video = true,
     double GameVolume = 1,
-    double MicrophoneVolume = 1
+    double MicrophoneVolume = 1,
+    long CropBytes = 0
 )
 {
     // Game And Microphone Mixed Anew, Each At Its Own Level
@@ -61,13 +62,20 @@ public static partial class ClipExporter
     private const double MostLimiting = 6;
     private const string PeakLimit = "alimiter=limit=0.708:level=0:latency=1";
 
-    // Starting, Probing And Checking Take About This Long
-    private const double StartSeconds = 1.5;
+    // Probing, Testing The Encoder And Checking, Measured Beside The Encode
+    private const double StartSeconds = 1;
 
     // Measured Over 1080p60 HEVC On AMF And Two x264 Passes
-    private const double HardwarePixelsPerSecond = 400_000_000;
-    private const double SoftwarePixelsPerSecond = 130_000_000;
+    private const double HardwarePixelsPerSecond = 500_000_000;
+    private const double SoftwarePixelsPerSecond = 160_000_000;
     private const double CopyBytesPerSecond = 400_000_000;
+
+    // Decoding A Source Frame Weighs Like Half A Megapixel, Measured
+    private const double FramePixels = 500_000;
+
+    // Times Faster Than Real Time, Measured Over 30 Minutes
+    private const double LoudnessSpeed = 700;
+    private const double OpusSpeed = 200;
 
     // The Last Export's Pace, Unknown Until One Ran
     private static double? s_pixelsPerSecond;
@@ -78,11 +86,11 @@ public static partial class ClipExporter
     }
 
     public static double EncodeSeconds(
-        int width,
-        int height,
-        double frameRate,
+        (int Width, int Height, double FrameRate) output,
+        double sourceFrameRate,
         double seconds,
-        bool video
+        bool video,
+        bool sound
     )
     {
         // Ponytail: Measured Per Run, The First Takes The Usual Pace
@@ -91,11 +99,25 @@ public static partial class ClipExporter
             .Any(encoder => encoder.IsHardware)
             ? HardwarePixelsPerSecond
             : SoftwarePixelsPerSecond;
+        var pictures = video ? PixelsOf(output, sourceFrameRate, seconds) / pace : 0;
 
-        // Sound Alone Encodes Hundreds Of Times Faster Than Real Time
-        return Rounded(
-            StartSeconds + (video ? width * (double)height * frameRate * seconds / pace : 0)
-        );
+        // Sound Is Measured First, Opus Then Encodes It Alone
+        var sounds = sound ? (seconds / LoudnessSpeed) + (video ? 0 : seconds / OpusSpeed) : 0;
+        return Rounded(StartSeconds + pictures + sounds);
+    }
+
+    private static double PixelsOf(
+        (int Width, int Height, double FrameRate) output,
+        double sourceFrameRate,
+        double seconds
+    )
+    {
+        // Tiny Frames Still Cost Their Source Frame's Decoding
+        return seconds
+            * (
+                (output.Width * (double)output.Height * output.FrameRate)
+                + (FramePixels * sourceFrameRate)
+            );
     }
 
     public static double CopySeconds(long bytes)
@@ -149,28 +171,23 @@ public static partial class ClipExporter
 
     public static long CropBytes(
         long clipBytes,
-        double clipSeconds,
         MediaInfo media,
-        double seconds,
-        CropBox crop
+        TrimRange range,
+        CropBox crop,
+        bool withAudio
     )
     {
-        // Off Keeps The Clip's Bits Per Pixel Over The Crop
+        // Off Keeps The Selection's Bits Per Pixel Over The Crop
         var (width, height, _, _) = crop.PixelsOf(media.Width, media.Height);
         var kept = width * height / (double)(media.Width * media.Height);
+        var soundBytesPerSecond = media.AudioTrackCount * SizeBudget.AudioBitsPerSecond / 8;
+        var pictureBytes = media.Packets is { } packets
+            ? SizeBudget.PictureBytes(packets, range)
+            : Math.Max(0, (clipBytes / media.Duration) - soundBytesPerSecond) * range.Length;
 
-        // A Still Window's Few Bits Keep Full Size And Rate
-        var shape = new ExportShape(
-            seconds,
-            width,
-            height,
-            FrameRateOf(media, planned: false),
-            media.HasAudio
-        );
-        return Math.Max(
-            (long)(clipBytes / clipSeconds * seconds * kept),
-            (long)Math.Round(SizeBudget.KeepingMegabytes(shape) * 1_000_000)
-        );
+        // One Sound Track Encoded Beside It, Or None
+        var soundBytes = withAudio ? SizeBudget.AudioBitsPerSecond / 8 * range.Length : 0;
+        return (long)((pictureBytes * kept) + soundBytes);
     }
 
     public static double FrameRateOf(MediaInfo media, bool planned)
@@ -244,10 +261,22 @@ public static partial class ClipExporter
             media.HasSeparateTracks && track == 0 && (gameVolume != 1 || microphoneVolume != 1);
         var copied = CopyBytes(clip.SizeBytes, media, range, track is null ? 0 : 1, keepsVideo);
 
-        // A Crop Fitting The Plan Keeps Its Frame Like Off
-        var weighed = cropped
-            ? CropBytes(clip.SizeBytes, media.Duration, media, range.Length, crop!)
-            : copied;
+        var (frameWidth, frameHeight, _, _) = cropped
+            ? crop!.PixelsOf(media.Width, media.Height)
+            : (media.Width, media.Height, 0, 0);
+        var cropBytes = cropped
+            ? CropBytes(clip.SizeBytes, media, range, crop!, track is not null)
+            : 0;
+
+        // A Crop Fitting The Plan Exports Like Off, Floor Included
+        var offShape = new ExportShape(
+            range.Length,
+            frameWidth,
+            frameHeight,
+            FrameRateOf(media, planned: false),
+            track is not null
+        );
+        var weighed = cropped ? SizeBudget.Keep(cropBytes / 1e6, offShape).TargetBytes : copied;
 
         // Sound Alone Becomes Opus, Which Discord Plays Inline
         var planned = !keepsVideo || weighed > limit * 1e6;
@@ -260,9 +289,6 @@ public static partial class ClipExporter
         }
 
         var frameRate = FrameRateOf(media, planned);
-        var (frameWidth, frameHeight, _, _) = cropped
-            ? crop!.PixelsOf(media.Width, media.Height)
-            : (media.Width, media.Height, 0, 0);
         var (width, height) = planned
             ? OutputSize(frameWidth, frameHeight)
             : (frameWidth, frameHeight);
@@ -294,7 +320,8 @@ public static partial class ClipExporter
                 Crop: cropped ? crop : null,
                 Video: keepsVideo,
                 GameVolume: gameVolume,
-                MicrophoneVolume: microphoneVolume
+                MicrophoneVolume: microphoneVolume,
+                CropBytes: cropBytes
             ),
             null
         );
