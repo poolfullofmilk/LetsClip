@@ -53,6 +53,9 @@ public partial class ClipEditor : IAsyncDisposable
     private static int StripCells => ClipLibrary.StripCells;
     private string? _path;
     private ClipInfo? _clip;
+
+    // A Cut's Whole Clip In The Recycle Bin
+    private DeletedClip? _recycledOriginal;
     private MediaInfo? _media;
     private string? _stripUrl;
     private string? _loadedName;
@@ -83,9 +86,8 @@ public partial class ClipEditor : IAsyncDisposable
     // Corners Size Freely, Sides Move One Edge
     private static readonly string[] s_cropGrips = ["nw", "ne", "sw", "se", "n", "e", "s", "w"];
 
-    // Mid Drag, Only The Export's Numbers Follow, The Page Paints
-    private TrimRange? _liveRange;
-    private CropBox? _liveCrop;
+    // Mid Drag Only Its Numbers Follow
+    private ExportPanel? _panel;
 
     // The Timeline's Hint Waits, Trimming Never Meets It At Once
     private const double TimelineTipDelay = 1000;
@@ -234,6 +236,12 @@ public partial class ClipEditor : IAsyncDisposable
 
         // Window Clips Keep Their Capture Rate, Probes Read Low
         var metadata = ClipLibrary.MetadataOf(path);
+
+        // A Cut Whose Whole Clip Waits In The Recycle Bin
+        var recycled =
+            clip is { HasOriginal: false } && metadata is { Cut: true }
+                ? await Task.Run(() => ClipLibrary.RecycledOriginalOf(path), token)
+                : null;
         var loaded = new LoadedClip(
             clip,
             media with
@@ -246,6 +254,7 @@ public partial class ClipEditor : IAsyncDisposable
                 ? TrimRange.Fit(start, end, media.Duration)
                 : TrimRange.Whole(media.Duration),
             metadata?.Box,
+            recycled,
             opening,
             token
         );
@@ -280,10 +289,11 @@ public partial class ClipEditor : IAsyncDisposable
     {
         // One Step, So Nothing On Screen Changes Piecemeal
         (_clip, _media, _path) = (loaded.Clip, loaded.Media, loaded.Path);
+        _recycledOriginal = loaded.RecycledOriginal;
         Controller.Exports.Editor = (loaded.Path, CutHereAsync);
         (_stripUrl, _duration, _range) = (loaded.StripUrl, loaded.Media.Duration, loaded.Range);
         (_viewStart, _viewEnd) = (0, loaded.Media.Duration);
-        (_crop, _placeCrop, _liveRange, _liveCrop) = (loaded.Crop, true, null, null);
+        (_crop, _placeCrop) = (loaded.Crop, true);
         _waveUrl = null;
         if (loaded.Media.HasAudio)
         {
@@ -512,15 +522,6 @@ public partial class ClipEditor : IAsyncDisposable
         }
     }
 
-    private async Task CopyFileAsync()
-    {
-        // The Whole File, Selection Or Not, Under Its Typed Name
-        if (await SettledPathAsync() is { } path)
-        {
-            DesktopShell.CopyFile(path, Snackbar);
-        }
-    }
-
     private void ShowSourceClips()
     {
         if (_clip is { } clip)
@@ -573,6 +574,7 @@ public partial class ClipEditor : IAsyncDisposable
         string? StripUrl,
         TrimRange Range,
         CropBox? Crop,
+        DeletedClip? RecycledOriginal,
         bool Opening,
         CancellationToken Token
     );

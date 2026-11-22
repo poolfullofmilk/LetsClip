@@ -626,7 +626,7 @@ public sealed class Tray
         var save = new TrayMenuItem(_controller.SaveText, _controller.CanSave);
         var recording = _controller.RecordingSince is not null;
         var record = new TrayMenuItem(
-            recording ? "Stop Recording" : "Record Until Stopped",
+            recording ? "Stop and Save the Recording" : "Record Until Stopped",
             recording || _controller.IsRecording
         );
         var exit = new TrayMenuItem("Exit");

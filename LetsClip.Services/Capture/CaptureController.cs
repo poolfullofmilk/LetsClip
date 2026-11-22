@@ -164,9 +164,9 @@ public sealed class CaptureController : IDisposable
             _ => "Not Recording",
         };
 
-    // Written Like Every Other Length, Save Last 2m
+    // The Replay Length, Or What An Ended Session Kept
     public string SaveText =>
-        $"Save Last {Formatter.FormatDuration(Recorder.Options?.Seconds ?? Settings.ReplaySeconds)}";
+        $"Save Last {Formatter.FormatDuration(IsRecording ? Recorder.Options?.Seconds ?? Settings.ReplaySeconds : Math.Ceiling(Recorder.KeptSeconds))}";
 
     public long ReplayBytes(int seconds)
     {
@@ -477,7 +477,7 @@ public sealed class CaptureController : IDisposable
     }
 
     // Recording, Or An Ended Session's Replay Still Kept
-    public bool CanSave => IsRecording || Recorder.HasKeptReplay;
+    public bool CanSave => IsRecording || Recorder.KeptSeconds > 0;
 
     // Set While A Recording Runs Until Stopped
     public DateTimeOffset? RecordingSince => Recorder.RecordingSince;

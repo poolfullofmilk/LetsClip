@@ -4,6 +4,7 @@ using LetsClip.Desktop.Components.Shared.Dialogs;
 using LetsClip.Desktop.Interop;
 using LetsClip.Services.Capture;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
 using MudBlazor;
 
 namespace LetsClip.Desktop.Components.Shared.Media;
@@ -66,6 +67,15 @@ public partial class CaptureChip : IDisposable
         && !Controller.IsRecording
         && !Controller.Recorder.Status.IsSaving
             ? ("Edit Games and Apps", () => GamesDialog.ShowAsync(DialogService))
+        : null;
+
+    // Only A Fix Makes The Chip Clickable And Underlined
+    private EventCallback<MouseEventArgs> OpenFix =>
+        Fix is { } fix ? EventCallback.Factory.Create<MouseEventArgs>(this, fix.Open) : default;
+
+    private string? ChipClass =>
+        Fix is not null ? "action-chip"
+        : IsRecordingFine ? "recording"
         : null;
 
     private static Task Open(string target)

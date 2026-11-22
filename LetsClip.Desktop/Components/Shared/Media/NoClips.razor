@@ -30,16 +30,10 @@
                              OnClick="OpenSettings" />
             }
         </MudStack>
+        @* Edit Games Button *@
         @if (Controller.Settings.GamesOnly)
         {
-            @* Edit Games Button *@
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Info"
-                       Size="Size.Small"
-                       StartIcon="@Icons.Material.Rounded.SportsEsports"
-                       OnClick="() => GamesDialog.ShowAsync(DialogService)">
-                Edit Games and Apps
-            </MudButton>
+            <EditGamesButton />
         }
     </EmptyState>
 </MudPaper>

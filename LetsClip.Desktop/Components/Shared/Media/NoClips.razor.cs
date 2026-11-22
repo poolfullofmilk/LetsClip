@@ -1,7 +1,6 @@
 using LetsClip.Desktop.Interop;
 using LetsClip.Services.Capture;
 using Microsoft.AspNetCore.Components;
-using MudBlazor;
 
 namespace LetsClip.Desktop.Components.Shared.Media;
 
@@ -12,9 +11,6 @@ public partial class NoClips : IDisposable
 
     [Inject]
     public required DesktopShell Shell { get; set; }
-
-    [Inject]
-    public required IDialogService DialogService { get; set; }
 
     [Inject]
     public required NavigationManager Navigation { get; set; }

@@ -7,61 +7,57 @@
                 Busy="_listing"
                 OnClick="OpenAsync" />
     @* Deleted Popover *@
-    <MudPopover Open="_open"
-                AnchorOrigin="Origin.BottomRight"
-                TransformOrigin="Origin.TopRight"
-                Class="form-popover">
-        @if (_deleted is [])
-        {
-            <MudText Typo="Typo.body2"
-                     Align="Align.Center"
-                     Class="mud-text-secondary pa-6">
-                No Deleted Clips
-            </MudText>
-        }
-        else if (_deleted is { } deleted)
-        {
-            <MudElement HtmlTag="div"
-                        Class="deleted-list">
-                @foreach (var clip in deleted)
-                {
-                    <MudStack @key="clip.InfoPath"
-                              Row
-                              AlignItems="AlignItems.Center"
-                              Spacing="2"
-                              Class="deleted-row">
-                        <MudStack Spacing="0"
-                                  Class="deleted-title">
-                            <MudText Typo="Typo.body2"
-                                     Class="ellipsis">
-                                @clip.Title
-                            </MudText>
-                            <MudText Typo="Typo.caption"
-                                     Class="mud-text-secondary ellipsis">
-                                @DetailOf(clip)
-                            </MudText>
+    <FormPopover Open="_open"
+                 Closed="Close">
+        <ChildContent>
+            @if (_deleted is [])
+            {
+                <MudText Typo="Typo.body2"
+                         Align="Align.Center"
+                         Class="mud-text-secondary pa-6">
+                    No Deleted Clips
+                </MudText>
+            }
+            else if (_deleted is { } deleted)
+            {
+                <MudElement HtmlTag="div"
+                            Class="deleted-list">
+                    @foreach (var clip in deleted)
+                    {
+                        <MudStack @key="clip.InfoPath"
+                                  Row
+                                  AlignItems="AlignItems.Center"
+                                  Spacing="2"
+                                  Class="deleted-row">
+                            <MudStack Spacing="0"
+                                      Class="deleted-title">
+                                <MudText Typo="Typo.body2"
+                                         Class="ellipsis">
+                                    @clip.Title
+                                </MudText>
+                                <MudText Typo="Typo.caption"
+                                         Class="mud-text-secondary ellipsis">
+                                    @DetailOf(clip)
+                                </MudText>
+                            </MudStack>
+                            @* Restore Button *@
+                            <IconButton Icon="@Icons.Material.Rounded.Restore"
+                                        Text="Restore"
+                                        Disabled="@(_restoring is not null)"
+                                        Busy="@(_restoring == clip)"
+                                        OnClick="() => RestoreAsync([clip])" />
                         </MudStack>
-                        @* Restore Button *@
-                        <IconButton Icon="@Icons.Material.Rounded.Restore"
-                                    Text="Restore"
-                                    Disabled="@(_restoring is not null)"
-                                    Busy="@(_restoring == clip)"
-                                    OnClick="() => RestoreAsync([clip])" />
-                    </MudStack>
-                }
-            </MudElement>
-        }
-        <MudStack Row
-                  AlignItems="AlignItems.Center"
-                  Spacing="4"
-                  Class="popover-footer px-3 py-2">
+                    }
+                </MudElement>
+            }
+        </ChildContent>
+        <Footer>
             @* Recycle Bin Button *@
             <MudButton Variant="Variant.Text"
                        Size="Size.Small"
                        OnClick="OpenRecycleBin">
                 Open Recycle Bin
             </MudButton>
-            <MudSpacer />
             @* Restore All Button *@
             <MudButton Variant="Variant.Filled"
                        Color="Color.Info"
@@ -70,10 +66,6 @@
                        OnClick="() => RestoreAsync(_deleted ?? [])">
                 Restore All
             </MudButton>
-        </MudStack>
-    </MudPopover>
+        </Footer>
+    </FormPopover>
 </MudElement>
-@* Deleted Overlay *@
-<MudOverlay Visible="_open"
-            OnClick="Close"
-            AutoClose />

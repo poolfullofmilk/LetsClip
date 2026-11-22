@@ -106,6 +106,21 @@ public sealed partial class ClipLibrary
         return [.. clips.OrderByDescending(clip => clip.DeletedAt)];
     }
 
+    public static DeletedClip? RecycledOriginalOf(string path)
+    {
+        // The Whole Clip Its Last Cut Sent To The Bin
+        var original = OriginalPathOf(path);
+        var cutAt = File.GetLastWriteTimeUtc(path);
+        return File.Exists(original)
+            ? null
+            : DeletedFrom(Path.GetDirectoryName(path)!)
+                .FirstOrDefault(clip =>
+                    clip.IsWholeClip
+                    && FilePaths.AreSame(clip.OriginalPath, original)
+                    && (clip.DeletedAt.UtcDateTime - cutAt).Duration() <= s_companionGap
+                );
+    }
+
     public static string Restore(DeletedClip clip)
     {
         // Back Where It Was, A Taken Name Gets A Number

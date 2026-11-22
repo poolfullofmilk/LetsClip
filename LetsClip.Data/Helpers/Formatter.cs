@@ -76,7 +76,7 @@ public static partial class Formatter
     )]
     private static partial Regex DurationText();
 
-    public static string FormatDay(DateTimeOffset time, DateTime? today = null)
+    private static string FormatDay(DateTimeOffset time, DateTime? today = null)
     {
         // Today, Yesterday, Else The Day And Month, Other Years Named
         var day = time.ToLocalTime().Date;

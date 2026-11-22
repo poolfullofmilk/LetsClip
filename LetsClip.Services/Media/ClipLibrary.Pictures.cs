@@ -200,12 +200,25 @@ public sealed partial class ClipLibrary
 
     private static string PicturePathOf(string path, string suffix)
     {
+        return PicturePathOf(new FileInfo(path), suffix);
+    }
+
+    private static string PicturePathOf(FileInfo file, string suffix)
+    {
         // Named By The File's Generation, Replaced Files Get New Ones
-        var file = new FileInfo(path);
         var generation = file.Exists ? $"-{file.Length:x}-{file.LastWriteTimeUtc.Ticks:x}" : "";
         return Path.Combine(
             AppInfo.ThumbnailsDirectory,
-            $"{FilePaths.KeyOf(path)}{generation}{suffix}"
+            $"{FilePaths.KeyOf(file.FullName)}{generation}{suffix}"
         );
+    }
+
+    private static HashSet<string> NamesIn(string folder)
+    {
+        return
+        [
+            with(StringComparer.OrdinalIgnoreCase),
+            .. FilesIn(folder, "*").Select(Path.GetFileName).OfType<string>(),
+        ];
     }
 }

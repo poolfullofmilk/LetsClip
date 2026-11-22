@@ -1,0 +1,21 @@
+@* Form Popover *@
+<MudPopover Open="Open"
+            AnchorOrigin="Origin.BottomRight"
+            TransformOrigin="Origin.TopRight"
+            Class="form-popover">
+    @ChildContent
+    @if (Footer is not null)
+    {
+        <MudStack Row
+                  AlignItems="AlignItems.Center"
+                  Justify="Justify.SpaceBetween"
+                  Spacing="4"
+                  Class="popover-footer px-3 py-2">
+            @Footer
+        </MudStack>
+    }
+</MudPopover>
+@* Closing Overlay *@
+<MudOverlay Visible="Open"
+            OnClick="Closed"
+            AutoClose />

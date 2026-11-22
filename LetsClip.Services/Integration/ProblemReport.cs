@@ -12,7 +12,7 @@ public static class ProblemReport
     {
         // Version And Windows Build Filled In, The Log Pasted Later
         var body =
-            $"LetsClip {AppInfo.VersionText} on Windows {Environment.OSVersion.Version}\n\nWhat happened:\n\n\nThe log is on your clipboard, paste it here:\n";
+            $"LetsClip {AppInfo.VersionText} on {AppInfo.WindowsText}\n\nWhat happened:\n\n\nThe log is on your clipboard, paste it here:\n";
         return $"{AppInfo.RepositoryUrl}/issues/new?body={Uri.EscapeDataString(body)}";
     }
 

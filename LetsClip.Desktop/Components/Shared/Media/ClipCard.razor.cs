@@ -85,10 +85,9 @@ public partial class ClipCard
         }
     }
 
-    // Screen Readers Hear The New And Edited Chips Too
+    // Screen Readers Hear The New Chip Too
     private string Description =>
         (IsNew ? "New, " : "")
-        + (Clip.IsEdited ? "Edited, " : "")
         + string.Join(", ", Facts.Select(fact => $"{fact.Label} {fact.Value}"));
 
     private bool Changes(DiscordPlan plan)

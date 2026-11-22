@@ -26,13 +26,7 @@
                                 Switch="Controller.Settings.GamesOnly"
                                 SwitchChanged="SetGamesOnly">
                         @* Edit Games Button *@
-                        <MudButton Variant="Variant.Filled"
-                                   Color="Color.Info"
-                                   Size="Size.Small"
-                                   StartIcon="@Icons.Material.Rounded.SportsEsports"
-                                   OnClick="() => GamesDialog.ShowAsync(DialogService)">
-                            Edit Games and Apps
-                        </MudButton>
+                        <EditGamesButton />
                     </SettingRow>
                     <MudDivider />
                     <CaptureSettings />
@@ -108,15 +102,13 @@
                         <DeviceSelect Devices="_playback"
                                       SavedId="@Controller.Settings.SystemAudioDeviceId"
                                       ValueChanged="SetPlaybackDevice"
+                                      Label="Records"
                                       Missing="No Output Device Detected"
-                                      Reason="@PlaybackDeviceReason"
-                                      Disabled="@PlaybackDeviceDisabled" />
+                                      FirstChoice="Game and Voice Chat"
+                                      FirstChoicePicked="RecordsVoiceChat"
+                                      FirstChoiceDisabled="@(!Controller.Settings.GamesOnly)"
+                                      Disabled="@(!Controller.Settings.SystemAudio)" />
                     </SettingRow>
-                    <MudDivider />
-                    <SettingRow Title="Only Record Game and Voice Chat"
-                                Switch="Controller.Settings.OnlyGameAndDiscord"
-                                SwitchChanged="SetOnlyGameAndDiscord"
-                                SwitchDisabled="@(!CanRecordOnlyGameAndDiscord)" />
                     <MudDivider />
                     @* Voice Chat Volume *@
                     <VolumeRow Title="Voice Chat Volume"

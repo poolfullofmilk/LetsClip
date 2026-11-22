@@ -8,7 +8,7 @@ namespace LetsClip.Services.Media;
 public sealed partial class ClipLibrary : IDisposable
 {
     // Temporary Outputs Carry This Prefix Until They Are Finished
-    public const string PartialPrefix = ".LetsClip-";
+    private const string PartialPrefix = ".LetsClip-";
 
     // A Cut Clip's Full Original Waits Here, Hidden Beside It
     private const string OriginalsFolder = ".Originals";
@@ -146,19 +146,19 @@ public sealed partial class ClipLibrary : IDisposable
     public async Task<IReadOnlyList<ClipInfo>> ListAsync(CancellationToken token)
     {
         var folder = Folder;
-        string[] paths;
+        FileInfo[] files;
         try
         {
+            // Each Listed File Carries Its Size And Time Already
             IsUnavailable = !Directory.Exists(folder);
-            paths = IsUnavailable
+            files = IsUnavailable
                 ? []
                 :
                 [
-                    .. Directory
-                        .GetFiles(folder, "*.mp4")
-                        .Where(path =>
-                            !Path.GetFileName(path)
-                                .StartsWith(PartialPrefix, StringComparison.Ordinal)
+                    .. new DirectoryInfo(folder)
+                        .EnumerateFiles("*.mp4")
+                        .Where(file =>
+                            !file.Name.StartsWith(PartialPrefix, StringComparison.Ordinal)
                         ),
                 ];
         }
@@ -171,10 +171,19 @@ public sealed partial class ClipLibrary : IDisposable
         }
 
         // Gathered Once, Only When A Clip Lacks Its Details
+        var paths = files.Select(file => file.FullName).ToArray();
         var orphans = new Lazy<ConcurrentDictionary<(long Size, DateTime Written), string>>(() =>
             OrphanDetails(folder, paths)
         );
-        var clips = await Task.WhenAll(paths.Select(path => GetAsync(path, token, orphans)));
+
+        // One Look At Each Folder, Never One Per Clip
+        var present = (
+            Pictures: NamesIn(AppInfo.ThumbnailsDirectory),
+            Originals: NamesIn(Path.Combine(folder, OriginalsFolder))
+        );
+        var clips = await Task.WhenAll(
+            files.Select(file => GetAsync(file, token, orphans, present))
+        );
         var listed = clips.OfType<ClipInfo>().OrderByDescending(clip => clip.RecordedAt).ToList();
         FillThumbnails([
             .. listed.Where(clip =>
@@ -257,17 +266,28 @@ public sealed partial class ClipLibrary : IDisposable
         return null;
     }
 
-    public async Task<ClipInfo?> GetAsync(
-        string path,
+    public Task<ClipInfo?> GetAsync(string path, CancellationToken token)
+    {
+        return GetAsync(new FileInfo(path), token);
+    }
+
+    private async Task<ClipInfo?> GetAsync(
+        FileInfo file,
         CancellationToken token,
-        Lazy<ConcurrentDictionary<(long Size, DateTime Written), string>>? orphans = null
+        Lazy<ConcurrentDictionary<(long Size, DateTime Written), string>>? orphans = null,
+        (HashSet<string> Pictures, HashSet<string> Originals)? present = null
     )
     {
-        var file = new FileInfo(path);
         if (!file.Exists)
         {
             return null;
         }
+
+        // A Listing Read Each Folder Once, Else The Disk
+        static bool Has(string path, HashSet<string>? names) =>
+            names?.Contains(Path.GetFileName(path)) ?? File.Exists(path);
+
+        var path = file.FullName;
 
         var metadata = ReadMetadata(file) is { } known
             ? known.Width > 0
@@ -288,21 +308,21 @@ public sealed partial class ClipLibrary : IDisposable
             UpdateMetadata(path, stored => stored with { Game = game, Monitor = monitor });
         }
 
-        var thumbnail = PicturePathOf(path, ThumbnailSuffix);
-        var firstSecond = PicturePathOf(path, FirstSecondSuffix);
+        var thumbnail = PicturePathOf(file, ThumbnailSuffix);
+        var firstSecond = PicturePathOf(file, FirstSecondSuffix);
         var export = ExportPathOf(path, metadata.Export);
         return new ClipInfo(
-            file.FullName,
+            path,
             name,
             metadata.RecordedAt,
             metadata.Duration,
             file.Length,
-            File.Exists(thumbnail) ? thumbnail
-                : File.Exists(firstSecond) ? firstSecond
+            Has(thumbnail, present?.Pictures) ? thumbnail
+                : Has(firstSecond, present?.Pictures) ? firstSecond
                 : null,
             metadata.Title,
             metadata.Game,
-            !metadata.ForeignOriginal && File.Exists(OriginalPathOf(path)),
+            !metadata.ForeignOriginal && Has(OriginalPathOf(path), present?.Originals),
             metadata.Width,
             metadata.Height,
             metadata.FrameRate ?? 0,
@@ -313,7 +333,7 @@ public sealed partial class ClipLibrary : IDisposable
         );
     }
 
-    public static string? ExportPathOf(string clip, string? export)
+    private static string? ExportPathOf(string clip, string? export)
     {
         // The Last Export Is Remembered By Its Name In Exports
         return export is null

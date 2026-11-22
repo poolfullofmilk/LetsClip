@@ -53,7 +53,7 @@ public sealed record UserSettings(
 )
 {
     // Raised When New Defaults Reach Existing Users Once
-    public const int CurrentDefaults = 4;
+    private const int CurrentDefaults = 4;
 
     // First Clip At Half Volume, The Microphone Test Too
     public const double OpeningVolume = 0.5;

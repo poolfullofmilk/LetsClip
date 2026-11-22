@@ -1,33 +1,14 @@
-@if (Fix is { } fix)
-{
-    @* Capture Fix Chip *@
-    <Tooltip Text="@fix.Text"
-             Placement="Placement.Bottom">
-        <MudChip T="string"
-                 Icon="@Icon"
-                 IconColor="@IconColor"
-                 Color="@ChipColor"
-                 Size="Size.Small"
-                 Variant="Variant.Text"
-                 Class="action-chip"
-                 OnClick="fix.Open">
-            @Controller.StatusText
-        </MudChip>
-    </Tooltip>
-}
-else
-{
-    @* Capture Chip *@
-    <Tooltip Text="@HeldText"
-             Placement="Placement.Bottom">
-        <MudChip T="string"
-                 Icon="@Icon"
-                 IconColor="@IconColor"
-                 Color="@ChipColor"
-                 Size="Size.Small"
-                 Variant="Variant.Text"
-                 Class="@(IsRecordingFine ? "recording" : null)">
-            @Controller.StatusText
-        </MudChip>
-    </Tooltip>
-}
+@* Capture Chip *@
+<Tooltip Text="@(Fix?.Text ?? HeldText)"
+         Placement="Placement.Bottom">
+    <MudChip T="string"
+             Icon="@Icon"
+             IconColor="@IconColor"
+             Color="@ChipColor"
+             Size="Size.Small"
+             Variant="Variant.Text"
+             Class="@ChipClass"
+             OnClick="OpenFix">
+        @Controller.StatusText
+    </MudChip>
+</Tooltip>

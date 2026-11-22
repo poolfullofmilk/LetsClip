@@ -20,10 +20,10 @@ public sealed record VideoEncoder(
 
 public static class VideoEncoders
 {
-    public static readonly VideoEncoder Amf = new("AMD AMF", "h264_amf", true);
-    public static readonly VideoEncoder Nvenc = new("NVIDIA NVENC", "h264_nvenc", true);
-    public static readonly VideoEncoder QuickSync = new("Intel Quick Sync", "h264_qsv", true);
-    public static readonly VideoEncoder QuickSyncGpu = QuickSync with { GpuFrames = true };
+    private static readonly VideoEncoder s_amf = new("AMD AMF", "h264_amf", true);
+    private static readonly VideoEncoder s_nvenc = new("NVIDIA NVENC", "h264_nvenc", true);
+    private static readonly VideoEncoder s_quickSync = new("Intel Quick Sync", "h264_qsv", true);
+    private static readonly VideoEncoder s_quickSyncGpu = s_quickSync with { GpuFrames = true };
     public static readonly VideoEncoder Software = new("x264 on the CPU", "libx264", false);
 
     // Every Clip And Export Is Tagged BT.709 Limited Range
@@ -51,9 +51,9 @@ public static class VideoEncoders
             // Quick Sync Converts On The GPU First, CPU Second
             VideoEncoder[] encoders = vendor switch
             {
-                0x1002 => [Amf],
-                0x10DE => [Nvenc],
-                0x8086 => [QuickSyncGpu, QuickSync],
+                0x1002 => [s_amf],
+                0x10DE => [s_nvenc],
+                0x8086 => [s_quickSyncGpu, s_quickSync],
                 _ => [],
             };
             candidates.AddRange(encoders.Where(encoder => !candidates.Contains(encoder)));

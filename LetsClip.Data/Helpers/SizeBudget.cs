@@ -122,7 +122,6 @@ public static class SizeBudget
         // The Sound Is Copied From That Keyframe On Too
         var lead = times.Length > 0 ? Math.Max(0, seek - times[first]) : 0;
 
-        // The Page Script Weighs The Same, Rounding The Same Way
         var sound = tracks * (range.Length + lead) * SoundBytesPerSecond(packets);
         var pictures = video ? bytes + (IndexBytesPerPacket * count) : 0;
         return pictures + (long)Math.Round(sound, MidpointRounding.AwayFromZero) + HeaderBytes;

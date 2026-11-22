@@ -6,6 +6,9 @@ namespace LetsClip.Desktop.Components.Shared.Media;
 
 public partial class DeviceSelect
 {
+    // A Choice Before Every Device, Never A Device Id
+    public const string FirstChoiceId = "first-choice";
+
     // Null While Windows Is Asked, Empty When It Has None
     [Parameter]
     public required IReadOnlyList<AudioDeviceInfo>? Devices { get; set; }
@@ -19,9 +22,22 @@ public partial class DeviceSelect
     [Parameter]
     public bool Disabled { get; set; }
 
+    [Parameter]
+    public string Label { get; set; } = "Device";
+
     // Shown In The Field When Windows Has No Such Device
     [Parameter]
     public required string Missing { get; set; }
+
+    // A Choice Above Automatic, Picked Over The Saved Device
+    [Parameter]
+    public string? FirstChoice { get; set; }
+
+    [Parameter]
+    public bool FirstChoicePicked { get; set; }
+
+    [Parameter]
+    public bool FirstChoiceDisabled { get; set; }
 
     // The Microphone's Level Runs Along The Field
     [Parameter]
@@ -31,22 +47,20 @@ public partial class DeviceSelect
 
     // A Gone Device Records Through Automatic Until It Returns
     private string Shown =>
-        Listed.Any(device => device.Id == SavedId) ? SavedId : AudioDevices.AutomaticId;
+        FirstChoicePicked ? FirstChoiceId
+        : Listed.Any(device => device.Id == SavedId) ? SavedId
+        : AudioDevices.AutomaticId;
 
-    // Why A Greyed Field Is Not Used
-    [Parameter]
-    public string? Reason { get; set; }
-
-    // The Closed Field Reads Like Its Item, Or Says Why
+    // The Closed Field Reads Like Its Item
     private string? Detail =>
-        Devices is []
+        Devices is [] || FirstChoicePicked
             ? null
-            : Reason ?? Listed.FirstOrDefault(device => device.Id == SavedId)?.Adapter;
+            : Listed.FirstOrDefault(device => device.Id == SavedId)?.Adapter;
 
     private string LabelOf(string? id)
     {
-        return Devices is []
-            ? Missing
+        return Devices is [] ? Missing
+            : id == FirstChoiceId ? FirstChoice ?? ""
             : Listed.FirstOrDefault(device => device.Id == id)?.Name ?? "Automatic";
     }
 

@@ -267,12 +267,7 @@ public sealed class DesktopShell
         Copy(data, "Copied, paste it anywhere with Ctrl+V", snackbar);
     }
 
-    public static void CopyText(string text, string copied, ISnackbar snackbar)
-    {
-        Copy(text, copied, snackbar);
-    }
-
-    private static void Copy(object data, string copied, ISnackbar snackbar)
+    public static void Copy(object data, string copied, ISnackbar snackbar)
     {
         try
         {

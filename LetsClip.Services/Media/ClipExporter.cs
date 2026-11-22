@@ -127,10 +127,7 @@ public static partial class ClipExporter
         return (EvenUp(width * scale), EvenUp(height * scale));
     }
 
-    internal static double NextBitrate(
-        IReadOnlyList<(double Bitrate, long Size)> tries,
-        long target
-    )
+    private static double NextBitrate(List<(double Bitrate, long Size)> tries, long target)
     {
         // The Miss Plus Margin, Then Along Two Tries' Line
         var (bitrate, size) = tries[^1];

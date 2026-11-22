@@ -2,6 +2,56 @@
 
 Every dated round, newest first: what changed, the owner's picks, what was measured and why. The other files in `Docs` hold the current rules and what LetsClip does now; this one keeps the reasons and numbers behind them, so search it for a name or a number rather than reading it whole. A new round adds its own day at the top.
 
+## 22 November 2026
+
+### Picks: The Sweep Of Speed, Consistency And A Simpler UI
+
+The owner asked for a thorough sweep for efficiency, consistency and a simpler, more logical UI, with the sandbox free to run while he watched a video on his first monitor. A release build ran in a sandbox with 1,005 clips (1,000 hard links of a 30 s test clip and the demo library) and every screen was shot; the speed numbers are in `Docs/Verify.md`. Speed was already good: no hitch, no frame past 20 ms, every idle cost a tenth of a percent. Mid sweep he added his own item: `I also don't like the "Cut" icon on each clip, like it already says if a clip is "New", that's enough`. He picked all 13 items, then asked for a ponytail audit of the whole solution, applied, and the whole publish flow.
+
+- 1, the scissors mark on edited cards went, the card's top left holding New alone again as before 21 November; Only Unedited Clips still filters by `ClipMetadata.IsEdited`.
+- 2, the editor header's Copy File went: for an untouched clip it sat beside the panel's main button reading Copy File too. A card's menu still copies any whole file.
+- 3, Export Time reads None while the button only copies, where it read About 1s beside Copy File.
+- 4, System Audio is one select, labelled Records: Game and Voice Chat first (greyed while Games and Apps Only is off), a line, Automatic, a line, the devices (`DeviceSelect.FirstChoice`). The Only Record Game and Voice Chat switch under it greyed the device as Not Used while on, two switches for one three way choice. Picking a device records everything through it; the setting keeps its name (`OnlyGameAndDiscord`) and no install's choice changes. Checked by real presses: Automatic saved `OnlyGameAndDiscord` false and greyed Voice Chat Volume, Game and Voice Chat put both back, and with Games and Apps Only off the first choice greyed and the field read Automatic.
+- 5, Restore Original reaches the Recycle Bin: with Delete Originals When Cutting on (the default) a cut's whole clip went to the bin and undoing it took Clips, Recently Deleted, Restore, the editor again and Restore Original. Now the editor finds the whole clip its last cut sent there (`ClipLibrary.RecycledOriginalOf`, deleted within a minute of the cut file's write time) and one press brings it back and swaps it in. Checked: a 0,1 s cut of Ceiling Shot showed Restore Original at once, one press gave back the 62.4 MB 30 s file with its own write time, `Restored The Whole Clip`, and nothing of the round stayed in the bin (an old test clip of 20 November 2026 from another session is still there).
+- 6, the tray's Stop Recording reads Stop and Save the Recording, like the app bar's tooltip.
+- 7, a greyed slider's fill is grey (white at 35%) like its thumb; Microphone Volume with the microphone off kept a light blue fill.
+- 8, the log's first line and Report a Problem's issue named the system `Microsoft Windows 10.0.26300` and `Windows 10.0.26300.0`; both read `Windows 11 Build 26300` now (`AppInfo.WindowsText`).
+- 9, the manifest declares Windows 11: `supportedOS` (the id Windows 11 shares with its predecessor) and `maxversiontested` 10.0.26300.0, without which Windows gives an exe its oldest compatibility behaviour; the old `dpiAware` line went, `PerMonitorV2` alone does it on Windows 11.
+- 10, stale notes: `SizeBudget.CopyBytes` still said the page script weighed the same, `Docs/Behaviour.md` named `copyBytes` in `Editor.js` and `Docs/Verify.md` the .NET 10 composition host, all gone a round or more ago.
+- 11, `Microsoft.Web.WebView2` 1.0.4370.26, the one newer package; nothing vulnerable, transitive ones included.
+- 12, a live trim or crop drag redrew the whole editor for every number update; now only the Details panel redraws (`ExportPanel.ShowLive`, its `KeptRange` and `KeptCrop` the saved values, Save Cut working out its own shorter selection). Before, a release build's drag held LetsClip at 24% of a core and WebView2 at 57%, frames at 4.2 ms throughout.
+- 13, a listing touched every clip's thumbnail, first second picture and original with a file check each, about seven per clip; it reads the thumbnails folder and `.Originals` once and takes each clip's size and time from the folder listing. At 1,000 clips a new card showed 1.25 to 1.47 s after its file landed on a release build before, 0.72 to 0.96 s on a Debug build after, the watcher's 0.6 s wait included. A save still lists twice (its own list and the watcher's), cheap at the owner's 14 clips either way, so that stays.
+
+### Ponytail Audit Of The Whole Solution
+
+- `shrink`: the filter, a game's Tune and Recently Deleted each repeated the popover, its footer row and the overlay that closes it; one `FormPopover` holds them, every footer now Reset or the quiet action left and the primary right.
+- `shrink`: the status chip had two whole chips, one per branch, differing in tooltip, class and click; one chip, its click and underline only with a fix (`OpenFix`, `ChipClass`).
+- `shrink`: Edit Games and Apps was written out in Settings and on the empty Clips page; one `EditGamesButton`.
+- `shrink`: the export's two hints were two identical caption blocks; one `HintText`. The card's time and length chips were two identical chips; one loop.
+- `delete`: `DesktopShell.CopyText` only passed through to `Copy`, now public.
+- `yagni`: public members nothing outside their class used turned private: `Formatter.FormatDay`, `ClipLibrary.ExportPathOf` and `PartialPrefix`, `ClipExporter.NextBitrate`, `VideoEncoders`' AMF, NVENC and Quick Sync fields (now `s_` named), `UserSettings.CurrentDefaults`.
+- Nothing to cut: no package the platform covers, no interface, no setting nobody reads, no CSS class nothing renders, no page script call nothing makes, and the remaining one line methods are Razor handlers the code behind rule asks for.
+
+### The Owner's Questions
+
+- `What about my rule to not use hotkeys?`: nothing in the code touched a hotkey, but the test sandbox was seeded from the demo library's settings with F9, and a sandbox holds its save key across Windows while it runs, so F9 was taken from his other apps meanwhile. Sandboxes, stills and the demo use the default F10 since, only while his own copy is closed.
+- `Save Last Minute` beside `Waiting for a Game or App`: a real state, the round's own test, not a visual glitch. Switching Games and Apps Only off and on ended a 5 s monitor session, whose replay stays saveable for its own length (kept replays, 19 November 2026), so Save showed while nothing recorded; but it read `Save Last 1m`, the replay length, for a replay holding 5 s. It now says what it kept (`Save Last 5s`, `ReplayRecorder.KeptSeconds`), checked by the same switch.
+- Title Case everywhere: a scan of every label found none out of place (`Docs/Verify.md`).
+- The demo longer and showing more, with the Games and Apps dialog: see Release: v2.0.24.
+
+### Verify: The Sweep's Items
+
+- Build, analyzers, style, CSharpier, RazorStyle, line endings, comment length and the Title Case scan clean.
+- In the Debug sandbox with 1,005 clips: the cards without scissors and with their two picture chips, the header without Copy File, Export Time None beside Copy File on a whole clip, a drag's numbers following live with Save Cut and Save and Copy switching on mid drag, the System Audio picks and their saved values, the kept replay's `Save Last 5s`, the cut and the one press Restore Original from the bin, the filter and Recently Deleted closing on an outside click with their footers' buttons left and right, the status chip opening Games and Apps, Edit Games and Apps from Settings, and no console error.
+- The sweep at 1920 x 1009, 1600 x 845 and 1264 x 680 over Clips, the filter, Recently Deleted, a card's menu, the editor with a landscape and a portrait clip, Settings and its Audio panel, Games and Apps, a game's Tune, More and About: no sideways scroll, wrap or anything past its panel.
+- The same trim drag on v2.0.23 and v2.0.24, each a release exe on the demo library: LetsClip 44% and 1.6% of a core against 7.8% and 3.1%, WebView2 74 to 92% against 108% (it now applies more number updates a second), frames 4.2 ms on both.
+- Found on the way, as it was before: inside the Games and Apps dialog a click elsewhere does not close a game's Tune popover, since the dialog's own layer sits above the popover's overlay; Save closes it.
+
+### Release: v2.0.24
+
+- The lone exe test on the published exe alone in an empty folder: first an empty library (No Clips Yet, `Records in the background once one of your 17 games and apps starts`, `Press F10 to save what just happened`, Edit Games and Apps opening its dialog, the log's first line `On Windows 11 Build 26300`), then the demo library for the stills and the demo, no page error.
+- The demo, the owner's ask (`re-take the demo too, but also add a bit more, like the edit games popup and stuff`): the editor part as before, then Settings, Edit Games and Apps and Cuphead's Tune popover with a 2m replay saved, ending on the list with its chip. 249 frames, 36.9 s, 1.81 MB (v2.0.23: 190 frames, 25.6 s, 1.61 MB).
+
 ## 21 November 2026
 
 ### Picks: The Sweep's Items, Live Numbers And Windows 11 Only

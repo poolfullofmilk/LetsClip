@@ -162,7 +162,7 @@ public partial class App : Application
 
         // Every Log Starts With What Ran Where And Its Settings
         s_logger.Info(
-            $"Started {AppInfo.DisplayName} {AppInfo.VersionText}{(startsInTray ? " In The Tray" : "")} On {System.Runtime.InteropServices.RuntimeInformation.OSDescription}, .NET {Environment.Version}, {Environment.ProcessorCount} Threads{(AppInfo.SandboxRoot is null ? "" : ", Sandboxed")}"
+            $"Started {AppInfo.DisplayName} {AppInfo.VersionText}{(startsInTray ? " In The Tray" : "")} On {AppInfo.WindowsText}, .NET {Environment.Version}, {Environment.ProcessorCount} Threads{(AppInfo.SandboxRoot is null ? "" : ", Sandboxed")}"
         );
         var controller = new CaptureController();
         s_logger.Info($"Settings {System.Text.Json.JsonSerializer.Serialize(controller.Settings)}");

@@ -26,17 +26,16 @@ public partial class ClipEditor
     public void OnRange(double start, double end)
     {
         // The Page Script Dragged The Handles, Here The Range Settles
-        _liveRange = null;
         SetRange(TrimRange.Fit(start, end, _duration));
         StateHasChanged();
+        _panel?.ShowLive(null, null);
     }
 
     [JSInvokable]
     public void OnRanging(double start, double end)
     {
         // Mid Drag The Export's Numbers Follow, Nothing Is Saved
-        _liveRange = TrimRange.Fit(start, end, _duration);
-        StateHasChanged();
+        _panel?.ShowLive(TrimRange.Fit(start, end, _duration), null);
     }
 
     [JSInvokable]
@@ -108,17 +107,17 @@ public partial class ClipEditor
         // Over The Whole Frame, Nothing Is Cropped
         var box = new CropBox(left, top, width, height).Clamped();
         var crop = box.Changes(media.Width, media.Height) ? box : null;
-        (_crop, _liveCrop) = (crop, null);
+        _crop = crop;
         _ = Task.Run(() => ClipLibrary.UpdateMetadata(path, metadata => metadata.WithBox(crop)));
         StateHasChanged();
+        _panel?.ShowLive(null, null);
     }
 
     [JSInvokable]
     public void OnCropping(double left, double top, double width, double height)
     {
         // Mid Drag Only The Export's Numbers Follow
-        _liveCrop = new CropBox(left, top, width, height).Clamped();
-        StateHasChanged();
+        _panel?.ShowLive(null, new CropBox(left, top, width, height).Clamped());
     }
 
     private void ResetCrop()

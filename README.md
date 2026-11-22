@@ -24,13 +24,13 @@
 - Clips are named after their game and time, and renaming a clip renames its file, so it shares under that name
 - Clips sit under Today, Yesterday, This Week, Last Week and then each month, each header with its count and each clip tagged with its game, app or monitor
 - Search, sort and filter clips by game, app or monitor, or to the ones you have not edited yet
-- Clips saved since you last looked are marked New, edited ones show scissors, and resting the pointer on one previews it
+- Clips saved since you last looked are marked New, and resting the pointer on one previews it
 - Copy any clip as a file and paste it straight into Discord, or drag its card into Discord or a folder
 - Copy a clip sized for your Discord plan straight from its card, and copy its last export again any time
 - Deleting a clip can be undone for a moment, and Recently Deleted brings it back from the Recycle Bin with its trim and name, like the full clip a cut set aside
 - Stays quick with thousands of clips, the pictures on screen made first
 - Trim to the exact frame by dragging, typing or stepping, over a strip with the game and your voice drawn in their own colours that the mouse wheel zooms
-- Keep just the trimmed part without losing any quality, the full clip kept to bring back or sent to the Recycle Bin
+- Keep just the trimmed part without losing any quality, the full clip kept or sent to the Recycle Bin, and Restore Original brings it back either way
 - Export an exact copy, or fit Discord's Free, Nitro Basic or Nitro limit as HEVC at the size that looks sharpest, even for long selections
 - Crop to any part of the picture by dragging the box's corners or sides, move it anywhere, and reset it in one click
 - Leave out your voice or the game, or balance the two, and exports even out the sound so it is never too quiet in Discord

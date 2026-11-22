@@ -35,48 +35,32 @@
         @* Top Chips *@
         <MudElement HtmlTag="div"
                     Class="clip-top-chips">
-            <MudElement HtmlTag="div"
-                        Class="clip-marks">
-                @if (IsNew)
-                {
-                    <MudChip T="string"
-                             Size="Size.Small"
-                             Variant="Variant.Filled"
-                             Color="Color.Dark"
-                             Class="new-chip ma-0">
-                        New
-                    </MudChip>
-                }
-                @if (Clip.IsEdited)
-                {
-                    <MudChip T="string"
-                             Icon="@Icons.Material.Rounded.ContentCut"
-                             Size="Size.Small"
-                             Variant="Variant.Filled"
-                             Color="Color.Dark"
-                             Class="edited-chip ma-0" />
-                }
-            </MudElement>
+            @if (IsNew)
+            {
+                <MudChip T="string"
+                         Size="Size.Small"
+                         Variant="Variant.Filled"
+                         Color="Color.Dark"
+                         Class="new-chip ml-0 my-0 mr-auto">
+                    New
+                </MudChip>
+            }
             <SourceChip Clip="Clip"
                         OnPicture />
         </MudElement>
         @* Picture Chips *@
         <MudElement HtmlTag="div"
                     Class="clip-chips">
-            <MudChip T="string"
-                     Size="Size.Small"
-                     Variant="Variant.Filled"
-                     Color="Color.Dark"
-                     Class="ma-0">
-                @Time
-            </MudChip>
-            <MudChip T="string"
-                     Size="Size.Small"
-                     Variant="Variant.Filled"
-                     Color="Color.Dark"
-                     Class="ma-0">
-                @Formatter.FormatDuration(Clip.Duration)
-            </MudChip>
+            @foreach (var text in (string[])[Time, Formatter.FormatDuration(Clip.Duration)])
+            {
+                <MudChip T="string"
+                         Size="Size.Small"
+                         Variant="Variant.Filled"
+                         Color="Color.Dark"
+                         Class="ma-0">
+                    @text
+                </MudChip>
+            }
         </MudElement>
     </MudElement>
     <MudStack Row

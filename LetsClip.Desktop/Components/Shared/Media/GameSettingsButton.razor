@@ -16,110 +16,106 @@
                 Text="@($"Recording Settings for {Game.Name}")"
                 OnClick="Open" />
     @* Settings Popover *@
-    <MudPopover Open="_open"
-                AnchorOrigin="Origin.BottomRight"
-                TransformOrigin="Origin.TopRight"
-                Class="form-popover">
-        <MudStack Spacing="4"
-                  Class="pa-3">
-            <MudText Typo="Typo.subtitle2"
-                     Class="ellipsis">
-                @Game.Name
-            </MudText>
-            @* Replay Length Select *@
-            <FieldDetail Color="@CostColors.Replay(_draft.Seconds ?? Controller.Settings.ReplaySeconds)"
-                         Detail="@(_draft.Seconds is null ? Formatter.FormatDuration(Controller.Settings.ReplaySeconds) : null)">
-                <ChoiceSelect T="int?"
-                              @bind-Value="Seconds"
-                              ToStringFunc="SecondsLabel"
-                              Label="Replay Length">
-                    <MudSelectItem T="int?"
-                                   Value="null">
-                        <ItemLabel Text="Default"
-                                   Detail="@Formatter.FormatDuration(Controller.Settings.ReplaySeconds)" />
-                    </MudSelectItem>
-                    @foreach (var seconds in UserSettings.ReplayChoices)
-                    {
+    <FormPopover Open="_open"
+                 Closed="Close">
+        <ChildContent>
+            <MudStack Spacing="4"
+                      Class="pa-3">
+                <MudText Typo="Typo.subtitle2"
+                         Class="ellipsis">
+                    @Game.Name
+                </MudText>
+                @* Replay Length Select *@
+                <FieldDetail Color="@CostColors.Replay(_draft.Seconds ?? Controller.Settings.ReplaySeconds)"
+                             Detail="@(_draft.Seconds is null ? Formatter.FormatDuration(Controller.Settings.ReplaySeconds) : null)">
+                    <ChoiceSelect T="int?"
+                                  @bind-Value="Seconds"
+                                  ToStringFunc="SecondsLabel"
+                                  Label="Replay Length">
                         <MudSelectItem T="int?"
-                                       Value="seconds">
-                            <ItemLabel Text="@Formatter.FormatDuration(seconds)"
-                                       Color="@CostColors.Replay(seconds)" />
+                                       Value="null">
+                            <ItemLabel Text="Default"
+                                       Detail="@Formatter.FormatDuration(Controller.Settings.ReplaySeconds)" />
                         </MudSelectItem>
-                    }
-                </ChoiceSelect>
-            </FieldDetail>
-            @* Resolution Select *@
-            <FieldDetail Color="@CostColors.Resolution(_draft.Resolution ?? Controller.Resolution)"
-                         Detail="@(_draft.Resolution is null ? Formatter.FormatLines(Controller.Resolution) : null)">
-                <ChoiceSelect T="int?"
-                              @bind-Value="Resolution"
-                              ToStringFunc="ResolutionLabel"
-                              Label="Resolution">
-                    <MudSelectItem T="int?"
-                                   Value="null">
-                        <ItemLabel Text="Default"
-                                   Detail="@Formatter.FormatLines(Controller.Resolution)" />
-                    </MudSelectItem>
-                    @foreach (var lines in Controller.ResolutionChoices)
-                    {
+                        @foreach (var seconds in UserSettings.ReplayChoices)
+                        {
+                            <MudSelectItem T="int?"
+                                           Value="seconds">
+                                <ItemLabel Text="@Formatter.FormatDuration(seconds)"
+                                           Color="@CostColors.Replay(seconds)" />
+                            </MudSelectItem>
+                        }
+                    </ChoiceSelect>
+                </FieldDetail>
+                @* Resolution Select *@
+                <FieldDetail Color="@CostColors.Resolution(_draft.Resolution ?? Controller.Resolution)"
+                             Detail="@(_draft.Resolution is null ? Formatter.FormatLines(Controller.Resolution) : null)">
+                    <ChoiceSelect T="int?"
+                                  @bind-Value="Resolution"
+                                  ToStringFunc="ResolutionLabel"
+                                  Label="Resolution">
                         <MudSelectItem T="int?"
-                                       Value="lines">
-                            <ItemLabel Text="@Formatter.FormatLines(lines)"
-                                       Color="@CostColors.Resolution(lines)" />
+                                       Value="null">
+                            <ItemLabel Text="Default"
+                                       Detail="@Formatter.FormatLines(Controller.Resolution)" />
                         </MudSelectItem>
-                    }
-                </ChoiceSelect>
-            </FieldDetail>
-            @* Frame Rate Select *@
-            <FieldDetail Color="@CostColors.FrameRate(_draft.FrameRate ?? Controller.FrameRate)"
-                         Detail="@(_draft.FrameRate is null ? Formatter.FormatFrameRate(Controller.FrameRate) : null)">
-                <ChoiceSelect T="int?"
-                              @bind-Value="FrameRate"
-                              ToStringFunc="FrameRateLabel"
-                              Label="Frame Rate">
-                    <MudSelectItem T="int?"
-                                   Value="null">
-                        <ItemLabel Text="Default"
-                                   Detail="@Formatter.FormatFrameRate(Controller.FrameRate)" />
-                    </MudSelectItem>
-                    @foreach (var rate in Controller.FrameRateChoices)
-                    {
+                        @foreach (var lines in Controller.ResolutionChoices)
+                        {
+                            <MudSelectItem T="int?"
+                                           Value="lines">
+                                <ItemLabel Text="@Formatter.FormatLines(lines)"
+                                           Color="@CostColors.Resolution(lines)" />
+                            </MudSelectItem>
+                        }
+                    </ChoiceSelect>
+                </FieldDetail>
+                @* Frame Rate Select *@
+                <FieldDetail Color="@CostColors.FrameRate(_draft.FrameRate ?? Controller.FrameRate)"
+                             Detail="@(_draft.FrameRate is null ? Formatter.FormatFrameRate(Controller.FrameRate) : null)">
+                    <ChoiceSelect T="int?"
+                                  @bind-Value="FrameRate"
+                                  ToStringFunc="FrameRateLabel"
+                                  Label="Frame Rate">
                         <MudSelectItem T="int?"
-                                       Value="rate">
-                            <ItemLabel Text="@Formatter.FormatFrameRate(rate)"
-                                       Color="@CostColors.FrameRate(rate)" />
+                                       Value="null">
+                            <ItemLabel Text="Default"
+                                       Detail="@Formatter.FormatFrameRate(Controller.FrameRate)" />
                         </MudSelectItem>
-                    }
-                </ChoiceSelect>
-            </FieldDetail>
-            @* Quality Select *@
-            <FieldDetail Color="@CostColors.Quality(_draft.Quality ?? Controller.Settings.Quality)"
-                         Detail="@(_draft.Quality is null ? Controller.Settings.Quality.ToString() : null)">
-                <ChoiceSelect T="CaptureQuality?"
-                              @bind-Value="Quality"
-                              ToStringFunc="QualityLabel"
-                              Label="Quality">
-                    <MudSelectItem T="CaptureQuality?"
-                                   Value="null">
-                        <ItemLabel Text="Default"
-                                   Detail="@Controller.Settings.Quality.ToString()" />
-                    </MudSelectItem>
-                    @foreach (var quality in Enum.GetValues<CaptureQuality>())
-                    {
+                        @foreach (var rate in Controller.FrameRateChoices)
+                        {
+                            <MudSelectItem T="int?"
+                                           Value="rate">
+                                <ItemLabel Text="@Formatter.FormatFrameRate(rate)"
+                                           Color="@CostColors.FrameRate(rate)" />
+                            </MudSelectItem>
+                        }
+                    </ChoiceSelect>
+                </FieldDetail>
+                @* Quality Select *@
+                <FieldDetail Color="@CostColors.Quality(_draft.Quality ?? Controller.Settings.Quality)"
+                             Detail="@(_draft.Quality is null ? Controller.Settings.Quality.ToString() : null)">
+                    <ChoiceSelect T="CaptureQuality?"
+                                  @bind-Value="Quality"
+                                  ToStringFunc="QualityLabel"
+                                  Label="Quality">
                         <MudSelectItem T="CaptureQuality?"
-                                       Value="quality">
-                            <ItemLabel Text="@quality.ToString()"
-                                       Color="@CostColors.Quality(quality)" />
+                                       Value="null">
+                            <ItemLabel Text="Default"
+                                       Detail="@Controller.Settings.Quality.ToString()" />
                         </MudSelectItem>
-                    }
-                </ChoiceSelect>
-            </FieldDetail>
-        </MudStack>
-        <MudStack Row
-                  AlignItems="AlignItems.Center"
-                  Justify="Justify.SpaceBetween"
-                  Spacing="4"
-                  Class="popover-footer px-3 py-2">
+                        @foreach (var quality in Enum.GetValues<CaptureQuality>())
+                        {
+                            <MudSelectItem T="CaptureQuality?"
+                                           Value="quality">
+                                <ItemLabel Text="@quality.ToString()"
+                                           Color="@CostColors.Quality(quality)" />
+                            </MudSelectItem>
+                        }
+                    </ChoiceSelect>
+                </FieldDetail>
+            </MudStack>
+        </ChildContent>
+        <Footer>
             @* Reset Button *@
             <MudButton Variant="Variant.Text"
                        Color="Color.Error"
@@ -136,10 +132,6 @@
                        OnClick="Save">
                 Save
             </MudButton>
-        </MudStack>
-    </MudPopover>
+        </Footer>
+    </FormPopover>
 </MudElement>
-@* Settings Overlay *@
-<MudOverlay Visible="_open"
-            OnClick="Close"
-            AutoClose />

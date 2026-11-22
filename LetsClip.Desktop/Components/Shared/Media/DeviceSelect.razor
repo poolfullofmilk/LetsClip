@@ -5,8 +5,18 @@
                   Value="@Shown"
                   ValueChanged="ValueChanged"
                   ToStringFunc="LabelOf"
-                  Label="Device"
+                  Label="@Label"
                   Disabled="@(Disabled || Devices is [])">
+        @if (FirstChoice is { } first)
+        {
+            <MudSelectItem T="string"
+                           Value="@FirstChoiceId"
+                           Disabled="FirstChoiceDisabled"
+                           Class="divided">
+                <ItemLabel Text="@first"
+                           Checked="@IsChecked(FirstChoiceId)" />
+            </MudSelectItem>
+        }
         <MudSelectItem T="string"
                        Value="@AudioDevices.AutomaticId"
                        Class="divided">

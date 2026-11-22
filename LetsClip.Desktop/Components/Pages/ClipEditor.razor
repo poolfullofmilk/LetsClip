@@ -45,7 +45,7 @@ else
                 </Tooltip>
             }
             <MudSpacer />
-            @if (_clip?.HasOriginal == true)
+            @if (_clip?.HasOriginal == true || _recycledOriginal is not null)
             {
                 @* Restore Button *@
                 <IconButton Icon="@Icons.Material.Rounded.Restore"
@@ -54,11 +54,6 @@ else
                             Busy="_restoring"
                             OnClick="RestoreOriginalAsync" />
             }
-            @* Copy Button *@
-            <IconButton Icon="@Icons.Material.Rounded.ContentCopy"
-                        Text="Copy File"
-                        Disabled="_swapping"
-                        OnClick="CopyFileAsync" />
             @* Show In Folder Button *@
             <IconButton Icon="@Icons.Material.Rounded.FolderOpen"
                         Text="Show in Folder"
@@ -266,14 +261,15 @@ else
                 {
                     @* Details Panel *@
                     <ExportPanel @key="clip.Path"
+                                 @ref="_panel"
                                  Clip="clip"
                                  SaveCut="SaveCutAsync"
                                  SettledPath="SettledPathAsync"
-                                 CanSaveCut="@CanSaveCut()"
+                                 CanCut="@(Editable && !Exporting)"
                                  Cutting="_cutting"
                                  Busy="_swapping"
-                                 Range="_liveRange ?? _range"
-                                 Crop="_liveCrop ?? _crop"
+                                 KeptRange="_range"
+                                 KeptCrop="_crop"
                                  CropReset="ResetCrop"
                                  StreamsChanged="OnStreamsChanged"
                                  Media="media">

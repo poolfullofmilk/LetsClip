@@ -109,12 +109,6 @@ public partial class ClipEditor
         return cut;
     }
 
-    private bool CanSaveCut()
-    {
-        // Only A Shorter Selection Cuts, Live While Dragged
-        return Editable && !Exporting && (_liveRange ?? _range).CutsShort(_duration);
-    }
-
     private async Task RestoreOriginalAsync()
     {
         if (await SettledPathAsync() is not { } path)
@@ -122,9 +116,21 @@ public partial class ClipEditor
             return;
         }
 
+        // A Whole Clip In The Recycle Bin Comes Back First
         _restoring = true;
+        var recycled = _recycledOriginal;
         var restored = await ReplaceFileAsync(async () =>
         {
+            if (recycled is not null)
+            {
+                ClipLibrary.Restore(
+                    recycled with
+                    {
+                        OriginalPath = ClipLibrary.OriginalPathOf(path),
+                    }
+                );
+            }
+
             await ClipLibrary.RestoreAsync(path);
             return path;
         });

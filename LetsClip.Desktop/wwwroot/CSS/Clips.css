@@ -157,15 +157,8 @@ mark {
     }
 
         /* MudBlazor Wraps Each Chip, The Chips Themselves Line Up */
-        .clip-thumb :is(.clip-top-chips, .clip-marks) > .mud-chip-container {
+        .clip-thumb .clip-top-chips > .mud-chip-container {
             display: contents;
-        }
-
-        /* New And Edited Left, Pushing The Source Right */
-        .clip-thumb .clip-marks {
-            display: flex;
-            gap: 8px;
-            margin-right: auto;
         }
 
     .clip-thumb .source-chip {
@@ -176,17 +169,6 @@ mark {
     .clip-thumb .new-chip {
         color: var(--mud-palette-info);
     }
-
-        /* Edited Clips, An Icon Alone In A Circle */
-        .clip-thumb .mud-chip.edited-chip {
-            justify-content: center;
-            width: 24px;
-            padding: 0;
-        }
-
-            .clip-thumb .edited-chip .mud-chip-icon {
-                margin: 0;
-            }
 
         /* Chips On A Picture: Glass, Wider, The Icon's Shadow */
         .clip-thumb .mud-chip {

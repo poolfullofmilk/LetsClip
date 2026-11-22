@@ -112,20 +112,12 @@
         {
             <Notice Text="@TooLongText" />
         }
-        else if (OtherExporting && !OnlyCopies)
+        else if (HintText is { } hint)
         {
             <MudText Typo="Typo.caption"
                      Align="Align.Center"
                      Class="mud-text-secondary">
-                Another clip is exporting, this one waits its turn
-            </MudText>
-        }
-        else if (Budget?.Verdict == BudgetVerdict.Soft)
-        {
-            <MudText Typo="Typo.caption"
-                     Align="Align.Center"
-                     Class="mud-text-secondary">
-                Fast motion will look soft at this size, a shorter selection keeps it sharper
+                @hint
             </MudText>
         }
 

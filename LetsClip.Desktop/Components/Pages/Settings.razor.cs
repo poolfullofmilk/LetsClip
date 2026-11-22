@@ -1,6 +1,7 @@
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
 using LetsClip.Desktop.Components.Shared.Dialogs;
+using LetsClip.Desktop.Components.Shared.Media;
 using LetsClip.Desktop.Interop;
 using LetsClip.Services.Capture;
 using LetsClip.Services.Media;
@@ -85,16 +86,6 @@ public partial class Settings : IDisposable
                 : folder;
         }
     }
-
-    // Only A Game Window's Recording Knows Its Game's Sound
-    private bool CanRecordOnlyGameAndDiscord =>
-        Controller.Settings.GamesOnly && Controller.Settings.SystemAudio;
-
-    // The Game's Own Sound Ignores The Output Device
-    private bool PlaybackDeviceDisabled => !Controller.Settings.SystemAudio || RecordsVoiceChat;
-
-    private string? PlaybackDeviceReason =>
-        Controller.Settings.SystemAudio && RecordsVoiceChat ? "Not Used" : null;
 
     // The Saved Keys, Or While Picking The Last Keys Pressed
     private string HotkeyButtonText =>
@@ -215,12 +206,19 @@ public partial class Settings : IDisposable
 
     private void SetPlaybackDevice(string id)
     {
-        Controller.UpdateSettings(settings => settings with { SystemAudioDeviceId = id });
-    }
-
-    private void SetOnlyGameAndDiscord(bool enabled)
-    {
-        Controller.UpdateSettings(settings => settings with { OnlyGameAndDiscord = enabled });
+        // Game And Voice Chat, Or Everything Through A Device
+        Controller.UpdateSettings(settings =>
+            id == DeviceSelect.FirstChoiceId
+                ? settings with
+                {
+                    OnlyGameAndDiscord = true,
+                }
+                : settings with
+                {
+                    OnlyGameAndDiscord = false,
+                    SystemAudioDeviceId = id,
+                }
+        );
     }
 
     private void SetMicrophone(bool enabled)
@@ -239,9 +237,9 @@ public partial class Settings : IDisposable
         await RestartMicrophoneTestAsync();
     }
 
-    // Only A Game Window's Voice Apps Have Their Own Level
+    // Only A Game Window Knows Its Game And Voice Apps
     private bool RecordsVoiceChat =>
-        CanRecordOnlyGameAndDiscord && Controller.Settings.OnlyGameAndDiscord;
+        Controller.Settings is { GamesOnly: true, SystemAudio: true, OnlyGameAndDiscord: true };
 
     private void SetVoiceVolume(double level)
     {

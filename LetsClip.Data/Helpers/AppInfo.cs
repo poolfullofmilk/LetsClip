@@ -31,6 +31,10 @@ public static class AppInfo
     // Shown Like The Release Tags, v1.8
     public static string VersionText { get; } = "v" + Version.ToString(Version.Build > 0 ? 3 : 2);
 
+    // Windows 11 Keeps The Old Version Number, Its Build Tells
+    public static string WindowsText { get; } =
+        $"Windows 11 Build {Environment.OSVersion.Version.Build}";
+
     // Debug Builds Never Touch The Installed App's Files
 #if DEBUG
     public const string FolderName = "LetsClip Debug";

@@ -18,7 +18,7 @@ public partial class ExportPanel : IDisposable
     public required ClipInfo Clip { get; set; }
 
     [Parameter]
-    public required TrimRange Range { get; set; }
+    public required TrimRange KeptRange { get; set; }
 
     [Parameter]
     public required MediaInfo Media { get; set; }
@@ -39,9 +39,9 @@ public partial class ExportPanel : IDisposable
     [Parameter]
     public bool Busy { get; set; }
 
-    // A Shorter Selection, Ready Player And No Export Running
+    // A Ready Player And No Export Running
     [Parameter]
-    public bool CanSaveCut { get; set; }
+    public bool CanCut { get; set; }
 
     // The Cut Is Being Written, Its Button Spins
     [Parameter]
@@ -49,7 +49,7 @@ public partial class ExportPanel : IDisposable
 
     // The Crop's Place And Size, Null Keeps The Whole Frame
     [Parameter]
-    public CropBox? Crop { get; set; }
+    public CropBox? KeptCrop { get; set; }
 
     // Back To The Whole Picture
     [Parameter]
@@ -69,6 +69,19 @@ public partial class ExportPanel : IDisposable
     public required IJSRuntime JavaScript { get; set; }
 
     private bool _revealResult;
+
+    // Mid Drag The Page's Range Or Box, Drawn Here Alone
+    private TrimRange? _liveRange;
+
+    private TrimRange Range => _liveRange ?? KeptRange;
+
+    private CropBox? Crop
+    {
+        get => field ?? KeptCrop;
+        set;
+    }
+
+    private bool CanSaveCut => CanCut && Range.CutsShort(Media.Duration);
 
     // The Shown Export's Changes And Which File They Came From
     private string? _changesOf;
@@ -167,6 +180,13 @@ public partial class ExportPanel : IDisposable
         }
 
         return bytes;
+    }
+
+    public void ShowLive(TrimRange? range, CropBox? crop)
+    {
+        // Only The Numbers Follow A Drag, Never The Whole Editor
+        (_liveRange, Crop) = (range, crop);
+        StateHasChanged();
     }
 
     private bool IsExporting => Exports.IsExporting(Clip.Path);
@@ -270,6 +290,7 @@ public partial class ExportPanel : IDisposable
     // Encodes Take The Last Export's Pace, Copies A Moment
     private string ExportTimeText =>
         IsTooLong ? "-"
+        : OnlyCopies && !IsCut ? NoneText
         : Budget is not null
             ? $"About {Formatter.FormatDuration(ClipExporter.EncodeSeconds(OutputSize.Width, OutputSize.Height, ExportFrameRate, Range.Length, KeepsVideo))}"
         : $"About {Formatter.FormatDuration(ClipExporter.CopySeconds(ExportBytes))}";
@@ -307,6 +328,13 @@ public partial class ExportPanel : IDisposable
     // Names What The Plan Fits And How To Fit More
     private string TooLongText =>
         $"Too long for {SizeBudget.NameOf(Plan)}, which fits about {Formatter.FormatDuration(SizeBudget.LongestSeconds(SizeBudget.LimitOf(Plan) ?? 0, Shape))}, pick a shorter selection{(KeepsVideo && WithAudio ? " or leave out the video" : "")}";
+
+    // A Waiting Turn Or A Soft Picture, Under The Rows
+    private string? HintText =>
+        OtherExporting && !OnlyCopies ? "Another clip is exporting, this one waits its turn"
+        : Budget?.Verdict == BudgetVerdict.Soft
+            ? "Fast motion will look soft at this size, a shorter selection keeps it sharper"
+        : null;
 
     // A Fitting Plan Copies Like Off, Sound Alone Becomes Opus
     private bool Changes(DiscordPlan plan)

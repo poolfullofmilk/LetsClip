@@ -150,14 +150,20 @@ public sealed partial class ReplayRecorder : IDisposable
         }
     }
 
-    // An Ended Session Still Saves, The Button Stays On
-    public bool HasKeptReplay
+    // What An Ended Session Still Saves, Zero Once Let Go
+    public double KeptSeconds
     {
         get
         {
             lock (_gate)
             {
-                return _kept is { IsFresh: true };
+                return _kept is { IsFresh: true } kept
+                    ? Math.Clamp(
+                        kept.Session.NewestEnd - CaptureSession.LeadSeconds,
+                        0,
+                        kept.Session.Options.Seconds
+                    )
+                    : 0;
             }
         }
     }

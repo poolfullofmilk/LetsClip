@@ -419,6 +419,11 @@
     border-radius: var(--radius-pill);
 }
 
+/* A Greyed Slider Greys Its Fill Like Its Thumb */
+.mud-slider:has(.mud-slider-input:disabled) .mud-slider-filled {
+    background-color: var(--mud-palette-text-disabled);
+}
+
 /* A Held Or Focused Thumb Rings In The Tonal Blue */
 .mud-slider.mud-slider-info .mud-slider-input:is(:active, :focus-visible)::-webkit-slider-thumb {
     box-shadow: 0 0 0 8px var(--tonal-info);
