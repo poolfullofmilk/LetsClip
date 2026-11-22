@@ -50,7 +50,9 @@ The owner asked for a thorough sweep for efficiency, consistency and a simpler, 
 ### Release: v2.0.24
 
 - The lone exe test on the published exe alone in an empty folder: first an empty library (No Clips Yet, `Records in the background once one of your 17 games and apps starts`, `Press F10 to save what just happened`, Edit Games and Apps opening its dialog, the log's first line `On Windows 11 Build 26300`), then the demo library for the stills and the demo, no page error.
-- The demo, the owner's ask (`re-take the demo too, but also add a bit more, like the edit games popup and stuff`): the editor part as before, then Settings, Edit Games and Apps and Cuphead's Tune popover with a 2m replay saved, ending on the list with its chip. 249 frames, 36.9 s, 1.81 MB (v2.0.23: 190 frames, 25.6 s, 1.61 MB).
+- The demo, the owner's ask (`re-take the demo too, but also add a bit more, like the edit games popup and stuff`): the editor part as before, then Settings, Edit Games and Apps and Cuphead's Tune popover with a 2m replay saved, ending on the list with its chip. A first take ran 36.9 s (249 frames, 1.81 MB); the owner: `the demo has to be a bit faster, 40s is a lot, you could do it in 25 or so, maybe 30 if you show one or two more things quickly`. The shipped take keeps every step at a quicker pace: 26.7 s, 203 frames, 1.40 MB (v2.0.23: 190 frames, 25.6 s, 1.61 MB).
+- The README, the owner's ask the same afternoon (`show the demo on top, then don't show Screenshots either`, `super long.. Could be way shorter`): the title, the demo, nine feature bullets where there were 48, and short Quick start, Important and Technical details; the stills and `Screenshots/` went, the demo moved to the root as `Demo.webp`.
+- The owner also asked again for the scissors mark to go, sent while the round ran: it was already gone, item 1 of the sweep.
 
 ## 21 November 2026
 
