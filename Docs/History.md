@@ -4,6 +4,15 @@ Every dated round, newest first: what changed, the owner's picks, what was measu
 
 ## 22 November 2026
 
+### Picks: The Tune Popover And Old Workflow Runs
+
+- The owner picked the fix for the Tune popover found in the round (`Yes fix that and simply release a new version ... No need for a new demo`). MudBlazor draws a `MudOverlay` in the page wide popover layer at z-index 5, so inside the Games and Apps dialog (z-index 1400) the Tune popover's overlay lay behind the dialog and every click outside the popover reached the dialog instead; the popover itself is lifted to the dialog's layer plus three (1403). `FormPopover` now reads the dialog from the cascade and lifts its overlay to the dialog's layer plus two (1402) inside one, keeping 5 elsewhere. Checked in a sandbox: a click inside the dialog and one outside it each closed the popover and left the dialog open, its Replay Length select, Save and Reset still worked, and Recently Deleted stayed open for a click inside it and closed for one outside.
+- Old workflow runs, the owner's ask (`delete all old workflows too ... after release, I think it should delete older ones`): 54 runs had piled up; after v2.0.25 every run but its own build was deleted, and step 8.7 does that after every release.
+
+### Release: v2.0.25
+
+- The fix alone, no new demo or stills, the owner's word. The published exe ran alone in an empty folder, sandboxed on an empty library, before the release.
+
 ### Picks: The Sweep Of Speed, Consistency And A Simpler UI
 
 The owner asked for a thorough sweep for efficiency, consistency and a simpler, more logical UI, with the sandbox free to run while he watched a video on his first monitor. A release build ran in a sandbox with 1,005 clips (1,000 hard links of a 30 s test clip and the demo library) and every screen was shot; the speed numbers are in `Docs/Verify.md`. Speed was already good: no hitch, no frame past 20 ms, every idle cost a tenth of a percent. Mid sweep he added his own item: `I also don't like the "Cut" icon on each clip, like it already says if a clip is "New", that's enough`. He picked all 13 items, then asked for a ponytail audit of the whole solution, applied, and the whole publish flow.
@@ -45,7 +54,7 @@ The owner asked for a thorough sweep for efficiency, consistency and a simpler, 
 - In the Debug sandbox with 1,005 clips: the cards without scissors and with their two picture chips, the header without Copy File, Export Time None beside Copy File on a whole clip, a drag's numbers following live with Save Cut and Save and Copy switching on mid drag, the System Audio picks and their saved values, the kept replay's `Save Last 5s`, the cut and the one press Restore Original from the bin, the filter and Recently Deleted closing on an outside click with their footers' buttons left and right, the status chip opening Games and Apps, Edit Games and Apps from Settings, and no console error.
 - The sweep at 1920 x 1009, 1600 x 845 and 1264 x 680 over Clips, the filter, Recently Deleted, a card's menu, the editor with a landscape and a portrait clip, Settings and its Audio panel, Games and Apps, a game's Tune, More and About: no sideways scroll, wrap or anything past its panel.
 - The same trim drag on v2.0.23 and v2.0.24, each a release exe on the demo library: LetsClip 44% and 1.6% of a core against 7.8% and 3.1%, WebView2 74 to 92% against 108% (it now applies more number updates a second), frames 4.2 ms on both.
-- Found on the way, as it was before: inside the Games and Apps dialog a click elsewhere does not close a game's Tune popover, since the dialog's own layer sits above the popover's overlay; Save closes it.
+- Found on the way, as it was before: inside the Games and Apps dialog a click elsewhere did not close a game's Tune popover, since the dialog's own layer sits above the popover's overlay; Save closed it. Fixed the same afternoon in v2.0.25.
 
 ### Release: v2.0.24
 
