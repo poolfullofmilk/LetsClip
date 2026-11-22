@@ -232,6 +232,16 @@ public static class SizeBudget
         );
     }
 
+    public static ExportBudget Keep(double megabytes, ExportShape clip)
+    {
+        // Off Keeps Frame And Rate, Only The Bits Are Planned
+        var lines = Math.Max(
+            Math.Min(clip.Width, clip.Height),
+            (int)Math.Ceiling(Math.Max(clip.Width, clip.Height) * 9 / 16.0)
+        );
+        return Plan(megabytes, clip) with { Lines = lines, FrameRate = clip.FrameRate };
+    }
+
     private static bool SelfTestPasses()
     {
         // Ten 100 Byte Frames, Keyframes At 0 And 0.5
@@ -270,8 +280,13 @@ public static class SizeBudget
         var small = new ExportShape(30, 600, 400, 60, true);
         var kept = Plan(KeepingMegabytes(small), small);
         var square = new ExportShape(30, 1080, 1080, 60, true);
+        var wide = new ExportShape(30, 2550, 1434, 144, true);
+        var tall = new ExportShape(30, 810, 1440, 60, true);
         return copies
             && kept is { Verdict: BudgetVerdict.Good, Lines: 540, FrameRate: 60 }
+            && Keep(KeepingMegabytes(wide), wide)
+                is { Verdict: BudgetVerdict.Good, Lines: 1435, FrameRate: 144 }
+            && Keep(KeepingMegabytes(tall), tall) is { Verdict: BudgetVerdict.Good, Lines: 810 }
             && Plan(KeepingMegabytes(square), square)
                 is { Verdict: BudgetVerdict.Good, Lines: FullLines }
             && KeepingMegabytes(new ExportShape(30, 192, 166, 60, true)) < 2

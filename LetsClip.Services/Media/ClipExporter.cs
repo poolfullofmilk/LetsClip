@@ -160,12 +160,11 @@ public static partial class ClipExporter
         var kept = width * height / (double)(media.Width * media.Height);
 
         // A Still Window's Few Bits Keep Full Size And Rate
-        var (outputWidth, outputHeight) = OutputSize(width, height);
         var shape = new ExportShape(
             seconds,
-            outputWidth,
-            outputHeight,
-            FrameRateOf(media, encodes: true),
+            width,
+            height,
+            FrameRateOf(media, planned: false),
             media.HasAudio
         );
         return Math.Max(
@@ -174,11 +173,11 @@ public static partial class ClipExporter
         );
     }
 
-    public static double FrameRateOf(MediaInfo media, bool encodes)
+    public static double FrameRateOf(MediaInfo media, bool planned)
     {
-        // Odd Probes Read As 60, An Encode Stops At 60
+        // Odd Probes Read As 60, A Plan Stops At 60
         var rate = media.FrameRate is > 1 and < 241 ? Math.Round(media.FrameRate) : 60;
-        return encodes ? Math.Min(rate, 60) : rate;
+        return planned ? Math.Min(rate, 60) : rate;
     }
 
     public static int? TrackOf(MediaInfo media, bool game, bool microphone)
@@ -245,21 +244,28 @@ public static partial class ClipExporter
             media.HasSeparateTracks && track == 0 && (gameVolume != 1 || microphoneVolume != 1);
         var copied = CopyBytes(clip.SizeBytes, media, range, track is null ? 0 : 1, keepsVideo);
 
+        // A Crop Fitting The Plan Keeps Its Frame Like Off
+        var weighed = cropped
+            ? CropBytes(clip.SizeBytes, media.Duration, media, range.Length, crop!)
+            : copied;
+
         // Sound Alone Becomes Opus, Which Discord Plays Inline
-        var encodes = cropped || !keepsVideo || copied > limit * 1e6;
+        var planned = !keepsVideo || weighed > limit * 1e6;
         var everyTrack = media.HasSeparateTracks
             ? track == 0 && !balanced
             : track is not null == media.HasAudio;
-        if (!encodes && keepsVideo && everyTrack && !range.CutsShort(media.Duration))
+        if (!cropped && !planned && keepsVideo && everyTrack && !range.CutsShort(media.Duration))
         {
             return new(null, null);
         }
 
-        var frameRate = FrameRateOf(media, encodes);
+        var frameRate = FrameRateOf(media, planned);
         var (frameWidth, frameHeight, _, _) = cropped
             ? crop!.PixelsOf(media.Width, media.Height)
             : (media.Width, media.Height, 0, 0);
-        var (width, height) = OutputSize(frameWidth, frameHeight);
+        var (width, height) = planned
+            ? OutputSize(frameWidth, frameHeight)
+            : (frameWidth, frameHeight);
         var shape = new ExportShape(
             range.Length,
             width,
@@ -268,7 +274,7 @@ public static partial class ClipExporter
             track is not null,
             keepsVideo
         );
-        if (encodes && SizeBudget.Plan(limit, shape).Verdict == BudgetVerdict.TooSmall)
+        if (planned && SizeBudget.Plan(limit, shape).Verdict == BudgetVerdict.TooSmall)
         {
             return new(
                 null,
@@ -280,7 +286,7 @@ public static partial class ClipExporter
             new ExportRequest(
                 clip.Path,
                 range,
-                encodes ? plan : DiscordPlan.Off,
+                planned ? plan : DiscordPlan.Off,
                 frameRate,
                 track,
                 folder,
@@ -309,6 +315,10 @@ public static partial class ClipExporter
             && Math.Abs(noisy - (4_200_000.0 * 18_400_000 / 41_800_000 * 0.97)) < 1
             && FrameRateOf(new MediaInfo(5, "h264", null, 0, 0, 239.9, null, null), true) == 60
             && FrameRateOf(new MediaInfo(5, "h264", null, 0, 0, 0, null, null), false) == 60
+            && FrameRateOf(new MediaInfo(5, "h264", null, 0, 0, 143.9, null, null), false) == 144
+            && OutputSize(2550, 1434, SizeBudget.Keep(30, new(3, 2550, 1434, 144, true)).Lines)
+                == (2550, 1434)
+            && OutputSize(2550, 1434) == (1920, 1080)
             && Rounded(0.2) == 1
             && Rounded(7.4) == 7
             && Rounded(23) == 25

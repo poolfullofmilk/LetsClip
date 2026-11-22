@@ -4,6 +4,17 @@ Every dated round, newest first: what changed, the owner's picks, what was measu
 
 ## 22 November 2026
 
+### Release: v2.0.26
+
+- The crop fix alone, keeping v2.0.24's demo: its library's clips are 1080p60, whose crops read the same before and after. The published exe ran alone in an empty folder, sandboxed on the test clips and a copy of `Perongeluk Typen` with its crop: the editor read `2550 × 1434`, its export came out HEVC 2550 x 1434 at 60 FPS (228 frames, 12.6 MB in 2.7 s), the Exported panel's chip read `2550 × 1434`, Reset Crop put back Copy File with Export Time None, the editor, Clips and Settings measured clean at 1920 x 1009, 1600 x 845 and 1264 x 680, and the log held no warning.
+
+### Export: A Crop Under Off Keeps Its Frame
+
+- The owner's report: a slight crop of `Perongeluk Typen` (8 November, Overwatch) read `~~2560 × 1440~~ 1920 × 1080` while other clips did not. The clip is genuine 1440p (H.264 2560 x 1440, 60 FPS nominal, 227 shown frames over 3.8 s with one doubled slot from the capture of that day; a 1080p round trip scores 41.6 dB, so its detail is above 1080p) and the only 1440p clip in his library, every other one 1920 x 1080, where any crop already fits the box.
+- The cause: every crop encode, Off included, went through the plans' 16 by 9 box of 1080 lines and their 60 FPS cap (`ClipExporter.OutputSize` with `SizeBudget.FullLines`, `FrameRateOf(encodes: true)`), in the panel and in the export alike, while Size and Bitrate kept the clip's bits per pixel over the crop's full pixels. So any crop of a clip above 1080p came out at 1080p and any crop of a clip above 60 FPS at 60.
+- Now Off keeps the crop's own pixels and the clip's frame rate (`SizeBudget.Keep`, the budget's lines set to the box holding the frame), only a plan boxes it, and `CropBytes` weighs the keeping floor at that size and rate. A card's Copy for Discord whose crop fits its plan exports it like Off, as the editor already treated that plan (`ClipExporter.ForDiscord`, `planned`).
+- Measured in a sandbox on copies: `Perongeluk Typen` with its crop reads `2550 × 1434`, About 12,6 MB and 26,5 Mbps, and exported HEVC 2550 x 1434, 60 FPS, 228 frames, 3.800 s, 12.64 MB and 26.6 Mbps in 2.7 s; a 2560 x 1440 test clip at 144 FPS with a slight crop reads and exported 2530 x 1414 at 144 FPS (576 frames, 4.000 s, 12.2 MB against About 13,1 MB); a 26.8 MB 1440p clip cropped to 70% exported from its card's Copy for Discord Free at 2140 x 1204, 17.6 MB, where the editor reads 17,2 MB; the same clip with a crop too big for Free reads `1920 × 1076` at 60 FPS under Free, as before.
+
 ### Picks: The Tune Popover And Old Workflow Runs
 
 - The owner picked the fix for the Tune popover found in the round (`Yes fix that and simply release a new version ... No need for a new demo`). MudBlazor draws a `MudOverlay` in the page wide popover layer at z-index 5, so inside the Games and Apps dialog (z-index 1400) the Tune popover's overlay lay behind the dialog and every click outside the popover reached the dialog instead; the popover itself is lifted to the dialog's layer plus three (1403). `FormPopover` now reads the dialog from the cascade and lifts its overlay to the dialog's layer plus two (1402) inside one, keeping 5 elsewhere. Checked in a sandbox: a click inside the dialog and one outside it each closed the popover and left the dialog open, its Replay Length select, Save and Reset still worked, and Recently Deleted stayed open for a click inside it and closed for one outside.

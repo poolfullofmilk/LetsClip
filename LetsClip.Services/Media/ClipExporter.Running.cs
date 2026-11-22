@@ -98,11 +98,11 @@ public static partial class ClipExporter
             return copied;
         }
 
-        // Too Big For The Plan, Encoded Smaller To Fit
-        var limit =
-            SizeBudget.LimitOf(request.Plan)
-            ?? CropBytes(sourceBytes, source.Duration, source, duration, request.Crop!) / 1e6;
-        var (fullWidth, fullHeight) = OutputSize(frameWidth, frameHeight);
+        // A Plan Fits Its Box, Off Keeps The Frame
+        var limit = SizeBudget.LimitOf(request.Plan);
+        var (fullWidth, fullHeight) = limit is null
+            ? (frameWidth, frameHeight)
+            : OutputSize(frameWidth, frameHeight);
         var clip = new ExportShape(
             duration,
             fullWidth,
@@ -111,14 +111,19 @@ public static partial class ClipExporter
             withAudio,
             video
         );
-        var budget = SizeBudget.Plan(limit, clip);
+        var budget = limit is { } megabytes
+            ? SizeBudget.Plan(megabytes, clip)
+            : SizeBudget.Keep(
+                CropBytes(sourceBytes, source.Duration, source, duration, request.Crop!) / 1e6,
+                clip
+            );
         var (width, height) = OutputSize(frameWidth, frameHeight, budget.Lines);
         var frameRate = Math.Min(request.FrameRate, budget.FrameRate);
         var shown = video
             ? $"At {width} × {height}, {frameRate} FPS, {(withAudio ? $"With {budget.AudioBitsPerSecond / 1000:0} kbps Audio" : "Without Audio")}"
             : $"As Sound Only At {budget.AudioBitsPerSecond / 1000:0} kbps";
         s_logger.Info(
-            $"Exporting {Path.GetFileName(request.SourcePath)} From {Formatter.FormatDuration(request.Range.Start)} To {Formatter.FormatDuration(request.Range.End)} {shown}, Aiming Under {Formatter.FormatSize((long)(limit * 1_000_000))}, {budget.Verdict}"
+            $"Exporting {Path.GetFileName(request.SourcePath)} From {Formatter.FormatDuration(request.Range.Start)} To {Formatter.FormatDuration(request.Range.End)} {shown}, Aiming Under {Formatter.FormatSize(budget.TargetBytes)}, {budget.Verdict}"
         );
         if (budget.Verdict == BudgetVerdict.TooSmall)
         {

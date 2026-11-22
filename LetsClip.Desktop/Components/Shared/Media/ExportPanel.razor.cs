@@ -124,8 +124,11 @@ public partial class ExportPanel : IDisposable
     {
         get
         {
-            // Budgeted At Full Size, The Budget Then Picks The Lines
-            var (width, height) = ClipExporter.OutputSize(Frame.Width, Frame.Height);
+            // A Plan Budgets Its Full Box, Off The Frame Itself
+            var (width, height) =
+                Plan == DiscordPlan.Off
+                    ? Frame
+                    : ClipExporter.OutputSize(Frame.Width, Frame.Height);
             return new(Range.Length, width, height, FrameRate, WithAudio, KeepsVideo);
         }
     }
@@ -234,9 +237,9 @@ public partial class ExportPanel : IDisposable
             ? ClipExporter.OutputSize(Frame.Width, Frame.Height, budget.Lines)
             : Frame;
 
-    private double ClipFrameRate => ClipExporter.FrameRateOf(Media, encodes: false);
+    private double ClipFrameRate => ClipExporter.FrameRateOf(Media, planned: false);
 
-    private double FrameRate => ClipExporter.FrameRateOf(Media, encodes: !KeepsClip);
+    private double FrameRate => ClipExporter.FrameRateOf(Media, planned: Plan != DiscordPlan.Off);
 
     // Null For An Exact Copy, Crops Keep Bits Per Pixel
     private ExportBudget? Budget
@@ -250,7 +253,7 @@ public partial class ExportPanel : IDisposable
                 _budgetFor = key;
                 field =
                     SizeBudget.LimitOf(key.Plan) is { } limit ? SizeBudget.Plan(limit, key.Shape)
-                    : key.CropBytes > 0 ? SizeBudget.Plan(key.CropBytes / 1e6, key.Shape)
+                    : key.CropBytes > 0 ? SizeBudget.Keep(key.CropBytes / 1e6, key.Shape)
                     : null;
             }
 
