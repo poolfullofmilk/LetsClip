@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
 $url = 'https://github.com/poolfullofmilk/LetsClip/releases/download/ffmpeg/ffmpeg.zip'
-$expected = '30775F9371E2D5E7EF612E1E60C7F5459D96C8E3D73CF0152EAD76BB49F29B32'
+$expected = '906CC2CE8602F0D3EE33A3C58FEB982E478C833F564A76E079875931911D010F'
 $target = $PSScriptRoot
 $work = Join-Path ([System.IO.Path]::GetTempPath()) ("LetsClip-FFmpeg-" + [guid]::NewGuid().ToString('N'))
 

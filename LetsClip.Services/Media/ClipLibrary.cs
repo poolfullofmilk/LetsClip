@@ -38,15 +38,12 @@ public sealed partial class ClipLibrary : IDisposable
     private static readonly string s_stripSuffix = $".strip{StripCells}.jpg";
 
     // The Sound's Outline, Drawn Under The Strip Once Per File
-    private const string WaveSuffix = ".sound.jpg";
+    private const string WaveSuffix = ".mix.jpg";
 
     // A Zoomed Timeline's Window, Only The Newest Kept Per Clip
     private const string ZoomMark = ".zoom-";
-    private const string ZoomWaveMark = ".zoomsound-";
+    private const string ZoomWaveMark = ".zoommix-";
     private const string WaveSize = "1600x64";
-
-    // A Darker Grey, The Microphone Apart From The Game
-    private const string VoiceColor = "0x999999";
 
     // Decoded Before A Zoomed Window, An Exact Seek Shifts
     private const double WaveLead = 2;
@@ -329,7 +326,9 @@ public sealed partial class ClipLibrary : IDisposable
             metadata.Monitor,
             file.LastWriteTimeUtc,
             metadata.IsEdited,
-            File.Exists(export) ? export : null
+            File.Exists(export) ? export : null,
+            metadata.Shrunk,
+            metadata.Words is { } words ? string.Join(' ', words.Select(word => word.Text)) : null
         );
     }
 

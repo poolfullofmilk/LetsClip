@@ -257,10 +257,8 @@ public static class MediaProbe
                 audio?.CodecName,
                 null,
                 tracks.Count,
-                // LetsClip's Own Mix, Game And Microphone, Named In That Order
-                tracks
-                    .Select(track => track.Tags?.HandlerName)
-                    .SequenceEqual(AudioTracks.Separate),
+                // LetsClip's Own Mix, Then Each Part, Named In That Order
+                AudioTracks.StemsOf([.. tracks.Select(track => track.Tags?.HandlerName)]),
                 audio?.Tags?.HandlerName
             ),
             video?.Index,

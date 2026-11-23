@@ -89,7 +89,14 @@ public sealed partial class ReplayRecorder
             {
                 outcomes.Add(
                     await SaveSafelyAsync(
-                        () => SaveFromAsync(session, end, recordedAt, monitorOf(session.Options)),
+                        () =>
+                            SaveFromAsync(
+                                session,
+                                end,
+                                recordedAt,
+                                monitorOf(session.Options),
+                                saved: (start, to, path) => RememberSave(session, start, to, path)
+                            ),
                         pressed,
                         " Of",
                         "A Clip"
@@ -370,7 +377,8 @@ public sealed partial class ReplayRecorder
         double end,
         DateTimeOffset recordedAt,
         int? monitor,
-        double? since = null
+        double? since = null,
+        Action<double, double, string>? saved = null
     )
     {
         // Waits For The Press's Segment, A Still Window Sends None
@@ -427,7 +435,7 @@ public sealed partial class ReplayRecorder
                     : wanted;
 
             // Exactly The Replay Length, Or All Of A Younger Session
-            return await ClipSaver.SaveAsync(
+            var clip = await ClipSaver.SaveAsync(
                 video,
                 audio,
                 start,
@@ -438,9 +446,17 @@ public sealed partial class ReplayRecorder
                 session.Size,
                 session.Options.GameName,
                 monitor,
-                session.Options.SeparatesMicrophone && audio.Count > 0,
+                audio.Count > 0 ? session.Options.Stems : [],
                 _library
             );
+
+            // A Moving Picture's Clip Can Take What Comes After
+            if (videoOffset == 0)
+            {
+                saved?.Invoke(start, to, clip.Path);
+            }
+
+            return clip;
         }
         finally
         {

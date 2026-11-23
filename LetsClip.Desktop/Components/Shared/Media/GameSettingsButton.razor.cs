@@ -83,6 +83,12 @@ public partial class GameSettingsButton
         _open = false;
     }
 
+    // A Picked Length's Size, Else The Length Default Follows
+    private string ReplayDetail =>
+        _draft.Seconds is { } seconds
+            ? Controller.ReplaySizeText(seconds, _draft)
+            : Formatter.FormatDuration(Controller.Settings.ReplaySeconds);
+
     private static string SecondsLabel(int? seconds)
     {
         return seconds is { } picked ? Formatter.FormatDuration(picked) : "Default";

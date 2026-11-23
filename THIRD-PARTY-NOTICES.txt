@@ -33,6 +33,26 @@ FFmpeg is a trademark of Fabrice Bellard, originator of the FFmpeg project.
 
 ----------------------------------------------------------------------
 
+whisper.cpp 1.9.5, LetsClip's own static build of whisper-cli.exe
+https://github.com/ggml-org/whisper.cpp
+Downloaded once at runtime from this repository's whisper pre-release and
+run as a separate program to recognise speech in clips.
+
+MIT License, Copyright (c) 2023-2026 The ggml authors
+
+The Whisper small model (ggml-small-q5_1.bin), OpenAI's Whisper weights
+converted and quantized by the whisper.cpp project
+https://github.com/openai/whisper
+
+MIT License, Copyright (c) 2022 OpenAI
+
+Silero VAD v6.2.0 (ggml-silero-v6.2.0.bin), converted by the whisper.cpp project
+https://github.com/snakers4/silero-vad
+
+MIT License, Copyright (c) 2020-present Silero Team
+
+----------------------------------------------------------------------
+
 NAudio 3.3.0 (NAudio.Wasapi, NAudio.Core)
 https://github.com/naudio/NAudio
 Used for WASAPI loopback and microphone capture.
@@ -41,7 +61,7 @@ MIT License, Copyright (c) Mark Heath
 
 ----------------------------------------------------------------------
 
-MudBlazor 9.12.0
+MudBlazor 9.14.0
 https://github.com/MudBlazor/MudBlazor
 
 MIT License, Copyright (c) MudBlazor

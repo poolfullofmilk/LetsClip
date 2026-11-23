@@ -2,6 +2,55 @@
 
 Every dated round, newest first: what changed, the owner's picks, what was measured and why. The other files in `Docs` hold the current rules and what LetsClip does now; this one keeps the reasons and numbers behind them, so search it for a name or a number rather than reading it whole. A new round adds its own day at the top.
 
+## 23 November 2026
+
+### Release: v2.0.28
+
+- The round below with a fresh demo, since the editor's Audio row, its new Captions row, the single waveform, the pill grips and the Replay Length sizes all show in it. The demo library was reset from the last take (Ceiling Shot's whole clip back from `.Originals`, Cuphead's 2m gone) and re-dated to Today, Yesterday, Last Week and November (a Monday has no This Week), and Ceiling Shot gained a fourth track, Voice Chat, generated speech-like bursts mixed into its mix track, so the Audio row shows Game, Voice Chat and Microphone. Every clip's details hold empty `Words` and the speech engine was copied in beforehand, so nothing downloads or hears during a take. Recorded from the published exe alone in an empty folder: 208 frames, 29.1 s with the 2.2 s hold, 1.08 MB, played 6% faster than taken and the export's wait six times faster, every frame decoded with `ImageDecoder`.
+- The lone exe test ran first on an empty profile with one speech clip: 30 s after start it downloaded `whisper.zip` from the new pre-release, refused nothing, unpacked it, and heard the clip, 125 words in 11.4 s, with no warning in its log.
+- Found while making the demo: every encode said Drawing Captions for a moment, captions on or not (`ClipExporter.Running`), now only a captioned export does. The take's script first lowered the player's own volume instead of the game's, whose slider rises above its button. The builder first compared each frame with the lossy picture already encoded, so the encoding's own noise counted as change and every frame was written whole (3.88 MB); it now compares with the source pixels last shown.
+
+### Ten Picks From 44 Ideas
+
+- The owner's message, sent while away from his PC: `Go ahead with: 1, 2, 4, 5, 6, 12, 20, 23, 28, Also do 34, but I prefer 1 simple button in Settings instead of it happening automatically, but shows a clean list like GamesAndApps`, `Don't show seperate tracks on the bottom bar, just 1, smooth one is enough`, `The grabber for cropping should also be rounded like the grabber from the bottom bar, consistent look`, and `Every feature, new or old, has to be as simple as possible. I mean not overkill, on weird places, have too many steps, look to confusing`. Then: test everything, do the whole publish flow and turn his PC off afterwards. The other 34 ideas stay unbuilt.
+- Picked: 1 what came after a save, 2 every sound on its own track (voice chat; music cannot be split, see below), 4 replays of 20 and 30 minutes, 5 each replay length's size, 6 a still in the status chip, 12 search by what was said, 20 captions, 23 voice chat cleaned, 28 Post to Discord, 34 Shrink Clips.
+
+### Capture: Voice Chat On Its Own Track And Cleaned
+
+- Game and Voice Chat already recorded the game's and the voice apps' process trees through process loopback; their sound now goes into separate channels (`AudioMixer`, `separateVoice`) and the audio FFmpeg writes the mix, Game, Microphone and Voice Chat, at 8 channels in `7.1` when both parts stand apart and 5 in `5.0` with one. Music on a track of its own was looked at and left: a device loopback is one mix, and Windows' process loopback takes in or leaves out one process tree only, so a third stream would hear the game again.
+- A live recording with the stand-in game (`pattern.exe`, a 440 Hz tone) and a stand-in `DiscordCanary.exe` playing speech: four named tracks, the tone at -29 dB in Game and the speech alone in Voice Chat.
+- The voice cleaning first copied the microphone's chain whole: `speechnorm` then undid Voice Chat Volume, and at 50% the gate, hearing the quieter voice, cut it to -16.5 dB. Voice chat now leaves out `speechnorm` and its volume rides a level channel multiplied in after the gate (`CaptureSession.TrackFilters`): 50% measures -6.0 dB in the filter test and -6.2 dB live. On speech over noise the gaps fell to -62.1 to -91 dB with the words unchanged at -37.7 dB.
+- An export leaving voice chat out wrote a `Game and Microphone` track and the File Card read No Voice Chat.
+
+### Capture: Longer Replays, Their Size, A Still And What Came After
+
+- Replay Length gained 20 and 30 minutes, and every length shows what its save weighs, once, in the list and its field (`About 210 MB` for a minute at 1080p60 Normal; a game's Tune uses the game's own settings), rather than in three rows.
+- The status chip's tooltip shows a still of what records, a fresh one every 2 s while open, from the newest segment (`ReplayRecorder.StillAsync`); checked in the sandbox under the chip's `Holds the Last 41s`.
+- What came after: a clip saved from the running session keeps the session's segments pinned for one replay length after the press, and its editor shows that part past the clip's end; dragging End there saved the 53.5 s test clip again at 65.3 s, frames continuous across the join (the largest gap elsewhere), every frame decoding clean, its trim start kept.
+
+### Media: Speech Heard And Searched, And Captions
+
+- whisper.cpp v1.9.5 built static in the pinned MSYS2 (`Build-Whisper.ps1`: AVX2, no OpenMP, `whisper-cli.exe` 6.6 MB importing only Windows' own DLLs) with the multilingual small model at 5 bit (190 MB) and Silero's v6.2.0 speech detector, zipped to 187 MB (`whisper.zip`, SHA-256 `CEC2B2E6…`), the `whisper` pre-release, downloaded once by installs.
+- In the background a 65 s clip was heard in 15.3 s and a 30 s one in 7.1 s (half the cores, Idle, EcoQoS), clips with a tone alone gave no words, and a recording of known speech came back word for word (`Okay that was a clutch play in overtime, did you see that ceiling shot?`); 21 s of speech took 7 s on four threads at full speed.
+- Found while testing: the Clips search missed words heard after the list was read, so a search now reloads once new words land (`Transcriber.Transcribed`); and cards split `did you` from `see that` mid phrase, so a comma now ends a card too; and a four word phrase left its last word alone (`watch the boost`, then `pads,`), so a phrase now spreads evenly over the fewest cards, longer ones first (`watch the`, `boost pads,`; `ok that was`, `a clutch play`, `in overtime,`).
+- Captions burned in white with a dark edge low in the frame, checked frame by frame on a test pattern (the card's pixels only between its times). A captioned export of the noise test clip took four passes to fit, AMF's HEVC overshooting on noise before the H.264 fallback wrote 56.4 MB in 27.6 s.
+
+### Export: Post To Discord
+
+- A webhook link is checked by its shape, then asked for its channel's name; Connect stays disabled for anything else and a made up link gave `This link did not work, copy it again from Discord`. A local listener standing in for Discord received the multipart upload as Discord's documentation gives it (`payload_json` as JSON, then `files[0]`), and its answers of 413, 404 and 429 gave their messages. No real channel was posted to.
+
+### Media: Shrink Clips
+
+- One button in Settings' Disk Space row, a list like Games and Apps, the owner's words. A test clip came out HEVC with its three named tracks, 20.000 s long, its original in `.Originals`; a copy of the owner's Overwatch clip went from 75.5 MB to 31.2 MB (41%) at 40.8 dB PSNR, 3.8 times real time. Found while testing: rows read Untitled (now the clip's name, else its game, like Recently Deleted), a gap before the picture, and Shrink 0 Clips with nothing ticked (now Shrink Clips, disabled).
+
+### Layout: One Waveform And Pill Grips
+
+- The timeline's waveform is one smooth white outline of the mix again (`.mix.jpg`, so every clip draws it anew), and the crop's grips are pills like the trim grip, two at each corner and one on each side, checked zoomed against the trim grip.
+
+### FFmpeg: Pictures And WAV
+
+- Rebuilt with the `png` decoder, the `image2` and `png_pipe` demuxers and `wav` both ways, for the captions and the speech file: `ffmpeg.zip` 11.5 MB, SHA-256 `906CC2CE…`, `avcodec` 14.9 MB, replaced in place on the `ffmpeg` pre-release. MSYS2's mirrors answered 429 to parallel downloads, so the build downloads one at a time with three tries. All 20 runs of the regression list passed, the four track capture, the speech WAV and the captions overlay among them.
+
 ## 22 November 2026
 
 ### Release: v2.0.27

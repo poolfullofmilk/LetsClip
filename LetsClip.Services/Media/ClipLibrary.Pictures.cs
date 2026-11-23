@@ -133,7 +133,6 @@ public sealed partial class ClipLibrary
     public static Task<string?> EnsureWaveAsync(
         string path,
         double duration,
-        bool separate,
         CancellationToken token,
         TrimRange? window = null
     )
@@ -144,13 +143,10 @@ public sealed partial class ClipLibrary
         // A Late Window Seeks Just Before, The Trim Stays Exact
         var seek = from > WaveLead ? from - WaveLead : 0;
         IReadOnlyList<string> input = seek > 0 ? ["-ss", FFmpeg.Seconds(seek)] : [];
-        var outline =
-            $"atrim={FFmpeg.Seconds(from - seek)}:{FFmpeg.Seconds(to - seek)},showwavespic=s={WaveSize}:scale=sqrt:draw=full:filter=peak";
 
-        // Separate Tracks Draw The Game White, The Microphone Grey
-        var graph = separate
-            ? $"[0:a:1]{outline}:colors=white[game];[0:a:2]{outline}:colors={VoiceColor}[voice];[game][voice]overlay"
-            : $"[0:a:0]{outline}:colors=white";
+        // One Outline Of The Mix, Every Track Together
+        var graph =
+            $"[0:a:0]atrim={FFmpeg.Seconds(from - seek)}:{FFmpeg.Seconds(to - seek)},showwavespic=s={WaveSize}:scale=sqrt:draw=full:filter=peak:colors=white";
         return RenderAsync(
             PicturePathOf(path, window is { } part ? WindowSuffix(ZoomWaveMark, part) : WaveSuffix),
             [.. input, "-i", path, "-filter_complex", graph, "-frames:v", "1", "-q:v", "3"],

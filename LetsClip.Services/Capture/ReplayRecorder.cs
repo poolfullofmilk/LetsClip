@@ -20,12 +20,27 @@ public sealed record CaptureOptions(
     nint GameWindow,
     string? GameName,
     int GameProcess,
-    double VoiceVolume = 1
+    double VoiceVolume = 1,
+    bool CleanVoice = false
 )
 {
-    // Cleaning And Volume Both Filter The Microphone Alone
+    // Voice Apps Record Apart Only Beside A Game's Own Sound
+    public bool SeparatesVoice => SystemAudioId is not null && GameProcess != 0;
+
+    // Cleaning, Volume Or Voice Apart Separate The Microphone
     public bool SeparatesMicrophone =>
-        MicrophoneId is not null && (CleanMicrophone || MicrophoneVolume != 1);
+        MicrophoneId is not null && (CleanMicrophone || MicrophoneVolume != 1 || SeparatesVoice);
+
+    // Every Part Apart Becomes A Track Beside The Mix
+    public string[] Stems =>
+        SeparatesMicrophone || SeparatesVoice
+            ?
+            [
+                AudioTracks.Game,
+                .. SeparatesMicrophone ? [AudioTracks.Microphone] : Array.Empty<string>(),
+                .. SeparatesVoice ? [AudioTracks.Voice] : Array.Empty<string>(),
+            ]
+            : [];
 }
 
 public sealed record SaveOutcome(ClipInfo? Clip, string? Error);
@@ -147,6 +162,51 @@ public sealed partial class ReplayRecorder : IDisposable
                     )
                     : 0;
             }
+        }
+    }
+
+    // The Recorded Picture's Shape, While Something Records
+    public (int Width, int Height)? FrameSize
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return Status.State == CaptureState.Recording ? _session?.Size : null;
+            }
+        }
+    }
+
+    public async Task<bool> StillAsync(string target, CancellationToken token)
+    {
+        // The Newest Keyframe Of What Records, Held While Read
+        CaptureSession? session;
+        Segment? newest;
+        lock (_gate)
+        {
+            session = Status.State == CaptureState.Recording ? _session : null;
+            newest = session?.Video?.Segments.Covering(
+                session.VideoEnd - (CaptureSession.SegmentSeconds / 2),
+                double.MaxValue
+            )
+                is [.., var last]
+                ? last
+                : null;
+            if (session is null || newest is null)
+            {
+                return false;
+            }
+
+            session.Pin(newest.Start);
+        }
+
+        try
+        {
+            return await ClipSaver.StillAsync(newest, target, token);
+        }
+        finally
+        {
+            session.Unpin(newest.Start);
         }
     }
 

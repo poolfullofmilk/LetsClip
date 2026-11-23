@@ -92,6 +92,17 @@ public partial class ClipEditor : IAsyncDisposable
     // The Timeline's Hint Waits, Trimming Never Meets It At Once
     private const double TimelineTipDelay = 1000;
 
+    // Just Saved, What Came After Can Still Join It
+    private ClipExtension? _extension;
+    private double _after;
+    private string? _afterFolder;
+    private string? _afterStripUrl;
+    private string? _afterWaveUrl;
+    private string? _drawnAfter;
+
+    // The Timeline Reaches Past The Clip Over What Came After
+    private double Total => _duration + _after;
+
     // The Timeline's Shown Window, The Whole Clip Unless Zoomed
     private double _viewStart;
     private double _viewEnd;
@@ -132,8 +143,7 @@ public partial class ClipEditor : IAsyncDisposable
         && ClipExporter.KeepsVideo(
             media,
             Controller.Settings.ExportVideo,
-            Controller.Settings.ExportAudio,
-            Controller.Settings.ExportMicrophone
+            Controller.Settings.ExportSound
         );
 
     // A Clip Without Sound Has No Volume To Change
@@ -237,9 +247,15 @@ public partial class ClipEditor : IAsyncDisposable
         // Window Clips Keep Their Capture Rate, Probes Read Low
         var metadata = ClipLibrary.MetadataOf(path);
 
+        // Just Saved, What Came After Shows Past The Clip's End
+        var extension =
+            _extension is { } held && ReplayRecorder.Matches(held, path) ? held
+            : opening ? Controller.Recorder.ExtensionOf(path)
+            : null;
+
         // A Cut Whose Whole Clip Waits In The Recycle Bin
         var recycled =
-            clip is { HasOriginal: false } && metadata is { Cut: true }
+            clip is { HasOriginal: false } && metadata is { Cut: true } or { Shrunk: true }
                 ? await Task.Run(() => ClipLibrary.RecycledOriginalOf(path), token)
                 : null;
         var loaded = new LoadedClip(
@@ -255,6 +271,7 @@ public partial class ClipEditor : IAsyncDisposable
                 : TrimRange.Whole(media.Duration),
             metadata?.Box,
             recycled,
+            extension,
             opening,
             token
         );
@@ -292,17 +309,13 @@ public partial class ClipEditor : IAsyncDisposable
         _recycledOriginal = loaded.RecycledOriginal;
         Controller.Exports.Editor = (loaded.Path, CutHereAsync);
         (_stripUrl, _duration, _range) = (loaded.StripUrl, loaded.Media.Duration, loaded.Range);
-        (_viewStart, _viewEnd) = (0, loaded.Media.Duration);
+        ShowAfter(loaded.Extension, loaded.Media.HasAudio, loaded.Token);
+        (_viewStart, _viewEnd) = (0, Total);
         (_crop, _placeCrop) = (loaded.Crop, true);
         _waveUrl = null;
         if (loaded.Media.HasAudio)
         {
-            _ = LoadWaveAsync(
-                loaded.Path,
-                loaded.Media.Duration,
-                loaded.Media.HasSeparateTracks,
-                loaded.Token
-            );
+            _ = LoadWaveAsync(loaded.Path, loaded.Media.Duration, loaded.Token);
         }
 
         _savedTitle = loaded.Clip.CustomTitle;
@@ -353,8 +366,19 @@ public partial class ClipEditor : IAsyncDisposable
         // The Sound's Outline Joins The Strip Whenever It Is Ready
         if (_waveUrl != _drawnWave && _drawnStrip is not null && !string.IsNullOrEmpty(_strip.Id))
         {
-            _drawnWave = _waveUrl;
+            (_drawnWave, _drawnAfter) = (_waveUrl, null);
             await JavaScript.CallAsync("letsClip.showWave", _strip, _waveUrl);
+        }
+
+        // What Came After Draws Past The Clip's End
+        if (
+            _afterStripUrl != _drawnAfter
+            && _drawnStrip is not null
+            && !string.IsNullOrEmpty(_strip.Id)
+        )
+        {
+            _drawnAfter = _afterStripUrl;
+            await JavaScript.CallAsync("letsClip.showAfter", _strip, _afterStripUrl, _afterWaveUrl);
         }
 
         // The Crop Box Lies Over The Picture Once Drawn
@@ -387,7 +411,8 @@ public partial class ClipEditor : IAsyncDisposable
             _muted,
             CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator,
             _media?.Packets?.Times ?? [],
-            _autoPlay
+            _autoPlay,
+            _after
         );
     }
 
@@ -421,18 +446,101 @@ public partial class ClipEditor : IAsyncDisposable
         SaveNow();
     }
 
-    private async Task LoadWaveAsync(
-        string path,
-        double duration,
-        bool separate,
+    private void ShowAfter(ClipExtension? extension, bool audible, CancellationToken token)
+    {
+        // Each Load Draws What Came After Anew
+        DropAfter();
+        if (extension != _extension)
+        {
+            LetGoOfExtension();
+            _extension =
+                extension is not null && Controller.Recorder.TryHold(extension) ? extension : null;
+        }
+
+        _after = _extension is { } held && !Exporting ? ReplayRecorder.AfterSeconds(held) : 0;
+        if (_extension is { } kept && _after > 0)
+        {
+            _ = LoadAfterAsync(kept, _after, audible, token);
+        }
+    }
+
+    private async Task LoadAfterAsync(
+        ClipExtension extension,
+        double seconds,
+        bool audible,
         CancellationToken token
     )
     {
+        // Pictures Of What Came After, Drawn Past The Clip's End
+        try
+        {
+            var file = await Task.Run(
+                () => ReplayRecorder.AfterFileAsync(extension, seconds),
+                token
+            );
+            if (file is null)
+            {
+                return;
+            }
+
+            // A Newer Clip Opened Meanwhile, Its Copy Goes At Once
+            if (token.IsCancellationRequested)
+            {
+                CacheFolders.Delete(Path.GetDirectoryName(file)!);
+                return;
+            }
+
+            _afterFolder = Path.GetDirectoryName(file);
+            var strip = await Task.Run(
+                () => ClipLibrary.EnsureStripAsync(file, seconds, token),
+                token
+            );
+            var wave = audible
+                ? await Task.Run(() => ClipLibrary.EnsureWaveAsync(file, seconds, token), token)
+                : null;
+            if (!token.IsCancellationRequested && strip is not null)
+            {
+                _afterStripUrl = DesktopShell.ThumbnailUrl(strip);
+                _afterWaveUrl = wave is null ? null : DesktopShell.ThumbnailUrl(wave);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception exception)
+            when (exception
+                    is IOException
+                        or InvalidDataException
+                        or TimeoutException
+                        or OperationCanceledException
+                        or Win32Exception
+            )
+        {
+            // Without Pictures, The Part After Stays Plain
+            s_logger.Debug($"Failed To Draw What Came After {exception.GetType().Name}");
+        }
+    }
+
+    private void DropAfter()
+    {
+        // The Pictures' Own Copy Of What Came After Goes
+        (_afterStripUrl, _afterWaveUrl, _drawnAfter, _after) = (null, null, null, 0);
+        if (Interlocked.Exchange(ref _afterFolder, null) is { } folder)
+        {
+            CacheFolders.Delete(folder);
+        }
+    }
+
+    private void LetGoOfExtension()
+    {
+        if (Interlocked.Exchange(ref _extension, null) is { } extension)
+        {
+            Controller.Recorder.Release(extension);
+        }
+    }
+
+    private async Task LoadWaveAsync(string path, double duration, CancellationToken token)
+    {
         // A Missing Outline Leaves The Plain Strip
-        var wave = await Task.Run(
-            () => ClipLibrary.EnsureWaveAsync(path, duration, separate, token),
-            token
-        );
+        var wave = await Task.Run(() => ClipLibrary.EnsureWaveAsync(path, duration, token), token);
         if (!token.IsCancellationRequested)
         {
             _waveUrl = wave is null ? null : DesktopShell.ThumbnailUrl(wave);
@@ -561,6 +669,8 @@ public partial class ClipEditor : IAsyncDisposable
         LetGoOfCuts();
         _saveTimer?.Dispose();
         EndClip();
+        DropAfter();
+        LetGoOfExtension();
         await DetachAsync();
         RenameLeftClip();
         _page?.Dispose();
@@ -575,6 +685,7 @@ public partial class ClipEditor : IAsyncDisposable
         TrimRange Range,
         CropBox? Crop,
         DeletedClip? RecycledOriginal,
+        ClipExtension? Extension,
         bool Opening,
         CancellationToken Token
     );

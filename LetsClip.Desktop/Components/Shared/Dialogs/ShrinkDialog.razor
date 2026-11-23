@@ -1,0 +1,138 @@
+<MudDialog>
+
+    <TitleContent>
+        <DialogTitle Text="Shrink Clips"
+                     Dialog="MudDialog"
+                     Closable="@(_running is null)" />
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.body2"
+                     Class="mud-text-secondary">
+                @NoteText
+            </MudText>
+            @if (_rows is null)
+            {
+                <Loading />
+            }
+            else if (_rows.Count == 0)
+            {
+                <EmptyState Icon="@Icons.Material.Rounded.Compress"
+                            Text="Every Clip is Already Small" />
+            }
+            else if (_running is { } running)
+            {
+                <MudStack Spacing="2"
+                          Class="appear">
+                    <MudStack Row
+                              Justify="Justify.SpaceBetween">
+                        <MudText Typo="Typo.body2"
+                                 Class="ellipsis">
+                            @running.Title
+                        </MudText>
+                        <MudText Typo="Typo.body2"
+                                 Class="mud-text-secondary flex-shrink-0">
+                            @($"{running.Index} of {running.Count}")
+                        </MudText>
+                    </MudStack>
+                    <MudProgressLinear Color="Color.Info"
+                                       Value="@(running.Fraction * 100)"
+                                       Rounded
+                                       Size="Size.Medium" />
+                </MudStack>
+            }
+            else
+            {
+                @* Shrink Table *@
+                <MudTable T="ClipInfo"
+                          Items="_rows"
+                          Dense
+                          Hover
+                          Outlined
+                          Elevation="0"
+                          Class="fit games-table"
+                          Style="max-height:50vh">
+
+                    <RowTemplate>
+                        <MudTd Class="shrink-picture">
+                            @if (context.ThumbnailPath is { } thumbnail)
+                            {
+                                <MudImage Src="@DesktopShell.ThumbnailUrl(thumbnail)"
+                                          Alt=""
+                                          Class="export-picture"
+                                          loading="lazy" />
+                            }
+                            else
+                            {
+                                <MudElement HtmlTag="div"
+                                            Class="export-picture" />
+                            }
+                        </MudTd>
+                        <MudTd Class="title-cell">
+                            <MudText Typo="Typo.body2"
+                                     Class="ellipsis">
+                                @TitleOf(context)
+                            </MudText>
+                            <MudText Typo="Typo.caption"
+                                     Class="mud-text-secondary ellipsis d-block">
+                                @FactsOf(context)
+                            </MudText>
+                        </MudTd>
+                        <MudTd Class="game-switch">
+                            @* Shrink Switch *@
+                            <MudSwitch T="bool"
+                                       Value="_picked.Contains(context.Path)"
+                                       ValueChanged="on => Pick(context, on)"
+                                       Color="Color.Info"
+                                       aria-label="@($"Shrink {TitleOf(context)}")"
+                                       Class="ma-0" />
+                        </MudTd>
+                    </RowTemplate>
+
+                </MudTable>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        @if (_running is not null)
+        {
+            <MudSpacer />
+            @* Cancel Shrinking Button *@
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Error"
+                       OnClick="Cancel">
+                Cancel
+            </MudButton>
+        }
+        else
+        {
+            @* All Chip *@
+            <MudChip T="string"
+                     Icon="@AllIcon"
+                     IconColor="@(_picked.Count > 0 ? Color.Info : Color.Default)"
+                     Variant="Variant.Text"
+                     Disabled="@(_rows is not { Count: > 0 })"
+                     OnClick="ToggleAll"
+                     Class="ma-0">
+                All
+            </MudChip>
+            <MudSpacer />
+            @if (SavingText is { } saving)
+            {
+                <MudText Typo="Typo.body2"
+                         Class="mud-text-secondary">
+                    @saving
+                </MudText>
+            }
+            @* Shrink Button *@
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Info"
+                       StartIcon="@Icons.Material.Rounded.Compress"
+                       Disabled="@(_picked.Count == 0)"
+                       OnClick="ShrinkAsync">
+                @ShrinkText
+            </MudButton>
+        }
+    </DialogActions>
+
+</MudDialog>

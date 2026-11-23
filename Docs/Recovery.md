@@ -77,6 +77,12 @@ The owner's rule: consistent on every kind of system, and anything that can fix 
 | A clip is deleted by mistake | Recently Deleted lists it from the Recycle Bin and puts it back with its details and whole clip, a name taken since getting (2) (`ClipLibrary.Restore`) | The card again |
 | The Recycle Bin cannot be read (a drive without one, a record in use) | Logged once, the list shows what it read; Open Recycle Bin still opens Windows' own | Fewer rows, or No Deleted Clips |
 | A restore fails (the file in use, the folder gone) | Restore All stops there, nothing half moved | `The clip could not be restored, it may be in use` |
+| The speech download fails or does not hash like `Transcriber.ZipHash` | Logged once, tried again 10 minutes later, nothing half unpacked kept (the `ready-` marker comes last) | Nothing, search finds no words until it lands |
+| `whisper-cli` crashes (an illegal instruction, a broken model) | Hearing stops for this run, logged with its exit code; a clip that fails alone is skipped until the next start | Nothing |
+| A post to Discord fails | The export stays where it is | `Too big for this Discord server, export it for a smaller plan`, `The Discord channel's link stopped working, connect it again in Settings`, `Discord asked to wait, try again in a moment` or `Discord could not be reached, try again` |
+| A pasted webhook link does not work | Nothing is saved | `This link did not work, copy it again from Discord` |
+| A shrink fails or its file does not check out | That clip stays as it was, the encode deleted, the others go on | `Shrank 3 clips by 120 MB, 1 could not be shrunk` |
+| A clip's after part is gone (a hold, the file changed) | The clip stays as saved | The timeline ends at the clip's end |
 
 ## Reliability Research And Tests
 

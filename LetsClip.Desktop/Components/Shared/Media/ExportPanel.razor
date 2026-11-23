@@ -37,23 +37,20 @@
     @if (Media.HasSeparateTracks)
     {
         <SettingRow Title="Audio">
-            @* Game Audio Volume *@
-            <VolumeButton Text="@(KeepsGame ? "Mute Game Audio" : "Unmute Game Audio")"
-                          Filled
-                          Disabled="@SoundLocked(true)"
-                          Slides="KeepsMicrophone"
-                          OnClick="ToggleAudio"
-                          Value="@(KeepsGame ? GameVolume : 0)"
-                          ValueChanged="SetGameVolumeAsync" />
-            @* Microphone Volume *@
-            <VolumeButton Text="@(KeepsMicrophone ? "Mute Microphone" : "Unmute Microphone")"
-                          Filled
-                          IsMicrophone
-                          Disabled="@SoundLocked(false)"
-                          Slides="KeepsGame"
-                          OnClick="ToggleMicrophone"
-                          Value="@(KeepsMicrophone ? MicrophoneVolume : 0)"
-                          ValueChanged="SetMicrophoneVolumeAsync" />
+            @foreach (var part in ShownParts)
+            {
+                @* Part Volume *@
+                <VolumeButton @key="part"
+                              Text="@VolumeText(part)"
+                              Filled
+                              OnIcon="@PartIcon(part, true)"
+                              OffIcon="@PartIcon(part, false)"
+                              Disabled="@SoundLocked(part)"
+                              Slides="@Slides(part)"
+                              OnClick="@(() => TogglePartAsync(part))"
+                              Value="@(Sound.Keeps(part) ? Sound.LevelOf(part) : 0)"
+                              ValueChanged="@(level => SetLevelAsync(part, level))" />
+            }
         </SettingRow>
     }
     else if (Media.HasAudio)
@@ -64,8 +61,30 @@
                         Text="@(WithAudio ? "Mute Audio" : "Unmute Audio")"
                         Color="@(WithAudio ? Color.Default : Color.Error)"
                         Filled
-                        Disabled="@SoundLocked(true)"
-                        OnClick="ToggleAudio" />
+                        Disabled="@SoundLocked(AudioTracks.Game)"
+                        OnClick="@(() => TogglePartAsync(AudioTracks.Game))" />
+        </SettingRow>
+    }
+    @if (Media.HasAudio)
+    {
+        <SettingRow Title="Captions"
+                    Switch="@(CaptionsOn && _words is not { Count: 0 })"
+                    SwitchChanged="SetCaptionsAsync"
+                    SwitchDisabled="CaptionsLocked">
+            @if (_hearing)
+            {
+                @* Hearing Spinner *@
+                <MudProgressCircular Color="Color.Info"
+                                     Size="Size.Small"
+                                     Indeterminate />
+            }
+            else if (CaptionsDetail is { } detail)
+            {
+                <MudText Typo="Typo.body2"
+                         Class="mud-text-secondary">
+                    @detail
+                </MudText>
+            }
         </SettingRow>
     }
     <SettingRow Title="Length">
@@ -209,19 +228,23 @@
                 </MudText>
             </MudElement>
         </MudStack>
-        @if (_leftOut is { } leftOut)
+        @if (_leftOut.Count > 0)
         {
-            @* Left Out Chip *@
             <MudStack Row
+                      Spacing="2"
                       Class="appear pt-1">
-                <MudChip T="string"
-                         Icon="@leftOut.Icon"
-                         IconColor="Color.Error"
-                         Size="Size.Small"
-                         Variant="Variant.Text"
-                         Class="ma-0">
-                    @leftOut.Text
-                </MudChip>
+                @foreach (var leftOut in _leftOut)
+                {
+                    @* Left Out Chip *@
+                    <MudChip T="string"
+                             Icon="@leftOut.Icon"
+                             IconColor="Color.Error"
+                             Size="Size.Small"
+                             Variant="Variant.Text"
+                             Class="ma-0">
+                        @leftOut.Text
+                    </MudChip>
+                }
             </MudStack>
         }
         <MudStack Row
@@ -236,6 +259,16 @@
                        OnClick="CopyFile">
                 Copy File
             </MudButton>
+            @if (Controller.Settings.DiscordWebhook is not null)
+            {
+                @* Post Button *@
+                <IconButton Icon="@Icons.Material.Rounded.Send"
+                            Text="Post to Discord"
+                            Filled
+                            Square
+                            Busy="_posting"
+                            OnClick="() => PostAsync(result)" />
+            }
             @* Show In Folder Button *@
             <IconButton Icon="@Icons.Material.Rounded.FolderOpen"
                         Text="Show in Folder"

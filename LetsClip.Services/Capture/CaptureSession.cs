@@ -136,6 +136,7 @@ public sealed class CaptureSession(
                 Options.SystemAudioId,
                 Options.MicrophoneId,
                 Options.SeparatesMicrophone,
+                Options.SeparatesVoice,
                 Options.MicrophoneVolume,
                 Options.GameProcess,
                 Options.VoiceVolume
@@ -429,11 +430,29 @@ public sealed class CaptureSession(
     public static string VoiceFilters(bool clean, double volume)
     {
         // Cleaned First, The Gate Hears The Microphone Unchanged
-        var cleaning = clean ? $"{VoiceCleaning}," : "";
+        var cleaning = clean ? $"{CleaningOf("")}," : "";
         return string.Create(
             CultureInfo.InvariantCulture,
             $"{cleaning}volume={volume}{LimiterFor(volume)}"
         );
+    }
+
+    private static string CleaningOf(string part)
+    {
+        // Voice Chat Keeps Its Level, Only The Microphone Is Raised
+        var chain =
+            part == "voice"
+                ? VoiceCleaning[
+                    ..VoiceCleaning.LastIndexOf(",speechnorm", StringComparison.Ordinal)
+                ]
+                : VoiceCleaning;
+
+        // Each Cleaned Part Names Its Own Pads In One Graph
+        return chain
+            .Replace("[dry]", $"[{part}dry]", StringComparison.Ordinal)
+            .Replace("[key]", $"[{part}key]", StringComparison.Ordinal)
+            .Replace("[band]", $"[{part}band]", StringComparison.Ordinal)
+            .Replace("[late]", $"[{part}late]", StringComparison.Ordinal);
     }
 
     private static string LimiterFor(double volume)
@@ -444,32 +463,20 @@ public sealed class CaptureSession(
 
     private static List<string> AudioArguments(CaptureOptions options)
     {
-        // Microphone On Channels Three And Four, Halved Volume On Five
-        var separate = options.SeparatesMicrophone;
-
-        // Cleaned In Mono, One Channel Is Half The Work
-        var microphone = options.CleanMicrophone
-            ? $"pan=mono|c0=0.5*c2+0.5*c3,{VoiceCleaning},pan=stereo|c0=c0|c1=c0"
-            : "pan=stereo|c0=c2|c1=c3";
-        var limiter = LimiterFor(options.MicrophoneVolume);
-        IReadOnlyList<string> layout = separate
-            ? ["-ac", "5", "-ch_layout", "5.0"]
-            : ["-ac", "2", "-ch_layout", "stereo"];
-
-        // The Mix Plays Everywhere, Game And Voice Ride Beside It
-        IReadOnlyList<string> filters = separate
-            ?
-            [
-                "-filter_complex",
-                $"[0:a]asplit=3[a][b][c];[a]pan=stereo|c0=c0|c1=c1,asplit[system][game];[b]{microphone}[clean];[c]pan=stereo|c0=2*c4|c1=2*c4[volume];[clean][volume]amultiply{limiter},asplit[voice][microphone];[system][voice]amix=inputs=2:normalize=0{Limiter}[mix]",
-                "-map",
-                "[mix]",
-                "-map",
-                "[game]",
-                "-map",
-                "[microphone]",
-            ]
-            : [];
+        // Game, Then Microphone And Its Volume, Then Voice Chat
+        var channels = 2 + (options.SeparatesMicrophone ? 3 : 0) + (options.SeparatesVoice ? 3 : 0);
+        IReadOnlyList<string> layout =
+        [
+            "-ac",
+            channels.ToString(CultureInfo.InvariantCulture),
+            "-ch_layout",
+            channels switch
+            {
+                5 => "5.0",
+                8 => "7.1",
+                _ => "stereo",
+            },
+        ];
         return
         [
             "-hide_banner",
@@ -485,7 +492,7 @@ public sealed class CaptureSession(
             .. layout,
             "-i",
             "pipe:0",
-            .. filters,
+            .. options.Stems.Length > 0 ? TrackFilters(options) : [],
             "-c:a",
             "aac",
             "-b:a",
@@ -495,6 +502,69 @@ public sealed class CaptureSession(
             LeadSeconds.ToString(CultureInfo.InvariantCulture),
             .. SegmentArguments(),
         ];
+    }
+
+    private static List<string> TrackFilters(CaptureOptions options)
+    {
+        // The Mix Plays Everywhere, Each Part Rides Beside It
+        List<string> inputs = ["[game]"];
+        List<string> parts = ["[game]pan=stereo|c0=c0|c1=c1,asplit[gameMix][gameTrack]"];
+        if (options.SeparatesMicrophone)
+        {
+            inputs.AddRange(["[microphone]", "[level]"]);
+            parts.Add(
+                $"[microphone]{StereoOf(2, options.CleanMicrophone, "microphone")}[clean];[level]pan=stereo|c0=2*c4|c1=2*c4[volume];[clean][volume]amultiply{LimiterFor(options.MicrophoneVolume)},asplit[microphoneMix][microphoneTrack]"
+            );
+        }
+
+        if (options.SeparatesVoice)
+        {
+            // Its Level Follows Cleaning, So The Gate Hears It Unchanged
+            var first = options.SeparatesMicrophone ? 5 : 2;
+            inputs.AddRange(["[voice]", "[voiceLevel]"]);
+            parts.Add(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"[voice]{StereoOf(first, options.CleanVoice, "voice")}[voiceClean];[voiceLevel]pan=stereo|c0=2*c{first + 2}|c1=2*c{first + 2}[voiceVolume];[voiceClean][voiceVolume]amultiply{Limiter},asplit[voiceMix][voiceTrack]"
+                )
+            );
+        }
+
+        // The Same Order The Stems Are Named In
+        var names = inputs
+            .Where(input => input is not "[level]" and not "[voiceLevel]")
+            .Select(input => input[1..^1]);
+        var mixed = string.Concat(names.Select(name => $"[{name}Mix]"));
+        List<string> filters =
+        [
+            "-filter_complex",
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"[0:a]asplit={inputs.Count}{string.Concat(inputs)};{string.Join(";", parts)};{mixed}amix=inputs={names.Count()}:normalize=0{Limiter}[mix]"
+            ),
+            "-map",
+            "[mix]",
+        ];
+        foreach (var name in names)
+        {
+            filters.AddRange(["-map", $"[{name}Track]"]);
+        }
+
+        return filters;
+    }
+
+    private static string StereoOf(int first, bool clean, string part)
+    {
+        // Cleaned In Mono, One Channel Is Half The Work
+        return clean
+            ? string.Create(
+                CultureInfo.InvariantCulture,
+                $"pan=mono|c0=0.5*c{first}+0.5*c{first + 1},{CleaningOf(part)},pan=stereo|c0=c0|c1=c0"
+            )
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $"pan=stereo|c0=c{first}|c1=c{first + 1}"
+            );
     }
 
     private static List<string> SegmentArguments(bool flushPackets = false)

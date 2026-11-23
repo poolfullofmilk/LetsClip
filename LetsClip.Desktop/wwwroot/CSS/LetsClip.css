@@ -45,6 +45,8 @@
     /* A Full Button's Height, Which Square Icon Buttons Share */
     --action-size: calc(var(--mud-typography-button-size) * var(--mud-typography-button-lineheight) + 12px);
     --picture-shadow: 0 2px 12px 1px rgb(0 0 0 / 80%);
+    /* The Same Shadow Round A Crop Grip's Two Pills */
+    --grip-shadow: 0 2px 6px rgb(0 0 0 / 80%);
     /* One Screen Pixel In CSS Pixels, Kept Current By Script */
     --device-pixel: 1px;
     /* The Scrollbar As Drawn, Whole Screen Pixels Rounded Down */
@@ -510,6 +512,23 @@
 
     .mud-tooltip.mud-tooltip-default.mud-tooltip-arrow::after {
         border-color: var(--lifted-surface) transparent transparent transparent;
+    }
+
+/* What Records Now, Above The Status Chip's Words */
+.status-still {
+    width: min(240px, calc(160px * var(--still-aspect)));
+    aspect-ratio: var(--still-aspect);
+    margin: 4px auto 6px;
+    overflow: hidden;
+    border-radius: var(--radius-thumb);
+    background-color: var(--inset-fill);
+}
+
+    .status-still img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
     }
 
 /* Tooltips Step Aside While A Menu Or Form Is Open */

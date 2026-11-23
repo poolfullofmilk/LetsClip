@@ -1,8 +1,10 @@
 @* Tooltip *@
 <MudTooltip Text="@Text"
+            TooltipContent="Content"
+            VisibleChanged="VisibleChanged"
             RootClass="@RootClass"
             Placement="Placement"
-            Disabled="@(Disabled || string.IsNullOrEmpty(Text))"
+            Disabled="@(Disabled || (string.IsNullOrEmpty(Text) && Content is null))"
             ShowOnFocus="false"
             Delay="Delay"
             Class="@Class"

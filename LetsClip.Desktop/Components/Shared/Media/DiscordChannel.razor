@@ -1,0 +1,61 @@
+@* Discord Channel *@
+<MudElement HtmlTag="div"
+            Class="d-flex align-center justify-end gap-2">
+    @if (Controller.Settings.DiscordChannel is { } channel)
+    {
+        <MudText Typo="Typo.body2"
+                 Class="mud-text-secondary ellipsis">
+            @channel
+        </MudText>
+        @* Disconnect Button *@
+        <IconButton Icon="@Icons.Material.Rounded.LinkOff"
+                    Text="Disconnect Discord"
+                    Color="Color.Error"
+                    Filled
+                    OnClick="Disconnect" />
+    }
+    else
+    {
+        @* Connect Button *@
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Info"
+                   Size="Size.Small"
+                   StartIcon="@Icons.Material.Rounded.Link"
+                   OnClick="Open">
+            Connect
+        </MudButton>
+    }
+    @* Connect Popover *@
+    <FormPopover Open="_open"
+                 Closed="Close">
+        <ChildContent>
+            <MudStack Spacing="4"
+                      Class="pa-3">
+                <MudText Typo="Typo.subtitle2">Discord Channel</MudText>
+                @* Webhook Field *@
+                <MudTextField T="string"
+                              @bind-Value="_link"
+                              Label="Webhook Link"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              Immediate
+                              aria-label="Webhook Link" />
+                <MudText Typo="Typo.caption"
+                         Class="mud-text-secondary">
+                    In Discord, open the channel's settings, then Integrations, Webhooks, New Webhook and Copy Webhook URL
+                </MudText>
+            </MudStack>
+        </ChildContent>
+        <Footer>
+            <MudSpacer />
+            @* Connect Link Button *@
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Info"
+                       Size="Size.Small"
+                       Disabled="@(!CanConnect)"
+                       OnClick="ConnectAsync">
+                Connect
+            </MudButton>
+        </Footer>
+    </FormPopover>
+</MudElement>

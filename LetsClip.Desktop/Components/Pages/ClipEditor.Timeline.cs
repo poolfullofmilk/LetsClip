@@ -2,6 +2,7 @@ using System.Globalization;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
 using LetsClip.Desktop.Interop;
+using LetsClip.Services.Capture;
 using LetsClip.Services.Media;
 using Microsoft.JSInterop;
 
@@ -25,17 +26,40 @@ public partial class ClipEditor
     [JSInvokable]
     public void OnRange(double start, double end)
     {
+        // Dragged Past The Clip's End, What Came After Joins It
+        if (end > _duration + (TrimRange.Step / 2) && _after > 0 && !Exporting)
+        {
+            _ = ExtendToAsync(start, Math.Min(end, Total));
+            return;
+        }
+
         // The Page Script Dragged The Handles, Here The Range Settles
         SetRange(TrimRange.Fit(start, end, _duration));
         StateHasChanged();
         _panel?.ShowLive(null, null);
     }
 
+    private async Task ExtendToAsync(double start, double end)
+    {
+        if (_path is not { } path || _extension is not { } extension)
+        {
+            return;
+        }
+
+        // Saved Again Longer, The Editor Reloads Without A Flash
+        _panel?.ShowLive(new TrimRange(start, end), null);
+        await ReplaceFileAsync(async () =>
+        {
+            await ReplayRecorder.ExtendAsync(extension, path, end, start);
+            return path;
+        });
+    }
+
     [JSInvokable]
     public void OnRanging(double start, double end)
     {
         // Mid Drag The Export's Numbers Follow, Nothing Is Saved
-        _panel?.ShowLive(TrimRange.Fit(start, end, _duration), null);
+        _panel?.ShowLive(TrimRange.Fit(start, end, Total), null);
     }
 
     [JSInvokable]
@@ -52,7 +76,7 @@ public partial class ClipEditor
         // Settled After The Wheel, Blazor Draws The Same Window
         (_viewStart, _viewEnd) = (start, end);
         StateHasChanged();
-        if (_path is not { } path || end - start >= _duration - 0.001)
+        if (_path is not { } path || end - start >= Total - 0.001 || start >= _duration - 1)
         {
             return;
         }
@@ -60,8 +84,7 @@ public partial class ClipEditor
         // A Zoomed Window Gets Its Own Strip, The Newest Wins
         var zoom = ++_zooms;
         var (duration, token) = (_duration, _lifetime?.Token ?? CancellationToken.None);
-        var window = new TrimRange(start, end);
-        var separate = _media?.HasSeparateTracks == true;
+        var window = new TrimRange(start, Math.Min(end, _duration));
         try
         {
             // The Strip And The Outline Are Made Side By Side
@@ -72,7 +95,7 @@ public partial class ClipEditor
             var wave =
                 _media?.HasAudio == true
                     ? await Task.Run(
-                        () => ClipLibrary.EnsureWaveAsync(path, duration, separate, token, window),
+                        () => ClipLibrary.EnsureWaveAsync(path, duration, token, window),
                         token
                     )
                     : null;
@@ -84,8 +107,8 @@ public partial class ClipEditor
                     _strip,
                     DesktopShell.ThumbnailUrl(strip),
                     wave is null ? null : DesktopShell.ThumbnailUrl(wave),
-                    start,
-                    end
+                    window.Start,
+                    window.End
                 );
             }
         }
@@ -216,9 +239,9 @@ public partial class ClipEditor
 
     // A Zoomed Window's Place In The Whole Clip
     private string ZoomStyle =>
-        _duration <= 0 || _viewEnd - _viewStart >= _duration - 0.001
+        Total <= 0 || _viewEnd - _viewStart >= Total - 0.001
             ? "display:none"
-            : $"left:{Exact(_viewStart / _duration * 100)}%; width:{Exact((_viewEnd - _viewStart) / _duration * 100)}%";
+            : $"left:{Exact(_viewStart / Total * 100)}%; width:{Exact((_viewEnd - _viewStart) / Total * 100)}%";
 
     private string HandleStyle(double seconds)
     {

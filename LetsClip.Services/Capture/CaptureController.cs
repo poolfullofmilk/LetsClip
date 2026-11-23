@@ -76,6 +76,14 @@ public sealed class CaptureController : IDisposable
         Games.WindowChanged += () => _ = StepAsync(null);
         RefreshMonitors();
         _ = ScanGamesAsync();
+
+        // Speech Is Heard While No Game Records
+        Transcripts = new Transcriber(
+            Library,
+            () =>
+                Recorder.Status.State == CaptureState.Recording
+                && Recorder.Options?.GameWindow is not 0
+        );
     }
 
     public event Action? Changed;
@@ -91,6 +99,8 @@ public sealed class CaptureController : IDisposable
     public GameWatcher Games { get; } = new();
 
     public ExportRunner Exports { get; } = new();
+
+    public Transcriber Transcripts { get; }
 
     public IReadOnlyList<MonitorInfo> Monitors { get; private set; } = [];
 
@@ -168,14 +178,25 @@ public sealed class CaptureController : IDisposable
     public string SaveText =>
         $"Save Last {Formatter.FormatDuration(IsRecording ? Recorder.Options?.Seconds ?? Settings.ReplaySeconds : Math.Ceiling(Recorder.KeptSeconds))}";
 
-    public long ReplayBytes(int seconds)
+    public string ReplaySizeText(int seconds, GameCapture? game = null)
     {
-        // A Replay's Cache At The Picked Settings
+        // What A Save Of The Whole Replay Weighs
+        return $"About {Formatter.FormatSize(ReplayBytes(seconds, game))}";
+    }
+
+    public long ReplayBytes(int seconds, GameCapture? game = null)
+    {
+        // A Replay's Cache At The Picked Or A Game's Settings
         var (width, height) = (_gameMonitor ?? SelectedMonitor) is { } monitor
-            ? ReplayRecorder.OutputSize(monitor, Settings.Resolution)
+            ? ReplayRecorder.OutputSize(monitor, game?.Resolution ?? Settings.Resolution)
             : (1920, 1080);
-        return VideoEncoders.AverageBytesPerSecond(width, height, FrameRate, Settings.Quality)
-            * seconds;
+        var rate = FrameRateChoices.Where(choice => choice <= (game?.FrameRate ?? FrameRate)).Max();
+        return VideoEncoders.AverageBytesPerSecond(
+                width,
+                height,
+                rate,
+                game?.Quality ?? Settings.Quality
+            ) * seconds;
     }
 
     public bool GamesScanned => _installedGames is not null;
@@ -409,6 +430,7 @@ public sealed class CaptureController : IDisposable
             _ = Task.Run(WarmUpEncoderAsync);
         }
 
+        Transcripts.Start();
         return StepAsync(null);
     }
 
@@ -645,6 +667,7 @@ public sealed class CaptureController : IDisposable
             if (_holds != CaptureHolds.None)
             {
                 Recorder.DiscardKeptReplay();
+                Recorder.ForgetExtensions();
             }
 
             // Nothing To Do Unless Options Differ Or An Error Clears
@@ -709,7 +732,7 @@ public sealed class CaptureController : IDisposable
         // One Line A Log Reader Can Compare Between Steps
         return options is null
             ? "Nothing"
-            : $"{(options.GameWindow != 0 ? "A Game Window On " : "")}{options.Monitor.Label}, {options.Seconds} s, {options.Resolution}p, {options.FrameRate} FPS, {options.Quality}, System Audio {(options.GameProcess != 0 ? $"Of The Game And Voice Chat At {options.VoiceVolume * 100:0}%" : options.SystemAudioId switch { null => "Off", "" => "Automatic", _ => "Picked" })}, Microphone {options.MicrophoneId switch { null => "Off", "" => "Automatic", _ => "Picked" }}{(options.CleanMicrophone ? " Cleaned" : "")}{(options.MicrophoneId is null ? "" : $" At {options.MicrophoneVolume * 100:0}%")}";
+            : $"{(options.GameWindow != 0 ? "A Game Window On " : "")}{options.Monitor.Label}, {options.Seconds} s, {options.Resolution}p, {options.FrameRate} FPS, {options.Quality}, System Audio {(options.GameProcess != 0 ? $"Of The Game And Voice Chat At {options.VoiceVolume * 100:0}%{(options.CleanVoice ? ", Voice Chat Cleaned" : "")}" : options.SystemAudioId switch { null => "Off", "" => "Automatic", _ => "Picked" })}, Microphone {options.MicrophoneId switch { null => "Off", "" => "Automatic", _ => "Picked" }}{(options.CleanMicrophone ? " Cleaned" : "")}{(options.MicrophoneId is null ? "" : $" At {options.MicrophoneVolume * 100:0}%")}";
     }
 
     private CaptureOptions? WantedOptions()
@@ -765,7 +788,8 @@ public sealed class CaptureController : IDisposable
             window,
             window != 0 ? Games.GameName : null,
             gameAudio,
-            gameAudio != 0 ? settings.VoiceVolume : 1
+            gameAudio != 0 ? settings.VoiceVolume : 1,
+            gameAudio != 0 && settings.NoiseCancellation
         );
     }
     #endregion
@@ -774,6 +798,7 @@ public sealed class CaptureController : IDisposable
     {
         _closing.Cancel();
         Games.Dispose();
+        Transcripts.Dispose();
         Recorder.Dispose();
         Library.Dispose();
         GC.SuppressFinalize(this);

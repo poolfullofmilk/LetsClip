@@ -139,53 +139,85 @@
     box-sizing: content-box;
     width: var(--arm);
     height: var(--arm);
-    background:
-        linear-gradient(var(--grip), var(--grip)) var(--grip-x) var(--grip-y) / var(--arm) var(--grip-width) no-repeat content-box,
-        linear-gradient(var(--grip), var(--grip)) var(--grip-x) var(--grip-y) / var(--grip-width) var(--arm) no-repeat content-box;
-    filter: drop-shadow(var(--icon-shadow));
+    filter: drop-shadow(var(--grip-shadow));
 }
 
+    /* Pills Like The Trim Grip, Two Meet In Each Corner */
+    .crop-grip::before,
+    .crop-grip::after {
+        content: "";
+        position: absolute;
+        width: var(--grip-width);
+        height: var(--arm);
+        border-radius: var(--radius-pill);
+        background-color: var(--grip);
+    }
+
+    .crop-grip::before {
+        width: var(--arm);
+        height: var(--grip-width);
+    }
+
     .crop-grip[data-grip="nw"] {
-        --grip-x: left;
-        --grip-y: top;
         top: 0;
         left: 0;
         padding: var(--inset) 0 0 var(--inset);
         cursor: nwse-resize;
     }
 
+        .crop-grip[data-grip="nw"]::before,
+        .crop-grip[data-grip="nw"]::after {
+            top: var(--inset);
+            left: var(--inset);
+        }
+
     .crop-grip[data-grip="ne"] {
-        --grip-x: right;
-        --grip-y: top;
         top: 0;
         right: 0;
         padding: var(--inset) var(--inset) 0 0;
         cursor: nesw-resize;
     }
 
+        .crop-grip[data-grip="ne"]::before,
+        .crop-grip[data-grip="ne"]::after {
+            top: var(--inset);
+            right: var(--inset);
+        }
+
     .crop-grip[data-grip="sw"] {
-        --grip-x: left;
-        --grip-y: bottom;
         bottom: 0;
         left: 0;
         padding: 0 0 var(--inset) var(--inset);
         cursor: nesw-resize;
     }
 
+        .crop-grip[data-grip="sw"]::before,
+        .crop-grip[data-grip="sw"]::after {
+            bottom: var(--inset);
+            left: var(--inset);
+        }
+
     .crop-grip[data-grip="se"] {
-        --grip-x: right;
-        --grip-y: bottom;
         right: 0;
         bottom: 0;
         padding: 0 var(--inset) var(--inset) 0;
         cursor: nwse-resize;
     }
 
-    /* A Bar Mid Each Side Moves That Side Alone */
+        .crop-grip[data-grip="se"]::before,
+        .crop-grip[data-grip="se"]::after {
+            right: var(--inset);
+            bottom: var(--inset);
+        }
+
+    /* A Pill Mid Each Side Moves That Side Alone */
     .crop-grip:is([data-grip="n"], [data-grip="e"], [data-grip="s"], [data-grip="w"]) {
         --reach: calc(var(--arm) - var(--grip-width));
-        background: linear-gradient(var(--grip), var(--grip)) no-repeat content-box;
     }
+
+        .crop-grip:is([data-grip="n"], [data-grip="e"], [data-grip="s"], [data-grip="w"])::before {
+            display: none;
+        }
 
     .crop-grip:is([data-grip="n"], [data-grip="s"]) {
         left: 50%;
@@ -195,6 +227,12 @@
         cursor: ns-resize;
     }
 
+        .crop-grip:is([data-grip="n"], [data-grip="s"])::after {
+            left: var(--grip-gap);
+            width: var(--grip-height);
+            height: var(--grip-width);
+        }
+
     .crop-grip:is([data-grip="e"], [data-grip="w"]) {
         top: 50%;
         width: var(--grip-width);
@@ -203,25 +241,46 @@
         cursor: ew-resize;
     }
 
+        .crop-grip:is([data-grip="e"], [data-grip="w"])::after {
+            top: var(--grip-gap);
+            height: var(--grip-height);
+        }
+
     .crop-grip[data-grip="n"] {
         top: 0;
         padding: var(--inset) var(--grip-gap) var(--reach);
     }
+
+        .crop-grip[data-grip="n"]::after {
+            top: var(--inset);
+        }
 
     .crop-grip[data-grip="s"] {
         bottom: 0;
         padding: var(--reach) var(--grip-gap) var(--inset);
     }
 
+        .crop-grip[data-grip="s"]::after {
+            bottom: var(--inset);
+        }
+
     .crop-grip[data-grip="w"] {
         left: 0;
         padding: var(--grip-gap) var(--reach) var(--grip-gap) var(--inset);
     }
 
+        .crop-grip[data-grip="w"]::after {
+            left: var(--inset);
+        }
+
     .crop-grip[data-grip="e"] {
         right: 0;
         padding: var(--grip-gap) var(--inset) var(--grip-gap) var(--reach);
     }
+
+        .crop-grip[data-grip="e"]::after {
+            right: var(--inset);
+        }
 
 /* A Held Frame Covers A File Change, Then Fades */
 .player-frozen {

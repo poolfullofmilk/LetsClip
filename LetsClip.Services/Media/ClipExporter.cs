@@ -16,13 +16,14 @@ public sealed record ExportRequest(
     bool CopyWhenDone = false,
     CropBox? Crop = null,
     bool Video = true,
-    double GameVolume = 1,
-    double MicrophoneVolume = 1,
-    long CropBytes = 0
+    IReadOnlyList<SoundPick>? Balance = null,
+    long CropBytes = 0,
+    string? SoundName = null,
+    Func<int, int, string, CaptionTrack>? Captions = null
 )
 {
-    // Game And Microphone Mixed Anew, Each At Its Own Level
-    public bool IsBalanced => AudioTrack == 0 && (GameVolume != 1 || MicrophoneVolume != 1);
+    // Sound Parts Mixed Anew, Each At Its Own Level
+    public bool IsBalanced => AudioTrack == 0 && Balance is { Count: > 1 };
 }
 
 public sealed record ExportProgress(string Phase, double Fraction);
@@ -197,19 +198,51 @@ public static partial class ClipExporter
         return planned ? Math.Min(rate, 60) : rate;
     }
 
-    public static int? TrackOf(MediaInfo media, bool game, bool microphone)
+    public static (int? Track, IReadOnlyList<SoundPick>? Balance) SoundOf(
+        MediaInfo media,
+        SoundMix mix
+    )
     {
-        // Separate Tracks Can Leave Out Game Or Voice
-        var keepsGame = game && media.HasAudio;
-        return media.HasSeparateTracks ? AudioTracks.IndexOf(keepsGame, microphone)
-            : keepsGame ? 0
-            : null;
+        // One Track, The Mix As Recorded, Or Parts Mixed Anew
+        if (!media.HasAudio)
+        {
+            return (null, null);
+        }
+
+        if (!media.HasSeparateTracks)
+        {
+            return (mix.Game ? 0 : null, null);
+        }
+
+        var kept = media.Parts.Where(mix.Keeps).ToList();
+        var picks = kept.Select(stem => new SoundPick(
+                media.TrackOf(stem)!.Value,
+                mix.LevelOf(stem)
+            ))
+            .ToList();
+        return kept.Count switch
+        {
+            0 => (null, null),
+            1 => (picks[0].Track, null),
+            _ when kept.Count == media.Parts.Count && picks.All(pick => pick.Volume == 1) => (
+                0,
+                null
+            ),
+            _ => (0, picks),
+        };
     }
 
-    public static bool KeepsVideo(MediaInfo media, bool video, bool game, bool microphone)
+    public static string? SoundNameOf(MediaInfo media, SoundMix mix)
+    {
+        // Named For Its Parts, So Exported Says What Left
+        var kept = media.Parts.Where(mix.Keeps).ToList();
+        return kept.Count > 0 ? AudioTracks.MixOf(kept) : null;
+    }
+
+    public static bool KeepsVideo(MediaInfo media, bool video, SoundMix mix)
     {
         // Without Sound Kept, The Video Stays, Never Nothing
-        return video || TrackOf(media, game, microphone) is null;
+        return video || SoundOf(media, mix).Track is null;
     }
 
     public static long CopyBytes(
@@ -243,22 +276,18 @@ public static partial class ClipExporter
         MediaInfo media,
         TrimRange range,
         DiscordPlan plan,
-        bool game,
-        bool microphone,
+        SoundMix mix,
         bool video,
         string folder,
-        CropBox? crop,
-        double gameVolume,
-        double microphoneVolume
+        CropBox? crop
     )
     {
         // The Editor's Rules From A Card, Crop And Balance Included
-        var track = TrackOf(media, game, microphone);
-        var keepsVideo = KeepsVideo(media, video, game, microphone);
+        var (track, balance) = SoundOf(media, mix);
+        var keepsVideo = KeepsVideo(media, video, mix);
         var limit = SizeBudget.LimitOf(plan) ?? double.MaxValue;
         var cropped = keepsVideo && crop is { } box && box.Changes(media.Width, media.Height);
-        var balanced =
-            media.HasSeparateTracks && track == 0 && (gameVolume != 1 || microphoneVolume != 1);
+        var balanced = balance is not null;
         var copied = CopyBytes(clip.SizeBytes, media, range, track is null ? 0 : 1, keepsVideo);
 
         var (frameWidth, frameHeight, _, _) = cropped
@@ -319,9 +348,9 @@ public static partial class ClipExporter
                 CopyWhenDone: true,
                 Crop: cropped ? crop : null,
                 Video: keepsVideo,
-                GameVolume: gameVolume,
-                MicrophoneVolume: microphoneVolume,
-                CropBytes: cropBytes
+                Balance: balance,
+                CropBytes: cropBytes,
+                SoundName: SoundNameOf(media, mix)
             ),
             null
         );

@@ -66,6 +66,7 @@ Run it whole for a round that touches capture, saves, the replay, the games list
 | A thousand clips in the library | First cards in about 10 s, every thumbnail in 12.4 s, back from the editor near the top in under 150 ms |
 | The storm for an hour | Recording throughout, FFmpeg handles and memory flat |
 | A soak of 25 minutes or more: a save every 2.5 minutes, an editor visit every third, a Record every fifth | No full collection after the start (generation 2 stays where it began), heap about 150 MB, native replay about 92 MB for a minute at 1080p60, private about 495 MB with the window open, handles flat about 1900; the video FFmpeg about 74 MB and 1170 handles |
+- A change to sound is checked on a live recording with two stand-ins: `pattern.exe` as the game (a window with a 440 Hz tone) and a stand-in named `DiscordCanary.exe` playing speech as voice chat, so each track can be read apart with `astats` (the tone in Game, the speech in Voice Chat). Speech recognition is checked on a recording of known words, which must come back word for word.
 
 ## Baselines On The 7800X3D, 10 November 2026
 
@@ -78,3 +79,4 @@ Published exe in a sandbox, RX 9070 XT with AMF, one 2560 x 1440 monitor at 240 
 - The hotkey, the display hold and the first open were checked on the plain window: an injected key press saved a clip in 1.4 s, the display turned off and on logged the hold and the release, and the page showed its cards 0.5 s after the first open. The tray's right click menu was not clicked by a script, check it by hand.
 - Windows restarts a crashed LetsClip 5.1 s after the crash (see `Docs/Recovery.md`); a throwaway app measured 4.9 s.
 - `FitToScreen` sets the WebView2 zoom only when it differs, it ran on every step of a window drag.
+- Added 23 November 2026: hearing a 65 s clip took 15.3 s and a 30 s one 7.1 s in the background (half the cores, Idle, EcoQoS); Shrink Clips ran at 3.8 times real time on a 1080p60 clip.

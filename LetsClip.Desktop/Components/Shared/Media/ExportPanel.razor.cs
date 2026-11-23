@@ -4,6 +4,7 @@ using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
 using LetsClip.Desktop.Interop;
 using LetsClip.Services.Capture;
+using LetsClip.Services.Integration;
 using LetsClip.Services.Media;
 using LetsClip.Services.Storage;
 using Microsoft.AspNetCore.Components;
@@ -82,7 +83,7 @@ public partial class ExportPanel : IDisposable
     // The Shown Export's Facts And Lost Sound, Read Once
     private string? _shownExport;
     private string _exportFacts = NoFacts;
-    private (string Icon, string Text)? _leftOut;
+    private IReadOnlyList<(string Icon, string Text)> _leftOut = [];
 
     // Holds The Facts Line's Height Until They Are Read
     private const string NoFacts = " ";
@@ -96,19 +97,34 @@ public partial class ExportPanel : IDisposable
             : DiscordPlan.Off;
 
     // Off Copies Exactly, A Crop Always Encodes
-    private bool KeepsClip => Plan == DiscordPlan.Off && !IsCropped;
+    private bool KeepsClip => Plan == DiscordPlan.Off && !IsCropped && !Captioned;
+
+    // The Clip's Words, Null Until Heard, Empty For None
+    private IReadOnlyList<SpokenWord>? _words;
+    private bool _hearing;
+    private bool _wordsRead;
+
+    private bool CaptionsOn => Controller.Settings.ExportCaptions;
+
+    // Drawn Onto The Picture, So The Export Encodes
+    private bool Captioned => CaptionsOn && KeepsVideo && _words is { Count: > 0 };
+
+    // One Already On Can Always Be Turned Off
+    private bool CaptionsLocked =>
+        IsExporting || Busy || (!CaptionsOn && (!KeepsVideo || _words is { Count: 0 }));
+
+    private string? CaptionsDetail =>
+        _hearing ? null
+        : !KeepsVideo ? "Not Used"
+        : _words is { Count: 0 } ? "No Speech Heard"
+        : null;
 
     // A Crop That Changes The Frame, While A Picture Stays
     private bool IsCropped =>
         Crop is { } crop && KeepsVideo && crop.Changes(Media.Width, Media.Height);
 
     private bool KeepsVideo =>
-        ClipExporter.KeepsVideo(
-            Media,
-            Controller.Settings.ExportVideo,
-            Controller.Settings.ExportAudio,
-            Controller.Settings.ExportMicrophone
-        );
+        ClipExporter.KeepsVideo(Media, Controller.Settings.ExportVideo, Sound);
 
     // The Frame An Export Starts From, Cropped Or Whole
     private (int Width, int Height) Frame =>
@@ -133,19 +149,25 @@ public partial class ExportPanel : IDisposable
         }
     }
 
-    private bool KeepsGame => Controller.Settings.ExportAudio && Media.HasAudio;
+    private SoundMix Sound => Controller.Settings.ExportSound;
 
-    private bool KeepsMicrophone => Controller.Settings.ExportMicrophone;
+    // One Track Copied, Or Parts Mixed Anew At Their Levels
+    private (int? Track, IReadOnlyList<SoundPick>? Balance) Picked =>
+        ClipExporter.SoundOf(Media, Sound);
 
-    private double GameVolume => Controller.Settings.ExportGameVolume;
+    private bool IsBalanced => Picked.Balance is not null;
 
-    private double MicrophoneVolume => Controller.Settings.ExportMicrophoneVolume;
+    private int? Track => Picked.Track;
 
-    // Both Tracks At Their Own Levels Rebuild The Mix
-    private bool IsBalanced =>
-        Media.HasSeparateTracks && Track == 0 && (GameVolume != 1 || MicrophoneVolume != 1);
+    // Game, Voice Chat Then Microphone, The Order The Row Shows
+    private static readonly string[] s_partOrder =
+    [
+        AudioTracks.Game,
+        AudioTracks.Voice,
+        AudioTracks.Microphone,
+    ];
 
-    private int? Track => ClipExporter.TrackOf(Media, KeepsGame, KeepsMicrophone);
+    private IEnumerable<string> ShownParts => s_partOrder.Where(part => Media.Parts.Contains(part));
 
     private bool WithAudio => Track is not null;
 
@@ -188,7 +210,14 @@ public partial class ExportPanel : IDisposable
 
         if (!_copies.TryGetValue((tracks, KeepsVideo), out var bytes))
         {
-            bytes = ClipExporter.CopyBytes(Clip.SizeBytes, Media, Range, tracks, KeepsVideo);
+            // Past The End, What Came After Weighs Like The Rest
+            var within = new TrimRange(Range.Start, Math.Min(Range.End, Media.Duration));
+            bytes = ClipExporter.CopyBytes(Clip.SizeBytes, Media, within, tracks, KeepsVideo);
+            if (Range.End > Media.Duration && within.Length > 0)
+            {
+                bytes += (long)(bytes / within.Length * (Range.End - Media.Duration));
+            }
+
             _copies[(tracks, KeepsVideo)] = bytes;
         }
 
@@ -240,7 +269,11 @@ public partial class ExportPanel : IDisposable
     private bool CanExport =>
         OnlyCopies
             ? !Busy && (!IsCut || CanSaveCut)
-            : !IsExporting && !Busy && Range.IsValidFor(Media.Duration) && !IsTooLong;
+            : !IsExporting
+                && !Busy
+                && Range.IsValidFor(Media.Duration)
+                && !IsTooLong
+                && !(CaptionsOn && _hearing);
 
     private (int Width, int Height) OutputSize =>
         Budget is { } budget
@@ -257,13 +290,13 @@ public partial class ExportPanel : IDisposable
         get
         {
             // Every Row Reads It, Only New Inputs Work It Out
-            var key = (Plan, Shape, CropBytes);
+            var key = (Plan, Shape, OffBytes);
             if (key != _budgetFor)
             {
                 _budgetFor = key;
                 field =
                     SizeBudget.LimitOf(key.Plan) is { } limit ? SizeBudget.Plan(limit, key.Shape)
-                    : IsCropped ? SizeBudget.Keep(key.CropBytes / 1e6, key.Shape)
+                    : IsCropped || Captioned ? SizeBudget.Keep(key.OffBytes / 1e6, key.Shape)
                     : null;
             }
 
@@ -272,6 +305,12 @@ public partial class ExportPanel : IDisposable
     }
 
     // What A Crop Weighs Under Off, None Without One
+    // What An Encode Under Off Weighs, Crop Or Frame
+    private long OffBytes =>
+        IsCropped ? CropBytes
+        : Captioned ? CopyBytesOf(WithAudio ? 1 : 0)
+        : 0;
+
     private long CropBytes =>
         IsCropped ? ClipExporter.CropBytes(Clip.SizeBytes, Media, Range, Crop!, WithAudio) : 0;
 
@@ -384,51 +423,91 @@ public partial class ExportPanel : IDisposable
         await StreamsChanged.InvokeAsync();
     }
 
-    private Task ToggleAudio() =>
-        SetStreamsAsync(settings => settings with { ExportAudio = !KeepsGame });
-
     // Leaving Out The Video Needs Sound To Keep
     private bool VideoLocked => IsExporting || Busy || (KeepsVideo && !WithAudio);
 
-    private bool SoundLocked(bool game)
+    private bool SoundLocked(string part)
     {
-        // Without Video, The Last Sound Track Stays
+        // Without Video, The Last Sound Part Stays
         return IsExporting
             || Busy
-            || (
-                !KeepsVideo
-                && ClipExporter.TrackOf(
-                    Media,
-                    game ? !KeepsGame : KeepsGame,
-                    game ? KeepsMicrophone : !KeepsMicrophone
-                )
-                    is null
-            );
+            || (!KeepsVideo && ClipExporter.SoundOf(Media, Toggled(part)).Track is null);
+    }
+
+    private SoundMix Toggled(string part)
+    {
+        var sound = Sound;
+        return part switch
+        {
+            AudioTracks.Microphone => sound with { Microphone = !sound.Microphone },
+            AudioTracks.Voice => sound with { Voice = !sound.Voice },
+            _ => sound with { Game = !sound.Game },
+        };
+    }
+
+    private bool Slides(string part)
+    {
+        // A Slider Rises Only While Another Part Is Kept
+        return ShownParts.Any(other => other != part && Sound.Keeps(other));
+    }
+
+    private string VolumeText(string part)
+    {
+        var name = part == AudioTracks.Game ? "Game Audio" : part;
+        return Sound.Keeps(part) ? $"Mute {name}" : $"Unmute {name}";
+    }
+
+    private static string? PartIcon(string part, bool on)
+    {
+        // The Game Keeps The Speaker, Its Level Drawn In It
+        return part switch
+        {
+            AudioTracks.Microphone => on
+                ? Icons.Material.Rounded.Mic
+                : Icons.Material.Rounded.MicOff,
+            AudioTracks.Voice => on
+                ? Icons.Material.Rounded.Headset
+                : Icons.Material.Rounded.HeadsetOff,
+            _ => null,
+        };
     }
 
     private Task ToggleVideo() =>
         SetStreamsAsync(settings => settings with { ExportVideo = !KeepsVideo });
 
-    private Task ToggleMicrophone() =>
-        SetStreamsAsync(settings => settings with { ExportMicrophone = !KeepsMicrophone });
+    private Task TogglePartAsync(string part) =>
+        SetStreamsAsync(settings => WithPart(settings, part, !Sound.Keeps(part), null));
 
-    private Task SetGameVolumeAsync(double level) =>
-        SetStreamsAsync(settings =>
-            settings with
-            {
-                ExportAudio = level > 0,
-                ExportGameVolume = level > 0 ? level : settings.ExportGameVolume,
-            }
-        );
+    private Task SetLevelAsync(string part, double level) =>
+        SetStreamsAsync(settings => WithPart(settings, part, level > 0, level > 0 ? level : null));
 
-    private Task SetMicrophoneVolumeAsync(double level) =>
-        SetStreamsAsync(settings =>
-            settings with
+    private static UserSettings WithPart(
+        UserSettings settings,
+        string part,
+        bool kept,
+        double? level
+    )
+    {
+        // Sliding To Zero Mutes, The Last Level Stays For Unmuting
+        return part switch
+        {
+            AudioTracks.Microphone => settings with
             {
-                ExportMicrophone = level > 0,
-                ExportMicrophoneVolume = level > 0 ? level : settings.ExportMicrophoneVolume,
-            }
-        );
+                ExportMicrophone = kept,
+                ExportMicrophoneVolume = level ?? settings.ExportMicrophoneVolume,
+            },
+            AudioTracks.Voice => settings with
+            {
+                ExportVoice = kept,
+                ExportVoiceVolume = level ?? settings.ExportVoiceVolume,
+            },
+            _ => settings with
+            {
+                ExportAudio = kept,
+                ExportGameVolume = level ?? settings.ExportGameVolume,
+            },
+        };
+    }
 
     private async Task SaveCutAsync()
     {
@@ -439,8 +518,25 @@ public partial class ExportPanel : IDisposable
         }
     }
 
+    protected override async Task OnParametersSetAsync()
+    {
+        // Words Read Once, Heard Now When Captions Are Wanted
+        if (_wordsRead)
+        {
+            return;
+        }
+
+        _wordsRead = true;
+        _words = await Task.Run(() => ClipLibrary.MetadataOf(Clip.Path)?.Words);
+        if (CaptionsOn && _words is null && Media.HasAudio)
+        {
+            await HearAsync();
+        }
+    }
+
     protected override void OnInitialized()
     {
+        Controller.Transcripts.Transcribed += OnTranscribed;
         Exports.Changed += OnExportsChanged;
         Exports.Progressed += OnExportsChanged;
         Exports.Finished += OnExportFinished;
@@ -487,8 +583,9 @@ public partial class ExportPanel : IDisposable
         // Read Before A Rename Replaces This Panel
         var (cut, keepOriginal) = (IsCut, !Controller.Settings.DeleteOriginals);
         var (range, plan, frameRate, track, video) = (Range, Plan, FrameRate, Track, KeepsVideo);
-        var (crop, cropBytes) = (IsCropped ? Crop : null, CropBytes);
-        var (game, microphone) = IsBalanced ? (GameVolume, MicrophoneVolume) : (1.0, 1.0);
+        var (crop, cropBytes) = (IsCropped ? Crop : null, OffBytes);
+        var captions = Captioned && _words is { } words ? CaptionsOf(words, range) : null;
+        var (balance, soundName) = (Picked.Balance, ClipExporter.SoundNameOf(Media, Sound));
         var folder = Controller.Settings.ExportsDirectory;
         if (await SettledPath() is not { } path)
         {
@@ -505,9 +602,10 @@ public partial class ExportPanel : IDisposable
             folder,
             Crop: crop,
             Video: video,
-            GameVolume: game,
-            MicrophoneVolume: microphone,
-            CropBytes: cropBytes
+            Balance: balance,
+            Captions: captions,
+            CropBytes: cropBytes,
+            SoundName: soundName
         );
         _ = Exports.RunAsync(request, cut, keepOriginal);
     }
@@ -526,14 +624,15 @@ public partial class ExportPanel : IDisposable
             _shownExport = ExportedFile;
             (_exportFacts, _leftOut) = _shownExport is { } file
                 ? await FactsOfAsync(file)
-                : (NoFacts, null);
+                : (NoFacts, []);
             StateHasChanged();
         }
     }
 
-    private async Task<(string Facts, (string Icon, string Text)? LeftOut)> FactsOfAsync(
-        string file
-    )
+    private async Task<(
+        string Facts,
+        IReadOnlyList<(string Icon, string Text)> LeftOut
+    )> FactsOfAsync(string file)
     {
         try
         {
@@ -543,30 +642,127 @@ public partial class ExportPanel : IDisposable
                 IsSoundOnly(file) ? $"{size} · Sound Only"
                 : export is null ? size
                 : $"{size} · {Formatter.FormatResolution(export.Width, export.Height)} · {Formatter.FormatFrameRate(export.FrameRate)}";
-            return (facts, export is null ? null : LeftOutOf(export));
+            return (facts, export is null ? [] : LeftOutOf(export));
         }
         catch (Exception exception)
             when (exception is TimeoutException or Win32Exception or IOException)
         {
             // An Unreadable Export Shows Only Its Name
-            return (NoFacts, null);
+            return (NoFacts, []);
         }
     }
 
-    private (string Icon, string Text)? LeftOutOf(MediaInfo export)
+    private List<(string Icon, string Text)> LeftOutOf(MediaInfo export)
     {
-        // What The Export Left Out Of The Clip's Sound
-        return Media.HasAudio && !export.HasAudio ? (Icons.Material.Rounded.VolumeOff, "No Sound")
-            : Media.HasSeparateTracks && export.AudioName == AudioTracks.Game
-                ? (Icons.Material.Rounded.MicOff, "No Microphone")
-            : Media.HasSeparateTracks && export.AudioName == AudioTracks.Microphone
-                ? (Icons.Material.Rounded.VolumeOff, "No Game Audio")
-            : null;
+        // What The Export Left Out Of The Sound, Each Part
+        if (Media.HasAudio && !export.HasAudio)
+        {
+            return [(Icons.Material.Rounded.VolumeOff, "No Sound")];
+        }
+
+        return AudioTracks.PartsOf(export.AudioName) is { } held
+            ?
+            [
+                .. ShownParts
+                    .Where(part => !held.Contains(part))
+                    .Select(part =>
+                        (
+                            PartIcon(part, false) ?? Icons.Material.Rounded.VolumeOff,
+                            part == AudioTracks.Game ? "No Game Audio" : $"No {part}"
+                        )
+                    ),
+            ]
+            : [];
     }
 
     private void Cancel()
     {
         Exports.Cancel(Clip.Path);
+    }
+
+    private bool _posting;
+
+    private async Task PostAsync(string file)
+    {
+        // To The Connected Channel, Named Like The Clip
+        if (_posting || Controller.Settings.DiscordWebhook is not { } webhook)
+        {
+            return;
+        }
+
+        _posting = true;
+        var problem = await Task.Run(() =>
+            DiscordPost.PostAsync(webhook, file, Clip.Title, CancellationToken.None)
+        );
+        _posting = false;
+        if (problem is null)
+        {
+            Snackbar.Add("Posted to Discord", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add(problem, Severity.Warning);
+        }
+    }
+
+    private static Func<int, int, string, CaptionTrack> CaptionsOf(
+        IReadOnlyList<SpokenWord> words,
+        TrimRange range
+    )
+    {
+        // Drawn At The Export's Own Size Once It Is Known
+        var frames = CaptionCards.Of(words, range);
+        return (width, height, folder) =>
+            CaptionPainter.Paint(frames, range.Length, width, height, folder);
+    }
+
+    private async Task SetCaptionsAsync(bool on)
+    {
+        Controller.UpdateSettings(settings => settings with { ExportCaptions = on });
+        if (on && _words is null)
+        {
+            await HearAsync();
+        }
+    }
+
+    private async Task HearAsync()
+    {
+        // Heard Now At Full Speed, The Rows Wait Meanwhile
+        if (_hearing)
+        {
+            return;
+        }
+
+        _hearing = true;
+        StateHasChanged();
+        var path = Clip.Path;
+        var words = await Task.Run(() =>
+            Controller.Transcripts.TranscribeNowAsync(path, CancellationToken.None)
+        );
+        _hearing = false;
+        if (words is null)
+        {
+            Snackbar.Add("The speech could not be heard, try again later", Severity.Warning);
+        }
+        else if (path == Clip.Path)
+        {
+            _words = words;
+        }
+
+        StateHasChanged();
+    }
+
+    private void OnTranscribed(string path)
+    {
+        // Heard In The Background While Shown
+        if (path == Clip.Path)
+        {
+            _ = InvokeAsync(() =>
+            {
+                _words = ClipLibrary.MetadataOf(path)?.Words;
+                StateHasChanged();
+            });
+        }
     }
 
     private void CopyFile()
@@ -579,6 +775,7 @@ public partial class ExportPanel : IDisposable
 
     public void Dispose()
     {
+        Controller.Transcripts.Transcribed -= OnTranscribed;
         Exports.Changed -= OnExportsChanged;
         Exports.Progressed -= OnExportsChanged;
         Exports.Finished -= OnExportFinished;

@@ -26,6 +26,13 @@
         margin-inline: -9px;
     }
 
+/* A Clip To Shrink Leads With Its Picture */
+.games-table td.mud-table-cell.shrink-picture {
+    width: 72px;
+    padding-inline-end: 0;
+    line-height: 0;
+}
+
 /* A Table's Title Takes The Room Left, Then Dots */
 .title-cell {
     width: 100%;

@@ -28,18 +28,21 @@ public partial class VolumeButton
     [Parameter]
     public EventCallback<double> ValueChanged { get; set; }
 
-    // A Microphone Shows As One, Never A Speaker
+    // Microphone Or Voice Chat Show Themselves, Never A Speaker
     [Parameter]
-    public bool IsMicrophone { get; set; }
+    public string? OnIcon { get; set; }
+
+    [Parameter]
+    public string? OffIcon { get; set; }
 
     // Without It The Button Only Mutes, No Slider Rises
     [Parameter]
     public bool Slides { get; set; } = true;
 
     private string Icon =>
-        !IsMicrophone ? IconOf(Value)
-        : Value <= 0 ? Icons.Material.Rounded.MicOff
-        : Icons.Material.Rounded.Mic;
+        OnIcon is null || OffIcon is null ? IconOf(Value)
+        : Value <= 0 ? OffIcon
+        : OnIcon;
 
     private async Task SlideAsync(double value)
     {

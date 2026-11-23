@@ -57,6 +57,9 @@ public partial class Clips : IDisposable
     // Names Or Games Containing This, Kept Like The Filter
     private static string? s_query;
 
+    // Speech Heard Since The List Was Last Read
+    private static bool s_heard;
+
     // A Game Picked Elsewhere Starts At The Top
     private static bool s_fromTop;
 
@@ -88,7 +91,11 @@ public partial class Clips : IDisposable
     // Video Left Out With Sound Kept, Discord Gets Opus
     private bool SoundOnly =>
         !Controller.Settings.ExportVideo
-        && (Controller.Settings.ExportAudio || Controller.Settings.ExportMicrophone);
+        && (
+            Controller.Settings.ExportAudio
+            || Controller.Settings.ExportMicrophone
+            || Controller.Settings.ExportVoice
+        );
 
     // Sorted By Time, Clips Sit Under Day, Week Or Month
     private bool IsGrouped => Controller.Settings.ClipSort is ClipSort.Newest or ClipSort.Oldest;
@@ -144,6 +151,7 @@ public partial class Clips : IDisposable
 
         // Saves List At Once, The Watcher Covers Explorer
         Controller.Library.Changed += OnLibraryChanged;
+        Controller.Transcripts.Transcribed += OnTranscribed;
         Controller.Library.PicturesDone += OnPicturesDone;
         Controller.Library.PictureMade += OnPictureMade;
         Controller.Exports.Changed += OnExportsChanged;
@@ -217,6 +225,7 @@ public partial class Clips : IDisposable
         }
 
         var load = ++_loads;
+        s_heard = false;
         var token = _closing.Token;
         try
         {
@@ -337,17 +346,34 @@ public partial class Clips : IDisposable
 
     private static bool Matches(ClipInfo clip)
     {
-        // The Name, The File Or The Game, Any Case
+        // The Name, The File, The Game Or What Was Said
         var query = s_query?.Trim();
         return string.IsNullOrEmpty(query)
             || clip.Title.Contains(query, StringComparison.CurrentCultureIgnoreCase)
             || clip.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase)
-            || clip.Source.Contains(query, StringComparison.CurrentCultureIgnoreCase);
+            || clip.Source.Contains(query, StringComparison.CurrentCultureIgnoreCase)
+            || clip.Transcript?.Contains(query, StringComparison.CurrentCultureIgnoreCase) == true;
     }
 
     private async Task SearchAsync(string? query)
     {
         await ChangeAsync(() => s_query = query, fromTop: true);
+
+        // Words Heard Since The List Was Read Join The Search
+        if (s_heard)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private void OnTranscribed(string path)
+    {
+        // A Search Shown Now Finds What Was Just Heard
+        s_heard = true;
+        if (IsSearched)
+        {
+            _ = InvokeAsync(LoadAsync);
+        }
     }
 
     private static string? CardStyle(ClipInfo clip)
@@ -409,13 +435,10 @@ public partial class Clips : IDisposable
             media,
             range,
             plan,
-            settings.ExportAudio,
-            settings.ExportMicrophone,
+            settings.ExportSound,
             settings.ExportVideo,
             settings.ExportsDirectory,
-            metadata?.Box,
-            settings.ExportGameVolume,
-            settings.ExportMicrophoneVolume
+            metadata?.Box
         );
         if (copy.Problem is { } problem)
         {
@@ -653,6 +676,7 @@ public partial class Clips : IDisposable
         Controller.Changed -= OnControllerChanged;
         DeleteUndone -= OnLibraryChanged;
         Controller.Library.Changed -= OnLibraryChanged;
+        Controller.Transcripts.Transcribed -= OnTranscribed;
         Controller.Library.PicturesDone -= OnPicturesDone;
         Controller.Library.PictureMade -= OnPictureMade;
         Controller.Exports.Changed -= OnExportsChanged;

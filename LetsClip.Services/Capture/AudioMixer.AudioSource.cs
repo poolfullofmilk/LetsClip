@@ -425,7 +425,7 @@ public sealed partial class AudioMixer
             s_logger.Warn(report);
         }
 
-        public void Drain(long fromFrame, float[] mix, int stride, float gain)
+        public void Drain(long fromFrame, float[] mix, int stride)
         {
             lock (_gate)
             {
@@ -434,8 +434,8 @@ public sealed partial class AudioMixer
                 {
                     var slot = (int)((fromFrame + index) % RingFrames) * Channels;
                     var target = (index * stride) + channelOffset;
-                    mix[target] += _ring[slot] * gain;
-                    mix[target + 1] += _ring[slot + 1] * gain;
+                    mix[target] += _ring[slot];
+                    mix[target + 1] += _ring[slot + 1];
                     _ring[slot] = 0;
                     _ring[slot + 1] = 0;
                 }

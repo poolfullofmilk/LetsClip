@@ -10,11 +10,23 @@ public sealed record MediaInfo(
     string? AudioCodec,
     PacketMap? Packets,
     int AudioTrackCount = 0,
-    bool HasSeparateTracks = false,
+    string[]? Stems = null,
     string? AudioName = null
 )
 {
     public bool HasVideo => VideoCodec is not null;
 
     public bool HasAudio => AudioCodec is not null;
+
+    // Game, Microphone Or Voice Chat Apart, Each Beside The Mix
+    public IReadOnlyList<string> Parts => Stems ?? [];
+
+    public bool HasSeparateTracks => Parts.Count > 0;
+
+    public int? TrackOf(string stem)
+    {
+        // The Mix Plays First, Each Part Follows In Its Order
+        var index = Parts.ToList().IndexOf(stem);
+        return index < 0 ? null : index + 1;
+    }
 }

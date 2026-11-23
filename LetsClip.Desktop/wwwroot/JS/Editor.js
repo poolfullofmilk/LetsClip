@@ -11,6 +11,8 @@ Object.assign(
 
         // The Editor Attaches Only A Clip Longer Than Zero
         const duration = () => state.duration;
+        // The Timeline Reaches Past The Clip Over What Came After
+        const span = () => state.duration + state.after;
         const clamp = (time) => Math.min(duration(), Math.max(0, time));
         // Whole Screen Pixels Of The Shown Window, Edges Meet Exactly
         const percent = (time) => {
@@ -51,7 +53,7 @@ Object.assign(
         };
 
         // Opening A Clip Plays It, A Cut Or Restore Waits
-        const attach = (video, source, playhead, timeline, dotnet, length, start, end, volume, muted, separator, frames, autoPlay) => {
+        const attach = (video, source, playhead, timeline, dotnet, length, start, end, volume, muted, separator, frames, autoPlay, after) => {
             detach();
             // Detach Removed The Source Behind Blazor's Back
             if (video.getAttribute("src") !== source) video.setAttribute("src", source);
@@ -60,7 +62,7 @@ Object.assign(
             // One Signal Takes Every Listener Off On Detach
             const listening = new AbortController();
             const { signal } = listening;
-            state = { video, playhead, timeline, dotnet, separator, bounds, listening, duration: length, view: { start: 0, end: length }, viewTimer: 0, reported: 0, sent: -1, paused: true, stopAt: null, frame: 0, drag: null, live: { busy: false, next: null } };
+            state = { video, playhead, timeline, dotnet, separator, bounds, listening, duration: length, after, view: { start: 0, end: length + after }, viewTimer: 0, reported: 0, sent: -1, paused: true, stopAt: null, frame: 0, drag: null, live: { busy: false, next: null } };
             // Points Saved Before Snapping Move Onto Their Frames
             const range = { start, end };
             setEdge(range, "start", start);
@@ -160,11 +162,12 @@ Object.assign(
             return near ?? Math.round(clamped * 1000) / 1000;
         };
 
-        const setEdge = (range, edge, time) => {
+        // Only A Drag Reaches Past The Clip, Into What Followed
+        const setEdge = (range, edge, time, reach = duration()) => {
             // Too Short To Trim, The Whole Clip Stays
             if (duration() <= step) return;
-            if (edge === "start") range.start = fit(time, 0, range.end - step);
-            else range.end = fit(time, range.start + step, duration());
+            if (edge === "start") range.start = fit(time, 0, Math.min(range.end, duration()) - step);
+            else range.end = fit(time, range.start + step, reach);
         };
 
         // Start Shows Its First Frame, End The Last One Kept
@@ -184,7 +187,7 @@ Object.assign(
             const { view } = state;
             const half = (view.end - view.start) / state.timeline.clientWidth / devicePixelRatio / 2;
             state.timeline.toggleAttribute("data-at-start", view.start <= 0 && start < half);
-            state.timeline.toggleAttribute("data-at-end", view.end >= duration() && duration() - end < half);
+            state.timeline.toggleAttribute("data-at-end", view.end >= span() && span() - end < half);
             handleOf("start").style.left = percent(start);
             handleOf("end").style.left = percent(end);
             handleOf("start").style.visibility = outside(start) ? "hidden" : "";
@@ -282,17 +285,18 @@ Object.assign(
                 return setView(view.start + (delta / state.timeline.clientWidth) * span, span);
             }
             // Down To A Sixtieth Of The Clip, Never Below Five
-            const smallest = Math.min(duration(), Math.max(5, duration() / 60));
-            const next = Math.min(duration(), Math.max(smallest, span * (event.deltaY < 0 ? 2 / 3 : 3 / 2)));
+            const whole = state.duration + state.after;
+            const smallest = Math.min(whole, Math.max(5, whole / 60));
+            const next = Math.min(whole, Math.max(smallest, span * (event.deltaY < 0 ? 2 / 3 : 3 / 2)));
             if (next === span) return;
             const anchor = timeAt(event);
             setView(anchor - ((anchor - view.start) * next) / span, next);
         };
 
         // Painted At Once, Blazor Told Once It Settles
-        const setView = (start, span) => {
-            const from = Math.min(Math.max(0, start), duration() - span);
-            state.view = { start: from, end: from + span };
+        const setView = (start, shown) => {
+            const from = Math.min(Math.max(0, start), span() - shown);
+            state.view = { start: from, end: from + shown };
             paint(readRange());
             const time = state.video.currentTime;
             state.playhead.style.left = percent(time);
@@ -300,9 +304,9 @@ Object.assign(
             strips.forEach(paintStrip);
             // A Bar Shows Where The Window Sits In The Clip
             const bar = state.timeline.querySelector(".timeline-zoom");
-            bar.style.display = span >= duration() - 0.001 ? "none" : "";
-            bar.style.left = `${(from / duration()) * 100}%`;
-            bar.style.width = `${(span / duration()) * 100}%`;
+            bar.style.display = shown >= span() - 0.001 ? "none" : "";
+            bar.style.left = `${(from / span()) * 100}%`;
+            bar.style.width = `${(shown / span()) * 100}%`;
             clearTimeout(state.viewTimer);
             state.viewTimer = setTimeout(() => state?.dotnet.invokeMethodAsync("OnView", state.view.start, state.view.end).catch(() => {}), 250);
         };
@@ -341,7 +345,7 @@ Object.assign(
                 state.video.currentTime = clamp(time);
                 return;
             }
-            setEdge(state.range, state.drag, time);
+            setEdge(state.range, state.drag, time, span());
             paint(state.range);
             showEdge(state.range, state.drag);
         };
@@ -406,8 +410,10 @@ Object.assign(
                 const centre = ((index + 0.5) * width) / count;
                 const share = Math.min(Math.max((centre - pad) / Math.max(1, width - 2 * pad), 0), 1);
                 const time = view && length ? view.start + share * (view.end - view.start) : share;
-                const source = zoomed ? zoomed.image : image;
-                const fraction = zoomed ? (time - zoomed.start) / (zoomed.end - zoomed.start) : view && length ? time / length : share;
+                // Past The Clip's End, What Followed Has Its Frames
+                const later = view && length && time > length && canvas.afterImage?.naturalWidth ? canvas.afterImage : null;
+                const source = later ?? (zoomed ? zoomed.image : image);
+                const fraction = later ? (time - length) / state.after : zoomed ? (time - zoomed.start) / (zoomed.end - zoomed.start) : view && length ? time / length : share;
                 const cell = Math.min(cells - 1, Math.max(0, Math.floor(fraction * cells)));
                 const sourceWidth = source.naturalWidth / cells;
                 const left = Math.round((index * canvas.width) / count);
@@ -431,21 +437,32 @@ Object.assign(
             // White Lightens, The Picture's Black Leaves The Frames Alone
             context.globalCompositeOperation = "screen";
             context.globalAlpha = 0.7;
-            if (zoomed?.wave) context.drawImage(zoomed.wave, side, top, canvas.width - 2 * side, band);
+            const across = canvas.width - 2 * side;
+            if (zoomed?.wave) context.drawImage(zoomed.wave, side, top, across, band);
             else if (view && length) {
-                // The Whole Clip's Outline, Its Shown Window Stretched
-                const from = (view.start / length) * wave.naturalWidth;
-                const across = ((view.end - view.start) / length) * wave.naturalWidth;
-                context.drawImage(wave, from, 0, across, wave.naturalHeight, side, top, canvas.width - 2 * side, band);
-            } else context.drawImage(wave, side, top, canvas.width - 2 * side, band);
+                // Each Outline Where The Shown Window Holds It, Stretched
+                drawPart(context, wave, 0, length, view, side, top, across, band);
+                drawPart(context, canvas.afterWave, length, length + state.after, view, side, top, across, band);
+            } else context.drawImage(wave, side, top, across, band);
             context.globalAlpha = 1;
             context.globalCompositeOperation = "source-over";
+        };
+        // An Outline Of A Span, Cut To The Shown Window
+        const drawPart = (context, image, from, to, view, side, top, across, band) => {
+            const start = Math.max(from, view.start);
+            const end = Math.min(to, view.end);
+            if (!image?.naturalWidth || end <= start) return;
+            const scale = image.naturalWidth / (to - from);
+            const shown = view.end - view.start;
+            context.drawImage(image, (start - from) * scale, 0, (end - start) * scale, image.naturalHeight, side + ((start - view.start) / shown) * across, top, ((end - start) / shown) * across, band);
         };
         const stripSizes = new ResizeObserver((entries) => entries.forEach((entry) => paintStrip(entry.target)));
         addEventListener("resize", () => strips.forEach(paintStrip));
         const showStrip = (canvas) => {
             canvas.waveImage = null;
             canvas.zoom = null;
+            canvas.afterImage = null;
+            canvas.afterWave = null;
             const image = new Image();
             image.onload = () => paintStrip(canvas);
             image.src = canvas.dataset.src;
@@ -461,6 +478,22 @@ Object.assign(
             wave.onload = () => canvas.waveImage === wave && paintStrip(canvas);
             wave.src = url;
             canvas.waveImage = wave;
+        };
+
+        // What Followed The Clip, Its Frames And Outline Beyond
+        const showAfter = (canvas, stripUrl, waveUrl) => {
+            canvas.afterImage = null;
+            canvas.afterWave = null;
+            if (!stripUrl) return paintStrip(canvas);
+            const image = new Image();
+            image.onload = () => canvas.afterImage === image && paintStrip(canvas);
+            image.src = stripUrl;
+            canvas.afterImage = image;
+            if (!waveUrl) return;
+            const wave = new Image();
+            wave.onload = () => canvas.afterWave === wave && paintStrip(canvas);
+            wave.src = waveUrl;
+            canvas.afterWave = wave;
         };
 
         // A Zoomed Window's Strip And Outline, Drawn Once Loaded
@@ -621,6 +654,6 @@ Object.assign(
             frame.addEventListener("pointercancel", done, { signal: dragged.signal, once: true });
         };
 
-        return { attach, detach, play, pause, place, stepEdge, mark, showStrip, showWave, setVolume, fullScreen, placeCrop, showZoom };
+        return { attach, detach, play, pause, place, stepEdge, mark, showStrip, showWave, showAfter, setVolume, fullScreen, placeCrop, showZoom };
     })()
 );

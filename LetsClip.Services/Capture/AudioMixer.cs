@@ -39,6 +39,10 @@ public sealed partial class AudioMixer : IDisposable
     private readonly MMDeviceNotificationClient _notifications;
     private readonly int _outputChannels;
 
+    // Microphone On Three And Four, Volume Five, Voice After
+    private readonly bool _microphoneApart;
+    private readonly int _voiceOffset;
+
     // Replaced Whole, The Writer Reads One List Per Chunk
     private volatile AudioSource[] _sources = [];
     private readonly Lock _sourcesGate = new();
@@ -58,22 +62,28 @@ public sealed partial class AudioMixer : IDisposable
     // Halved So It Passes The Full Scale Clamp
     private volatile float _halfMicrophoneVolume;
 
-    // Voice Apps Mix In At Their Own Level
-    private volatile float _voiceVolume;
+    // Voice Chat's Level Rides Its Own Channel, Halved Too
+    private volatile float _halfVoiceVolume;
+    private readonly bool _voiceApart;
 
     public AudioMixer(
         long originTimestamp,
         string? systemId,
         string? microphoneId,
         bool separateMicrophone,
+        bool separateVoice,
         double microphoneVolume,
         int gameProcess,
         double voiceVolume
     )
     {
-        // A Cleaned Microphone Gets Two Channels, Its Volume A Fifth
+        // A Separate Microphone Takes Three Channels, Voice Two More
         _origin = originTimestamp;
-        _outputChannels = separateMicrophone ? (Channels * 2) + 1 : Channels;
+        _microphoneApart = separateMicrophone;
+        _voiceApart = separateVoice;
+        _voiceOffset = separateVoice ? Channels + (separateMicrophone ? Channels + 1 : 0) : 0;
+        _outputChannels =
+            Channels + (separateMicrophone ? Channels + 1 : 0) + (separateVoice ? Channels + 1 : 0);
         SetMicrophoneVolume(microphoneVolume);
         SetVoiceVolume(voiceVolume);
         if (systemId is not null && gameProcess != 0)
@@ -206,7 +216,14 @@ public sealed partial class AudioMixer : IDisposable
                 continue;
             }
 
-            var source = new AudioSource(this, kind, "", true, 0, process);
+            var source = new AudioSource(
+                this,
+                kind,
+                "",
+                true,
+                kind == VoiceKind ? _voiceOffset : 0,
+                process
+            );
             source.Connect();
             _sources = [.. _sources, source];
         }
@@ -231,8 +248,8 @@ public sealed partial class AudioMixer : IDisposable
 
     public void SetVoiceVolume(double volume)
     {
-        // From The Next Chunk, No Restart
-        _voiceVolume = (float)volume;
+        // The Encoder Multiplies Cleaned Voice Chat By It, No Restart
+        _halfVoiceVolume = (float)(volume / 2);
     }
 
     public void MuteSystemAudio(TimeSpan duration)
@@ -290,24 +307,20 @@ public sealed partial class AudioMixer : IDisposable
                 }
 
                 Array.Clear(mix);
-                var voiceVolume = _voiceVolume;
                 foreach (var source in _sources)
                 {
-                    source.Drain(
-                        _emittedFrames,
-                        mix,
-                        _outputChannels,
-                        source.Kind == VoiceKind ? voiceVolume : 1
-                    );
+                    source.Drain(_emittedFrames, mix, _outputChannels);
                 }
 
-                if (_outputChannels > Channels * 2)
+                // Each Level Rides Its Own Channel, Applied After Cleaning
+                if (_microphoneApart)
                 {
-                    var volume = _halfMicrophoneVolume;
-                    for (var index = Channels * 2; index < mix.Length; index += _outputChannels)
-                    {
-                        mix[index] = volume;
-                    }
+                    WriteLevel(mix, Channels * 2, _halfMicrophoneVolume);
+                }
+
+                if (_voiceApart)
+                {
+                    WriteLevel(mix, _voiceOffset + Channels, _halfVoiceVolume);
                 }
 
                 for (var index = 0; index < mix.Length; index++)
@@ -331,6 +344,14 @@ public sealed partial class AudioMixer : IDisposable
         {
             // A Throwing Thread Ends LetsClip, The Stall Check Restarts
             s_logger.Warn($"Failed To Write Audio {exception.GetType().Name}");
+        }
+    }
+
+    private void WriteLevel(float[] mix, int channel, float level)
+    {
+        for (var index = channel; index < mix.Length; index += _outputChannels)
+        {
+            mix[index] = level;
         }
     }
 

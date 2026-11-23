@@ -37,7 +37,9 @@ $script = @"
 set -euo pipefail
 pacman-key --init > /dev/null 2>&1 || true
 pacman-key --populate msys2 > /dev/null 2>&1 || true
-pacman -Sy --noconfirm --needed make diffutils patch nasm mingw-w64-x86_64-gcc mingw-w64-x86_64-pkgconf mingw-w64-x86_64-x264 mingw-w64-x86_64-dav1d mingw-w64-x86_64-opus mingw-w64-x86_64-zlib mingw-w64-x86_64-libvpl mingw-w64-x86_64-amf-headers mingw-w64-x86_64-ffnvcodec-headers
+# Mirrors Refuse Bursts, One Download At A Time
+sed -Ei 's/^#?ParallelDownloads.*/ParallelDownloads = 1/' /etc/pacman.conf
+for try in 1 2 3; do pacman -Sy --noconfirm --needed make diffutils patch nasm mingw-w64-x86_64-gcc mingw-w64-x86_64-pkgconf mingw-w64-x86_64-x264 mingw-w64-x86_64-dav1d mingw-w64-x86_64-opus mingw-w64-x86_64-zlib mingw-w64-x86_64-libvpl mingw-w64-x86_64-amf-headers mingw-w64-x86_64-ffnvcodec-headers && break; sleep 30; done
 # x264 Pulls In MSYS2's FFmpeg, Whose Static Libraries Would Link
 pacman -Rdd --noconfirm mingw-w64-x86_64-ffmpeg mingw-w64-x86_64-ffms2 > /dev/null 2>&1 || true
 cd "`$(cygpath -u '$Work')"
@@ -52,9 +54,9 @@ for patch in ../*.patch; do sed 's/\r$//' "`$patch" | patch -p1; done
   --enable-w32threads --enable-d3d11va --enable-dxva2 --enable-amf --enable-ffnvcodec --enable-nvenc \
   --enable-libvpl --enable-libx264 --enable-libdav1d --enable-libopus --enable-zlib \
   --disable-encoders --enable-encoder=libx264,h264_amf,hevc_amf,h264_nvenc,hevc_nvenc,h264_qsv,hevc_qsv,aac,libopus,mjpeg,wrapped_avframe,rawvideo,pcm_f32le,pcm_s16le \
-  --disable-decoders --enable-decoder=h264,hevc,libdav1d,vp8,vp9,mpeg4,mpeg2video,mjpeg,aac,aac_latm,mp3,mp3float,opus,vorbis,flac,ac3,eac3,alac,pcm_f32le,pcm_f64le,pcm_s16le,pcm_s24le,pcm_s32le,pcm_u8,rawvideo,wrapped_avframe \
-  --disable-muxers --enable-muxer=mp4,mpegts,segment,ogg,null,image2,pcm_f32le \
-  --disable-demuxers --enable-demuxer=mov,mpegts,concat,ogg,pcm_f32le \
+  --disable-decoders --enable-decoder=h264,hevc,libdav1d,vp8,vp9,mpeg4,mpeg2video,mjpeg,aac,aac_latm,mp3,mp3float,opus,vorbis,flac,ac3,eac3,alac,pcm_f32le,pcm_f64le,pcm_s16le,pcm_s24le,pcm_s32le,pcm_u8,png,rawvideo,wrapped_avframe \
+  --disable-muxers --enable-muxer=mp4,mpegts,segment,ogg,null,image2,pcm_f32le,wav \
+  --disable-demuxers --enable-demuxer=mov,mpegts,concat,ogg,pcm_f32le,image2,png_pipe,wav \
   --disable-protocols --enable-protocol=file,pipe,concat \
   --disable-devices --enable-indev=lavfi \
   --disable-hwaccels

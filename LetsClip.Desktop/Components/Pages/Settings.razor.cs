@@ -141,6 +141,14 @@ public partial class Settings : IDisposable
         });
     }
 
+    private async Task ShrinkClipsAsync()
+    {
+        // The Picked Clips Shrink, Then The Space Is Read Again
+        var dialog = await ShrinkDialog.ShowAsync(DialogService);
+        await dialog.Result;
+        await MeasureSpaceAsync();
+    }
+
     private async Task MeasureSpaceAsync()
     {
         // Walks The Folder, Off The UI Thread
@@ -240,6 +248,9 @@ public partial class Settings : IDisposable
     // Only A Game Window Knows Its Game And Voice Apps
     private bool RecordsVoiceChat =>
         Controller.Settings is { GamesOnly: true, SystemAudio: true, OnlyGameAndDiscord: true };
+
+    // Noise Cancellation Cleans The Microphone And Voice Chat
+    private bool CleansNothing => !Controller.Settings.Microphone && !RecordsVoiceChat;
 
     private void SetVoiceVolume(double level)
     {

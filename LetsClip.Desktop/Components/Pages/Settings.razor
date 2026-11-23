@@ -90,6 +90,11 @@
                     <SettingRow Title="Notifications"
                                 Switch="Controller.Settings.Notifications"
                                 SwitchChanged="SetNotifications" />
+                    <MudDivider />
+                    <SettingRow Title="Discord Channel">
+                        @* Discord Channel *@
+                        <DiscordChannel />
+                    </SettingRow>
                 </Panel>
 
                 @* Audio Settings *@
@@ -149,7 +154,7 @@
                     <SettingRow Title="Noise Cancellation"
                                 Switch="Controller.Settings.NoiseCancellation"
                                 SwitchChanged="SetNoiseCancellationAsync"
-                                SwitchDisabled="@(!Controller.Settings.Microphone)" />
+                                SwitchDisabled="CleansNothing" />
                 </Panel>
 
                 @* Storage Settings *@
@@ -209,6 +214,17 @@
                                 <MudProgressCircular Color="Color.Info"
                                                      Size="Size.Small"
                                                      Indeterminate />
+                            }
+                            @if (Controller.HasHardwareEncoder)
+                            {
+                                @* Shrink Clips Button *@
+                                <MudButton Variant="Variant.Filled"
+                                           Color="Color.Info"
+                                           Size="Size.Small"
+                                           StartIcon="@Icons.Material.Rounded.Compress"
+                                           OnClick="ShrinkClipsAsync">
+                                    Shrink Clips
+                                </MudButton>
                             }
                         </SettingRow>
                     }

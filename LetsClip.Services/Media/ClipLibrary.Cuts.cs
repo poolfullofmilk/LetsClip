@@ -81,6 +81,7 @@ public sealed partial class ClipLibrary
                         CutEnd = recycled ? null : earlierStart + range.End,
                         ForeignOriginal = false,
                         Cut = true,
+                        Words = null,
                     },
                 media.Duration
             );
@@ -242,6 +243,8 @@ public sealed partial class ClipLibrary
                     CutStart = null,
                     CutEnd = null,
                     Cut = false,
+                    Shrunk = false,
+                    Words = null,
                 },
             media?.Duration ?? metadata.Duration
         );
@@ -308,7 +311,7 @@ public sealed partial class ClipLibrary
         }
     }
 
-    private static async Task ReplacedAsync(
+    internal static async Task ReplacedAsync(
         string path,
         Func<ClipMetadata, ClipMetadata> change,
         double duration

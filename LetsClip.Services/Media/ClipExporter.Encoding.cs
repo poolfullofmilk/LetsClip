@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 using LetsClip.Data.Helpers;
+using LetsClip.Data.ViewModels;
 
 namespace LetsClip.Services.Media;
 
@@ -8,13 +9,21 @@ public static partial class ClipExporter
 {
     private static string SoundSource(ExportRequest request, int track, bool balanced)
     {
-        // One Track, Or Game And Microphone Mixed At Their Levels
-        return balanced
-            ? string.Create(
-                CultureInfo.InvariantCulture,
-                $"[0:a:1]volume={request.GameVolume}[game];[0:a:2]volume={request.MicrophoneVolume}[voice];[game][voice]amix=inputs=2:normalize=0"
-            )
-            : string.Create(CultureInfo.InvariantCulture, $"[0:a:{track}]anull");
+        // One Track, Or Its Parts Mixed At Their Levels
+        if (!balanced || request.Balance is not { } picks)
+        {
+            return string.Create(CultureInfo.InvariantCulture, $"[0:a:{track}]anull");
+        }
+
+        var parts = picks.Select(
+            (pick, index) =>
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"[0:a:{pick.Track}]volume={pick.Volume}[part{index}];"
+                )
+        );
+        var inputs = string.Concat(picks.Select((_, index) => $"[part{index}]"));
+        return $"{string.Concat(parts)}{inputs}amix=inputs={picks.Count}:normalize=0";
     }
 
     private static string SoundGraph(ExportRequest request, int track, bool balanced, double gain)
@@ -139,7 +148,8 @@ public static partial class ClipExporter
         double AudioBitsPerSecond,
         bool Video,
         double Gain,
-        bool Balanced
+        bool Balanced,
+        CaptionTrack? Captions
     );
 
     private static async Task EncodeAsync(
@@ -174,15 +184,28 @@ public static partial class ClipExporter
             FFmpeg.Seconds(range.SeekStart),
             "-i",
             job.Request.SourcePath,
+            // The Captions' Pictures, Timed By Their Own List
+            .. job.Captions is { } captions
+                ? ["-f", "concat", "-i", captions.List]
+                : Array.Empty<string>(),
             "-t",
             FFmpeg.Seconds(range.Length),
         ];
+        IReadOnlyList<string> drawn = job.Captions is { } shown
+            ?
+            [
+                "-filter_complex",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"[0:v:0]{filter}[base];[1:v]format=rgba[words];[base][words]overlay=0:{shown.Top}:eof_action=pass:format=auto,format=yuv420p[video]"
+                ),
+                "-map",
+                "[video]",
+            ]
+            : ["-map", "0:v:0", "-vf", filter];
         List<string> picture =
         [
-            "-map",
-            "0:v:0",
-            "-vf",
-            filter,
+            .. drawn,
             "-r",
             rate,
             "-fps_mode",
@@ -212,10 +235,10 @@ public static partial class ClipExporter
                 "48000",
             ]);
 
-            // Its Track's Name, So Exported Knows What Was Left Out
-            if (track > 0)
+            // Named For Its Parts, So Exported Knows What Left
+            if (job.Request.SoundName is { } name)
             {
-                output.AddRange(["-metadata:s:a:0", $"handler_name={AudioTracks.Separate[track]}"]);
+                output.AddRange(["-metadata:s:a:0", $"handler_name={name}"]);
             }
         }
 
@@ -311,7 +334,22 @@ public static partial class ClipExporter
             "-g",
             group,
         ];
-        string[] specific = encoder.Codec switch
+        var specific = QualityArguments(encoder);
+
+        // A Card's H.264 Takes Three B Frames, Its HEVC None
+        string[] frames = encoder.IsHardware && !encoder.IsHevc ? ["-bf", "3"] : [];
+
+        // Tagged hvc1, So Apple Devices Play It Too
+        string[] profile = encoder.IsHevc
+            ? ["-profile:v", "main", "-tag:v", "hvc1"]
+            : ["-profile:v", "high"];
+        return ["-c:v", encoder.Codec, .. specific, .. frames, .. profile, .. rate];
+    }
+
+    internal static string[] QualityArguments(VideoEncoder encoder)
+    {
+        // Each Encoder's Best Quality Setting That Keeps Its Pace
+        return encoder.Codec switch
         {
             "h264_amf" or "hevc_amf" =>
             [
@@ -338,18 +376,9 @@ public static partial class ClipExporter
             "h264_qsv" or "hevc_qsv" => ["-preset", "slower"],
             _ => ["-preset", "medium"],
         };
-
-        // A Card's H.264 Takes Three B Frames, Its HEVC None
-        string[] frames = encoder.IsHardware && !encoder.IsHevc ? ["-bf", "3"] : [];
-
-        // Tagged hvc1, So Apple Devices Play It Too
-        string[] profile = encoder.IsHevc
-            ? ["-profile:v", "main", "-tag:v", "hvc1"]
-            : ["-profile:v", "high"];
-        return ["-c:v", encoder.Codec, .. specific, .. frames, .. profile, .. rate];
     }
 
-    private static async Task RunPassAsync(
+    internal static async Task RunPassAsync(
         IReadOnlyList<string> arguments,
         double duration,
         string phase,

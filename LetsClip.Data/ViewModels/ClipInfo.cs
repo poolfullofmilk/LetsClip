@@ -18,7 +18,9 @@ public sealed record ClipInfo(
     int? Monitor,
     DateTime WrittenUtc,
     bool IsEdited,
-    string? Export
+    string? Export,
+    bool IsShrunk = false,
+    string? Transcript = null
 )
 {
     public string Source => ClipNames.SourceOf(Game, Monitor);

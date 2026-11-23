@@ -165,7 +165,9 @@ public partial class App : Application
             $"Started {AppInfo.DisplayName} {AppInfo.VersionText}{(startsInTray ? " In The Tray" : "")} On {AppInfo.WindowsText}, .NET {Environment.Version}, {Environment.ProcessorCount} Threads{(AppInfo.SandboxRoot is null ? "" : ", Sandboxed")}"
         );
         var controller = new CaptureController();
-        s_logger.Info($"Settings {System.Text.Json.JsonSerializer.Serialize(controller.Settings)}");
+        s_logger.Info(
+            $"Settings {System.Text.Json.JsonSerializer.Serialize(controller.Settings.ForLog())}"
+        );
 
         // A Fresh Download Adds The Desktop Shortcut, Never An Update
         controller.RegisterWithWindows(isInstall: download is not null && previousVersion is null);

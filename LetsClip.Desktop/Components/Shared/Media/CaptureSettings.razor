@@ -41,7 +41,8 @@
 <SettingRow Title="Replay Length">
     @* Replay Length Select *@
     <FieldDetail Class="fixed-width"
-                 Color="@CostColors.Replay(Controller.Settings.ReplaySeconds)">
+                 Color="@CostColors.Replay(Controller.Settings.ReplaySeconds)"
+                 Detail="@Controller.ReplaySizeText(Controller.Settings.ReplaySeconds)">
         <ChoiceSelect T="int"
                       Value="Controller.Settings.ReplaySeconds"
                       ValueChanged="SetReplay"
@@ -52,7 +53,8 @@
                 <MudSelectItem T="int"
                                Value="seconds">
                     <ItemLabel Text="@ReplayLabel(seconds)"
-                               Color="@CostColors.Replay(seconds)" />
+                               Color="@CostColors.Replay(seconds)"
+                               Detail="@Controller.ReplaySizeText(seconds)" />
                 </MudSelectItem>
             }
         </ChoiceSelect>

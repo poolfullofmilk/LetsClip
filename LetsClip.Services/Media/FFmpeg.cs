@@ -70,7 +70,8 @@ public static partial class FFmpeg
         string executable,
         IEnumerable<string> arguments,
         bool redirectInput = false,
-        string? workingDirectory = null
+        string? workingDirectory = null,
+        bool gently = false
     )
     {
         var startInfo = new ProcessStartInfo(executable)
@@ -94,7 +95,14 @@ public static partial class FFmpeg
             Process.Start(startInfo.WithoutWebView())
             ?? throw new InvalidOperationException($"Failed To Start {executable}");
         _ = AssignProcessToJobObject(s_job, process.Handle);
-        KeepFullSpeed(process.Handle);
+        if (gently)
+        {
+            RunGently(process);
+        }
+        else
+        {
+            KeepFullSpeed(process.Handle);
+        }
 
         // The Exact Command, And A Start Slower Than 100 ms
         var took = Stopwatch.GetElapsedTime(starting).TotalMilliseconds;
@@ -102,6 +110,31 @@ public static partial class FFmpeg
             $"Started {Path.GetFileName(executable)} {process.Id}{(took >= 100 ? $" In {took:0} ms" : "")}: {string.Join(' ', startInfo.ArgumentList.Select(argument => argument.Contains(' ') ? $"\"{argument}\"" : argument))}"
         );
         return process;
+    }
+
+    private static void RunGently(Process process)
+    {
+        // Efficiency Mode And Idle Priority, Games Never Wait
+        var state = new PowerThrottlingState
+        {
+            Version = 1,
+            ControlMask = ThrottleExecutionSpeed,
+            StateMask = ThrottleExecutionSpeed,
+        };
+        _ = SetProcessInformation(
+            process.Handle,
+            ProcessPowerThrottling,
+            ref state,
+            (uint)Marshal.SizeOf<PowerThrottlingState>()
+        );
+        try
+        {
+            process.PriorityClass = ProcessPriorityClass.Idle;
+        }
+        catch (Exception exception) when (exception is Win32Exception or InvalidOperationException)
+        {
+            // Already Ended, Nothing Left To Lower
+        }
     }
 
     private static void KeepFullSpeed(nint process)
@@ -128,10 +161,11 @@ public static partial class FFmpeg
         CancellationToken token,
         Action<string>? errorLine = null,
         string? workingDirectory = null,
-        Action<string>? outputLine = null
+        Action<string>? outputLine = null,
+        bool gently = false
     )
     {
-        var process = Start(executable, arguments, false, workingDirectory);
+        var process = Start(executable, arguments, false, workingDirectory, gently);
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(token);
         limit.CancelAfter(timeout);
 

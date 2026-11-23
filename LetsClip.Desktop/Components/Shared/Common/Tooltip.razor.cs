@@ -28,4 +28,11 @@ public partial class Tooltip
     // On The Tooltip Itself
     [Parameter]
     public string? Class { get; set; }
+
+    // Shown In Place Of Text, A Picture Among It
+    [Parameter]
+    public RenderFragment? Content { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> VisibleChanged { get; set; }
 }

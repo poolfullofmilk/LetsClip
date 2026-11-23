@@ -44,7 +44,7 @@ public static class ClipSaver
         (int Width, int Height) size,
         string? game,
         int? monitor,
-        bool separateTracks,
+        IReadOnlyList<string> stems,
         ClipLibrary library
     )
     {
@@ -65,16 +65,7 @@ public static class ClipSaver
             {
                 try
                 {
-                    await RemuxAsync(
-                        video,
-                        audio,
-                        from,
-                        to,
-                        videoOffset,
-                        separateTracks,
-                        needed,
-                        temporary
-                    );
+                    await RemuxAsync(video, audio, from, to, videoOffset, stems, needed, temporary);
                     break;
                 }
                 catch (Exception exception)
@@ -125,7 +116,7 @@ public static class ClipSaver
         double from,
         double to,
         double videoOffset,
-        bool separateTracks,
+        IReadOnlyList<string> stems,
         long needed,
         string temporary
     )
@@ -177,7 +168,7 @@ public static class ClipSaver
                     .. audioInput,
                     "-c",
                     "copy",
-                    .. separateTracks ? TrackNames() : [],
+                    .. TrackNames(stems),
                     "-to",
                     FFmpeg.Seconds(to - from),
                     "-movflags",
@@ -200,6 +191,93 @@ public static class ClipSaver
         {
             await feeding.CancelAsync();
             await Task.WhenAll(feeders);
+        }
+    }
+
+    public static async Task ReplaceAsync(
+        IReadOnlyList<Segment> video,
+        IReadOnlyList<Segment> audio,
+        double from,
+        double to,
+        IReadOnlyList<string> stems,
+        string path
+    )
+    {
+        // Written Beside The Clip, Then Swapped In Under Its Name
+        var temporary = ClipLibrary.PartialPathIn(Path.GetDirectoryName(path) ?? "");
+        try
+        {
+            await RemuxToAsync(video, audio, from, to, stems, temporary);
+            await ClipLibrary.ReplaceWhileBusyAsync(() =>
+                File.Move(temporary, path, overwrite: true)
+            );
+        }
+        finally
+        {
+            await FFmpeg.DeleteOutputAsync(temporary);
+        }
+    }
+
+    internal static async Task RemuxToAsync(
+        IReadOnlyList<Segment> video,
+        IReadOnlyList<Segment> audio,
+        double from,
+        double to,
+        IReadOnlyList<string> stems,
+        string target
+    )
+    {
+        // The Same Remux A Save Runs, Once
+        if (video.Count == 0)
+        {
+            throw new InvalidDataException("Nothing recorded yet");
+        }
+
+        var needed = video.Sum(segment => segment.Bytes) + audio.Sum(segment => segment.Bytes);
+        await RemuxAsync(video, audio, from, to, 0, stems, needed, target);
+    }
+
+    public static async Task<bool> StillAsync(
+        Segment segment,
+        string target,
+        CancellationToken token
+    )
+    {
+        // A Segment Opens On Its Keyframe, One Frame Is Enough
+        var name = $"LetsClip-{Guid.NewGuid():N}-still";
+        using var feeding = CancellationTokenSource.CreateLinkedTokenSource(token);
+        var feeder = FeedAsync(name, [segment], feeding.Token);
+        try
+        {
+            var result = await FFmpeg.RunAsync(
+                FFmpeg.FFmpegPath,
+                [
+                    "-hide_banner",
+                    "-nostdin",
+                    "-loglevel",
+                    "error",
+                    "-y",
+                    "-f",
+                    "mpegts",
+                    "-i",
+                    $"//./pipe/{name}",
+                    "-frames:v",
+                    "1",
+                    "-vf",
+                    "scale=w=480:h=480:force_original_aspect_ratio=decrease",
+                    "-q:v",
+                    "4",
+                    target,
+                ],
+                TimeSpan.FromSeconds(10),
+                token
+            );
+            return result.Succeeded && File.Exists(target);
+        }
+        finally
+        {
+            await feeding.CancelAsync();
+            await feeder;
         }
     }
 
@@ -248,15 +326,16 @@ public static class ClipSaver
             && count > 0;
     }
 
-    private static List<string> TrackNames()
+    private static List<string> TrackNames(IReadOnlyList<string> stems)
     {
         // Named For Players, Only The Mix Plays By Default
+        string[] names = stems.Count > 0 ? [AudioTracks.MixOf(stems), .. stems] : [];
         List<string> arguments = [];
-        for (var index = 0; index < AudioTracks.Separate.Length; index++)
+        for (var index = 0; index < names.Length; index++)
         {
             arguments.AddRange([
                 $"-metadata:s:a:{index}",
-                $"handler_name={AudioTracks.Separate[index]}",
+                $"handler_name={names[index]}",
                 $"-disposition:a:{index}",
                 index == 0 ? "default" : "0",
             ]);

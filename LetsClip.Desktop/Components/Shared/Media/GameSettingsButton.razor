@@ -27,7 +27,7 @@
                 </MudText>
                 @* Replay Length Select *@
                 <FieldDetail Color="@CostColors.Replay(_draft.Seconds ?? Controller.Settings.ReplaySeconds)"
-                             Detail="@(_draft.Seconds is null ? Formatter.FormatDuration(Controller.Settings.ReplaySeconds) : null)">
+                             Detail="@ReplayDetail">
                     <ChoiceSelect T="int?"
                                   @bind-Value="Seconds"
                                   ToStringFunc="SecondsLabel"
@@ -42,7 +42,8 @@
                             <MudSelectItem T="int?"
                                            Value="seconds">
                                 <ItemLabel Text="@Formatter.FormatDuration(seconds)"
-                                           Color="@CostColors.Replay(seconds)" />
+                                           Color="@CostColors.Replay(seconds)"
+                                           Detail="@Controller.ReplaySizeText(seconds, _draft)" />
                             </MudSelectItem>
                         }
                     </ChoiceSelect>

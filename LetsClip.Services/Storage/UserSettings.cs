@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using LetsClip.Data.Enums;
 using LetsClip.Data.Helpers;
 using LetsClip.Data.ViewModels;
+using LetsClip.Services.Integration;
 using LetsClip.Services.Media;
 using NLog;
 using HotkeyGesture = LetsClip.Data.Helpers.Hotkey;
@@ -40,6 +41,9 @@ public sealed record UserSettings(
     double ExportGameVolume = 1,
     double ExportMicrophoneVolume = 1,
     bool ExportVideo = true,
+    bool ExportVoice = true,
+    double ExportVoiceVolume = 1,
+    bool ExportCaptions = false,
     bool DeleteOriginals = true,
     int DefaultsVersion = 0,
     ClipSort ClipSort = ClipSort.Newest,
@@ -49,7 +53,9 @@ public sealed record UserSettings(
     double PlayerVolume = UserSettings.OpeningVolume,
     bool PlayerMuted = false,
     WindowBounds? Window = null,
-    string[]? OfferedApps = null
+    string[]? OfferedApps = null,
+    string? DiscordWebhook = null,
+    string? DiscordChannel = null
 )
 {
     // Raised When New Defaults Reach Existing Users Once
@@ -61,7 +67,7 @@ public sealed record UserSettings(
     // A Quiet Microphone Or Friend Can Be Doubled
     public const double MaximumVolume = 2;
 
-    public static readonly int[] ReplayChoices = [30, 60, 120, 300, 600];
+    public static readonly int[] ReplayChoices = [30, 60, 120, 300, 600, 1200, 1800];
     public static readonly int[] FrameRateChoices = [30, 60, 120, 144, 165, 240];
 
     // Lines Of A 16 By 9 Box
@@ -84,6 +90,18 @@ public sealed record UserSettings(
 
     [JsonIgnore]
     public string ExportsDirectory => Path.Combine(ClipsDirectory, ClipLibrary.ExportsFolder);
+
+    // What An Export Keeps Of Each Part Of The Sound
+    [JsonIgnore]
+    public SoundMix ExportSound =>
+        new(
+            ExportAudio,
+            ExportMicrophone,
+            ExportVoice,
+            ExportGameVolume,
+            ExportMicrophoneVolume,
+            ExportVoiceVolume
+        );
 
     public static UserSettings Load()
     {
@@ -168,6 +186,9 @@ public sealed record UserSettings(
             ExportGameVolume = ExportGameVolume,
             ExportMicrophoneVolume = ExportMicrophoneVolume,
             ExportVideo = ExportVideo,
+            ExportVoice = ExportVoice,
+            ExportVoiceVolume = ExportVoiceVolume,
+            ExportCaptions = ExportCaptions,
             DefaultsVersion = DefaultsVersion,
             ClipSort = ClipSort,
             AttemptedUpdate = AttemptedUpdate,
@@ -177,7 +198,15 @@ public sealed record UserSettings(
             PlayerMuted = PlayerMuted,
             Window = Window,
             OfferedApps = OfferedApps,
+            DiscordWebhook = DiscordWebhook,
+            DiscordChannel = DiscordChannel,
         };
+    }
+
+    public UserSettings ForLog()
+    {
+        // A Webhook's Token Never Reaches The Log
+        return this with { DiscordWebhook = DiscordWebhook is null ? null : "Set" };
     }
 
     public IEnumerable<string> ChangesFrom(UserSettings before)
@@ -194,7 +223,10 @@ public sealed record UserSettings(
             var now = JsonSerializer.Serialize(property.GetValue(this), property.PropertyType);
             if (old != now)
             {
-                yield return $"{property.Name} {old} -> {now}";
+                // A Webhook's Token Never Reaches The Log
+                yield return property.Name == nameof(DiscordWebhook)
+                    ? $"{property.Name} {(DiscordWebhook is null ? "Removed" : "Set")}"
+                    : $"{property.Name} {old} -> {now}";
             }
         }
     }
@@ -251,6 +283,9 @@ public sealed record UserSettings(
                     .Select(game =>
                         game with
                         {
+                            Seconds = ReplayChoices.Contains(game.Seconds ?? 0)
+                                ? game.Seconds
+                                : null,
                             FrameRate = FrameRateChoices.Contains(game.FrameRate ?? 0)
                                 ? game.FrameRate
                                 : null,
@@ -289,7 +324,14 @@ public sealed record UserSettings(
             ExportMicrophoneVolume = double.IsFinite(ExportMicrophoneVolume)
                 ? Math.Clamp(Math.Round(ExportMicrophoneVolume, 1), 0.1, 1)
                 : defaults.ExportMicrophoneVolume,
+            ExportVoiceVolume = double.IsFinite(ExportVoiceVolume)
+                ? Math.Clamp(Math.Round(ExportVoiceVolume, 1), 0.1, 1)
+                : defaults.ExportVoiceVolume,
             OfferedApps = OfferedApps?.Where(key => !string.IsNullOrWhiteSpace(key)).ToArray(),
+            DiscordWebhook = DiscordPost.WebhookOf(DiscordWebhook),
+            DiscordChannel = DiscordPost.WebhookOf(DiscordWebhook) is null
+                ? null
+                : DiscordChannel ?? "Discord",
             PlayerVolume = double.IsFinite(PlayerVolume)
                 ? Math.Clamp(Math.Round(PlayerVolume, 1), 0.1, 1)
                 : defaults.PlayerVolume,

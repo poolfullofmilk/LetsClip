@@ -83,10 +83,14 @@ public static partial class ClipExporter
         // Game And Microphone Mixed Anew, Only From Their Own Tracks
         var balanced = request.IsBalanced && source.HasSeparateTracks;
 
+        // Captions Are Drawn Onto The Picture, So It Encodes
+        var captioned = video && request.Captions is not null;
+
         // Off, Or Small Enough, Copies Exactly, Sound Alone Only Off
         var copyRate = video ? sourceRate : SizeBudget.AudioBitsPerSecond / 8;
         if (
             !cropped
+            && !captioned
             && (video || request.Plan == DiscordPlan.Off)
             && SizeBudget.KeepsClip(request.Plan, duration, copyRate)
             && await CopyAsync(request, track, video, balanced, progress, token) is { } copied
@@ -159,6 +163,12 @@ public static partial class ClipExporter
                 $"crop={frameWidth}:{frameHeight}:{cropLeft}:{cropTop},"
             )
             : "";
+        CaptionTrack? captions = null;
+        if (captioned)
+        {
+            progress.Report(new ExportProgress("Drawing Captions", 0));
+            captions = request.Captions!(width, height, workFolder);
+        }
         var job = new EncodeJob(
             request,
             temporary,
@@ -171,7 +181,8 @@ public static partial class ClipExporter
             budget.AudioBitsPerSecond,
             video,
             gain,
-            balanced
+            balanced,
+            captions
         );
         var encoding = Stopwatch.StartNew();
         try
@@ -306,6 +317,12 @@ public static partial class ClipExporter
                     "-map",
                     string.Create(CultureInfo.InvariantCulture, $"0:a:{index}"),
                 ]);
+            }
+
+            // Named For Its Parts, A Rebuilt Mix Loses Its Name
+            if (track is not null && request.SoundName is { } name)
+            {
+                streams.AddRange(["-metadata:s:a:0", $"handler_name={name}"]);
             }
 
             var output = await ClipLibrary.CopyRangeAsync(

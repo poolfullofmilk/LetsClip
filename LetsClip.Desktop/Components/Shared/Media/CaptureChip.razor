@@ -1,14 +1,33 @@
 @* Capture Chip *@
-<Tooltip Text="@(Fix?.Text ?? HeldText)"
-         Placement="Placement.Bottom">
-    <MudChip T="string"
-             Icon="@Icon"
-             IconColor="@IconColor"
-             Color="@ChipColor"
-             Size="Size.Small"
-             Variant="Variant.Text"
-             Class="@ChipClass"
-             OnClick="OpenFix">
-        @Controller.StatusText
-    </MudChip>
+<Tooltip Placement="Placement.Bottom"
+         Disabled="@(TipText is null)"
+         VisibleChanged="ShowTipAsync">
+    <Content>
+        @if (ShowsStill)
+        {
+            <MudElement HtmlTag="div"
+                        Class="status-still"
+                        Style="@StillStyle">
+                @if (_still is { } still)
+                {
+                    <MudImage Src="@DesktopShell.ThumbnailUrl(still)"
+                              Alt="Recording Now"
+                              Class="fade-in" />
+                }
+            </MudElement>
+        }
+        @TipText
+    </Content>
+    <ChildContent>
+        <MudChip T="string"
+                 Icon="@Icon"
+                 IconColor="@IconColor"
+                 Color="@ChipColor"
+                 Size="Size.Small"
+                 Variant="Variant.Text"
+                 Class="@ChipClass"
+                 OnClick="OpenFix">
+            @Controller.StatusText
+        </MudChip>
+    </ChildContent>
 </Tooltip>

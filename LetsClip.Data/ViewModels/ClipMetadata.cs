@@ -25,7 +25,9 @@ public sealed record ClipMetadata(
     int? CropShape = null,
     double? CropY = null,
     double? CropSize = null,
-    CropBox? CropArea = null
+    CropBox? CropArea = null,
+    bool Shrunk = false,
+    SpokenWord[]? Words = null
 )
 {
     // Older Clips Kept A Shape, CropShape 2 Is Square
